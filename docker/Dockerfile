@@ -1,6 +1,7 @@
 FROM python:3-alpine
 
-ARG BUILD_VERSION
+ARG BUILD_VERSION="head"
+
 
 # Create config volume
 VOLUME /config
@@ -11,6 +12,7 @@ WORKDIR /app
 # Install enoceanmqtt and requirements
 RUN apk add --no-cache git && \
     python3 -m pip install --upgrade pip && \
+    pip3 install setuptools && \
     pip3 install pyyaml==6.0.1 && \
     pip3 install tinydb==4.7.1 && \
     pip3 install paho-mqtt==1.6.1 && \
@@ -32,8 +34,8 @@ RUN apk add --no-cache git && \
         rm "/app.tar.gz" && \
         mv -v "HA_enoceanmqtt-${BUILD_VERSION%-*}" HA_enoceanmqtt ; \
     fi; \
-    cp -rf HA_enoceanmqtt/enoceanmqtt enocean-mqtt && \
-    rm -rf HA_enoceanmqtt
+    cp -rf ./HA_enoceanmqtt/enoceanmqtt enocean-mqtt && \
+    rm -rf ./HA_enoceanmqtt
 
 # Set entrypoint
 ENTRYPOINT [ "python", "/usr/local/bin/enoceanmqtt", "/config/enoceanmqtt.conf" ]
