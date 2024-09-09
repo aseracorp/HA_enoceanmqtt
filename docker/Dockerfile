@@ -8,6 +8,10 @@ VOLUME /config
 # Create Working Directory
 WORKDIR /app
 
+##add timezone-support
+RUN apk add --no-cache tzdata
+ENV TZ=Europe/London
+
 # Install enoceanmqtt and requirements
 RUN apk add --no-cache git && \
     python3 -m pip install --upgrade pip && \
