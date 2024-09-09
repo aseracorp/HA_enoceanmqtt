@@ -2,6 +2,10 @@ FROM python:3-alpine
 
 ARG BUILD_VERSION
 
+# Copy enoceanmqtt.conf.sample to container
+RUN mkdir /config
+COPY docker/enoceanmqtt.conf.sample /config/enoceanmqtt.conf
+
 # Create config volume
 VOLUME /config
 
