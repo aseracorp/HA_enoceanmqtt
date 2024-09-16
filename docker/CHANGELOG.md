@@ -1,3 +1,76 @@
+## Fork aseracorp/HA_enoceanMQTT
+
+### Added
+- support TCP-linked transceivers (mak-gitdev/HA_enoceanmqtt#130)
+- GH-Actions to build new docker image on every commit (mak-gitdev/HA_enoceanmqtt#155)
+- timezone support in Dockerfile, fixes _last seen_ datapoint in HA (mak-gitdev/HA_enoceanmqtt#156)
+- include default configfile in container (enoceanmqtt.conf) for easier container-deployment (mak-gitdev/HA_enoceanmqtt#157)
+- Add Support for A5-10-01 Temperature Sensor, Set Point, Fan Stage and Occupancy Control
+
+### Fixes
+- Fix for the new version of enocean-mqtt (mak-gitdev/HA_enoceanmqtt#136)
+- fix EEP A5-12-00 (mak-gitdev/HA_enoceanmqtt#144)
+- latest commits not in relase 0.1.28
+  - Change off to closed for A5-14-09 and A5-14-0A
+  - Fix small issues in mapping file + Add support for D2-05-02
+  - Fix battery mapping for A5-20-06
+  - Add state_class to entities + start using anchors and alias + update standalone script
+  - Fix issue mak-gitdev/HA_enoceanmqtt#121
+  - Minor fixes in mapping file
+  - Remove EEP.xml from repository
+  - D2-01-08 + Fix issue mak-gitdev/HA_enoceanmqtt#122 for Docker and standalone
+
+## 0.1.28
+Important: Add a new cover entity (cover2) for D2-05-00. This should fix inverted position issue (thanks to @didi31).
+
+### Fixed
+- Add a new cover entity (cover2) for D2-05-00. This should fix inverted position issue (thanks to @didi31).
+See #94 for more details.
+
+### Added
+- Add support for:
+  - D2-14-30 (Netsecur smoke detector with temperature and humidity sensors)
+  - F6-04-01. All NodOn devices to date are now supported.
+  - D2-50-00 (thanks to @billeranton for testing and initial mapping)
+  - D2-50-01
+  - D2-50-10
+  - D2-50-11
+  - A5-20-01 (control+status)
+  - A5-20-04 (control+status)
+  - A5-20-06 (control+status, thanks to @stefanhofmann2)
+  - A5-14-09 (thanks to @juame in #101)
+  - A5-13-04
+  - A5-13-05
+  - A5-13-06
+- Add switches for F6-02-01/02 virtual entities in addition to the existing select entities.
+
+### Changed
+- Add A5-13-04, A5-13-05 and A5-13-06 entities to A5-13-01 as requested by the EEP specification.
+
+## 0.1.27
+
+### Changed
+None
+
+### Added
+- Add support for:
+  - D2-01-01
+  - D2-01-09
+  - A5-09-04
+  - A5-30-03
+  - A5-30-04
+  - A5-38-08 (Command 2)
+- Added new configuration entry use_dev_name_in_entity to select whether to use device name in the name of entities.
+This is for users of HA versions from 2023.8.1 to the one before 2024.2.0.
+For users of version before 2023.8.1, this entry is internally forced to true.
+For users of version starting from 2024.2.0, this will be internally forced to false.
+
+### Fixed
+- Fixes device selection error (see mak-gitdev/HA_enoceanmqtt#73 and embyt/enocean-mqtt#43 for more details)
+- Fix issue mak-gitdev/HA_enoceanmqtt#77 related to MQTT entity naming
+- Fix issue mak-gitdev/HA_enoceanmqtt#72
+
+
 ## 0.1.26
 
 ### Changed
