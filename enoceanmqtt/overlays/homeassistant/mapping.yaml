@@ -4481,6 +4481,23 @@
                  value_template: >-
                    {% if value_json.KC == 112 %}ON{% else %}OFF{% endif %}
    0x05:
+      0x01:
+         device_config:
+            command: ""
+            channel: ""
+            log_learn: ""
+            direction: ""
+            answer: ""
+         entities:
+            - component: "device_automation"
+              name: "trig_water"
+              config:
+                 automation_type: "trigger"
+                 type: "water_detected"
+                 subtype: "sensor"
+                 topic: ""
+                 payload: "1"
+                 value_template: "{{ value_json.WAS }}"
       0x02:
          device_config:
             command: ""
