@@ -4496,7 +4496,7 @@
                  type: "water_detected"
                  subtype: "sensor"
                  topic: ""
-                 payload: "1"
+                 payload: "17"
                  value_template: "{{ value_json.WAS }}"
       0x02:
          device_config:
