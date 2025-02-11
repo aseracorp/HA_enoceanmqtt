@@ -2534,6 +2534,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -2570,6 +2573,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -2600,6 +2606,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -2636,6 +2645,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -2712,6 +2724,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "h_raw"
               config:
@@ -2765,6 +2780,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "h_raw"
               config:
