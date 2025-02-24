@@ -2866,10 +2866,19 @@
             answer: ""
          entities:
             - component: "sensor"
+              name: "h_raw"
+              config:
+                state_topic: ""
+                value_template: "{{ value_json.HUM }}"
+                device_class: "humidity"
+                state_class: "measurement"
+                unit_of_measurement: "%"
+                enabled_by_default: "false"
+            - component: "sensor"
               name: "humidity"
               config:
                  state_topic: ""
-                 value_template: "{{ value_json.HUM }}"
+                 value_template: "{{ value_json.HUM | round(1) }}"
                  device_class: "humidity"
                  state_class: "measurement"
                  unit_of_measurement: "%"
@@ -2882,10 +2891,19 @@
                  state_class: "measurement"
                  unit_of_measurement: "ppm"
             - component: "sensor"
+              name: "t_raw"
+              config:
+                state_topic: ""
+                value_template: "{{ value_json.TMP }}"
+                device_class: "temperature"
+                state_class: "measurement"
+                unit_of_measurement: "°C"
+                enabled_by_default: "false"
+            - component: "sensor"
               name: "temperature"
               config:
                  state_topic: ""
-                 value_template: "{{ value_json.TMP }}"
+                 value_template: "{{ value_json.TMP | round(1) }}"
                  device_class: "temperature"
                  state_class: "measurement"
                  unit_of_measurement: "°C"
@@ -2928,6 +2946,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -2964,6 +2985,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -2994,6 +3018,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -3030,6 +3057,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -3106,6 +3136,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "h_raw"
               config:
@@ -3159,6 +3192,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "h_raw"
               config:
