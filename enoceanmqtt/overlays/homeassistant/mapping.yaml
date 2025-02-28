@@ -2919,6 +2919,22 @@
                  state_topic: ""
                  value_template: >-
                    {% if value_json.TSN == 0 %}OFF{% else %}ON{% endif %}
+      0x0C:
+         device_config:
+            command: ""
+            channel: "VOC_ID"
+            log_learn: ""
+            direction: ""
+            answer: ""
+         entities:
+            - component: "sensor"
+              name: "VOCT"
+              config:
+                 state_class: "measurement"
+                 state_topic: "VOC_ID0"
+                 value_template: "{{ value_json.Conc*0.01*(10**value_json.SCM) }}"
+                 device_class: "volatile_organic_compounds_parts"
+                 unit_of_measurement: "ppb"
    0x10:
       0x01:
          device_config:
