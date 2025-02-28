@@ -429,7 +429,7 @@ class Communicator:
         # radio packet of proper rorg type received; parse EEP
         found_property = False
         direction = None
-        if sensor.get('direction')
+        if sensor.get('direction'):
             direction = sensor.get('direction')
 
         # Retrieve command from the received packet and pass it to parse_eep()
