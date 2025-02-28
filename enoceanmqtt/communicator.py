@@ -428,8 +428,9 @@ class Communicator:
     def _handle_data_packet(self, packet, sensor, mqtt_json):
         # radio packet of proper rorg type received; parse EEP
         found_property = False
-#        direction = sensor.get('direction')
         direction = None
+        if sensor.get('direction')
+            direction = sensor.get('direction')
 
         # Retrieve command from the received packet and pass it to parse_eep()
         command = None
