@@ -2556,7 +2556,7 @@
               config:
                  state_topic: ""
                  value_template: >-
-                   {% if value_json.PIRS == 1 %}ON{% else %}OFF{% endif %}
+                   {% if value_json.PIRS >= 128 %}ON{% else %}OFF{% endif %}
                  device_class: "occupancy"
       0x02:
          device_config:
