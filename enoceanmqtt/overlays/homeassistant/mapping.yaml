@@ -1368,7 +1368,7 @@
                    {% else %}
                      online
                    {% endif %}
-                 value_template: "{{ (value_json.T * 0.32) - 20 }}"
+                 value_template: "{{ ((value_json.T * 0.32) - 20) | round(1) }}"
                  unit_of_measurement: "°C"
             - component: sensor
               name: "Humidity"
