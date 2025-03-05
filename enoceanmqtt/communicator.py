@@ -518,7 +518,7 @@ class Communicator:
             # data packet received
             # Check whether payload is raw data
             if 'raw_data' in sensor:
-                logging.debug("sensor data: %s", sensor['raw_data'])
+                logging.debug("sensor raw data: %s", sensor['raw_data'])
                 try:
                     # Use the EnOcean library hex_string format for raw_data
                     # as there can be more than 8 bytes depending on EEP (VLD)
