@@ -370,39 +370,7 @@ class Communicator:
     def _read_packet(self, packet, sensor):
         '''interpret packet, read properties and publish to MQTT'''
         mqtt_json = {}
-#        # loop through all configured devices
-#        for cur_sensor in self.sensors:
-#            # does this sensor match?
-#            if enocean.utils.combine_hex(packet.sender) == cur_sensor['address'] and \
-#               packet.packet_type == PACKET.RADIO and packet.rorg == cur_sensor['rorg'] and \
-#               not cur_sensor.get('sender'):
-#                # found sensor configured in config file
-#
-#                # Shall the packet be published to MQTT ?
-#                if not packet.learn or str(cur_sensor.get('log_learn')) in ("True", "true", "1"):
-#                    # Store RSSI
-#                    # Use underscore so that it is unique and doesn't
-#                    # match a potential future EnOcean EEP field.
-#                    mqtt_json['_RSSI_'] = packet.dBm
-#
-#                    # Store receive date
-#                    # Use underscore so that it is unique and doesn't
-#                    # match a potential future EnOcean EEP field.
-#                    mqtt_json['_DATE_'] = packet.received.isoformat()
-#
-#                    # Handling received data packet
-#                    found_property = self._handle_data_packet( packet, cur_sensor, mqtt_json)
-#                    if not found_property:
-#                        logging.warning("message not interpretable: %s", cur_sensor['name'])
-#                    else:
-#                        self._publish_mqtt(cur_sensor, mqtt_json)
-#                else:
-#                    # learn request received
-#                    logging.info("learn request not emitted to mqtt")
-#
-#                # The packet has been handled
-#                break
-
+        
         # Shall the packet be published to MQTT ?
         if not packet.learn or str(sensor.get('log_learn')) in ("True", "true", "1"):
             # Store RSSI
@@ -551,7 +519,7 @@ class Communicator:
                                         0xff for i in reversed(range(4))]
                     except:
                         # Default data is property-based
-                        logging.debug("sensor default_data: %s", sensor['default_data'])
+                        logging.debug("sensor default data: %s", sensor['default_data'])
                         # Set packet data payload
                         packet.set_eep(json.loads(sensor['default_data']))
                         # Set packet status bits
@@ -566,6 +534,7 @@ class Communicator:
                     # Set packet data payload with property-based data
                     packet.set_eep(sensor['data'])
                     # Set packet status bits
+                    logging.debug("packet status: %02x", packet.status)
                     packet.data[-1] = packet.status
                     packet.parse_eep()  # ensure that the logging output of packet is updated
                 else:
