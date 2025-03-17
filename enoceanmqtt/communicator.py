@@ -534,8 +534,8 @@ class Communicator:
                     # Set packet data payload with property-based data
                     packet.set_eep(sensor['data'])
                     # Set packet status bits
-                    logging.debug("packet status: %02x", packet.status)
-                    packet.data[-1] = packet.status
+                    # logging.debug("packet status: %02x", packet.status)
+                    # packet.data[-1] = packet.status
                     packet.parse_eep()  # ensure that the logging output of packet is updated
                 else:
                     # what to do if we have no data to send yet?
