@@ -482,6 +482,7 @@ class Communicator:
             return
 
         # assemble data based on packet type (learn / data)
+        logging.debug("profile: %s", packet._profile)
         if not is_learn_response:
             # data packet received
             # Check whether payload is raw data
