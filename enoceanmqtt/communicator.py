@@ -192,6 +192,7 @@ class Communicator:
         found_topic = False
         for cur_sensor in self.sensors:
             if cur_sensor['name']+"/" in mqtt_topic:
+                logging.debug("Sensor found: %s", cur_sensor)
                 # get message topic
                 prop = mqtt_topic[len(cur_sensor['name']+"/"):]
                 # JSON payload shall be sent to '/req' topic
