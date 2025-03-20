@@ -192,7 +192,6 @@ class Communicator:
         found_topic = False
         for cur_sensor in self.sensors:
             if cur_sensor['name']+"/" in mqtt_topic:
-                logging.debug("Sensor found: %s", cur_sensor)
                 # get message topic
                 prop = mqtt_topic[len(cur_sensor['name']+"/"):]
                 # JSON payload shall be sent to '/req' topic
@@ -237,7 +236,6 @@ class Communicator:
                     if 'data' not in cur_sensor:
                         cur_sensor['data'] = {}
                     cur_sensor['data'].update(mqtt_json_payload)
-                    logging.debug("Sensor with data: %s", cur_sensor)
 
                     # Finally, send the message
                     if send == True:
@@ -484,7 +482,6 @@ class Communicator:
             return
 
         # assemble data based on packet type (learn / data)
-        logging.debug("profile: %s", packet._profile)
         if not is_learn_response:
             # data packet received
             # Check whether payload is raw data
