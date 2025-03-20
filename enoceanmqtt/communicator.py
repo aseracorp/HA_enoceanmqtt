@@ -237,6 +237,7 @@ class Communicator:
                     if 'data' not in cur_sensor:
                         cur_sensor['data'] = {}
                     cur_sensor['data'].update(mqtt_json_payload)
+                    logging.debug("Sensor with data: %s", cur_sensor)
 
                     # Finally, send the message
                     if send == True:
@@ -450,7 +451,7 @@ class Communicator:
                      negate_direction=False, learn_data=None):
         '''triggers sending of an enocean packet'''
         # determine direction indicator
-        if 'direction' in sensor:
+        if 'direction' in sensor and sensor.get('direction'):
             direction = sensor['direction']
             if negate_direction:
                 # we invert the direction in this reply
