@@ -5619,6 +5619,77 @@ eltako:
                 {% endif %}
    fud61: *fud14
    fdg14: *fud14
+   fttb:
+      device_config:
+         - rorg: "0xA5"
+           func: "0x07"
+           type: "0x01"
+           command: ""
+           channel: ""
+           log_learn: ""
+           direction: ""
+           answer: ""
+         - rorg: "0xF6"
+           func: "0x01"
+           type: "0x01"
+           command: ""
+           channel: ""
+           log_learn: ""
+           direction: ""
+           answer: ""
+      entities:
+         - component: "binary_sensor"
+           name: "Presence"
+           config:
+              state_topic: "a5"
+              value_template: >-
+                {% if value_json.PIRS >= 128 %}
+                  ON
+                {% else %}
+                  OFF
+                {% endif %}
+              device_class: "presence"
+              off_delay: 60
+         - component: "sensor"
+           name: "v_raw"
+           config:
+              state_topic: "a5"
+              value_template: >- 
+                {{ value_json.SVC }}
+              enabled_by_default: "false"
+              availability_topic: "a5"
+              availability_template: >-
+                {% if value_json.SVA == 1 %}
+                  online
+                {% else %}
+                  offline
+                {% endif %}
+              device_class: "voltage"
+              state_class: "measurement"
+              unit_of_measurement: "V"
+         - component: "sensor"
+           name: "voltage"
+           config:
+              state_topic: "a5"
+              value_template: >- 
+                {{ value_json.SVC | round(2) }}
+              availability_topic: "a5"
+              availability_template: >-
+                {% if value_json.SVA == 1 %}
+                  online
+                {% else %}
+                  offline
+                {% endif %}
+              device_class: "voltage"
+              state_class: "measurement"
+              unit_of_measurement: "V"
+         - component: "binary_sensor"
+           name: "Button"
+           config:
+              state_topic: "f6"
+              value_template: "{{ value_json.PB }}"
+              payload_on: "1"
+              payload_off: "0"
 
 # Below are mappings common to all EEPs
 common:
