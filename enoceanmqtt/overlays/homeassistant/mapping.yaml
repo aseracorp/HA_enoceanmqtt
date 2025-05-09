@@ -5690,6 +5690,44 @@ eltako:
               value_template: "{{ value_json.PB }}"
               payload_on: "1"
               payload_off: "0"
+   tf100l:
+      device_config:
+         - rorg: "0xA5"
+           func: "0x38"
+           type: "0x08"
+           command: ""
+           channel: ""
+           log_learn: ""
+           direction: ""
+           answer: ""
+         - rorg: "0xF6"
+           func: "0x02"
+           type: "0x01"
+           command: ""
+           channel: ""
+           log_learn: ""
+           direction: ""
+           answer: ""
+      entities:
+         - component: "button"
+           name: "pairing"
+           config:
+              command_topic: "a5/req"
+              payload_press: >-
+                {"raw_data":"E0:40:0D:80","send":"clear+learn+raw_data"}
+              icon: "mdi:connection"
+         - component: "light"
+           name: "light"
+           config:
+              schema: "template"
+              command_topic: "f6/req"
+              command_on_template: >-
+                {"raw_data":"50","send":"clear+raw_data"}
+              command_off_template: >-
+                {"raw_data":"70","send":"clear+raw_data"}
+              state_topic: "f6"
+              state_template: >-
+                {% if value_json._RAW_DATA_.split(":")[0]=="70" %}on{% elif value_json._RAW_DATA_.split(":")[0]=="50" %}off{% endif %}
 
 # Below are mappings common to all EEPs
 common:
