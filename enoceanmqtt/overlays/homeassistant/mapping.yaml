@@ -1218,6 +1218,404 @@
                  tilt_command_template: >-
                    {"CMD":"1","POS":"127","ANG":"{{ tilt_position }}","REPO":"0","LOCK":"0","CHN":"0","send":"clear"}
       0x02: *D20500
+   0x06:
+      0x01:
+         device_config:
+            command: "MT"
+            channel: "MT"
+            log_learn: ""
+            direction: ""
+            answer: ""
+         entities:
+            - component: binary_sensor
+              name: "burglary_alarm"
+              config:
+                 name: "Burglary alarm"
+                 state_topic: "MT0"
+                 device_class: "vibration"
+                 availability_topic: "MT0"
+                 availability_template: >-
+                   {% if value_json.BAL >= 2 %}
+                     offline
+                   {% else %}
+                     online
+                   {% endif %}
+                 payload_off: "0"
+                 payload_on: "1"
+                 value_template: "{{ value_json.BAL }}"
+            - component: binary_sensor
+              name: "protection_plus_alarm"
+              config:
+                 name: "Protection plus alarm"
+                 state_topic: "MT0"
+                 device_class: "safety"
+                 availability_topic: "MT0"
+                 availability_template: >-
+                   {% if value_json.PPAL >= 2 %}
+                     offline
+                   {% else %}
+                     online
+                   {% endif %}
+                 payload_off: "0"
+                 payload_on: "1"
+                 value_template: "{{ value_json.PPAL }}"
+            - component: sensor
+              name: "handle_position"
+              config:
+                 name: "Handle Position"
+                 state_topic: "MT0"
+                 device_class: "enum"
+                 availability_topic: "MT0"
+                 availability_template: >-
+                   {% if value_json.HP >= 5 %}
+                     offline
+                   {% else %}
+                     online
+                   {% endif %}
+                 options:
+                    - "Undefined"
+                    - "Up"
+                    - "Down"
+                    - "Left"
+                    - "Right"
+                 value_template: >-
+                   {% set direction = {0: "Undefined", 1: "Up", 2: "Down", 3: "Left", 4: "Right"} %}
+                   {{ direction[value_json.HP] }}
+            - component: sensor
+              name: "window_state"
+              config:
+                 name: "Window State"
+                 state_topic: "MT0"
+                 device_class: "enum"
+                 availability_topic: "MT0"
+                 availability_template: >-
+                   {% if value_json.WS >= 3 %}
+                     offline
+                   {% else %}
+                     online
+                   {% endif %}
+                 options:
+                    - "Undefined"
+                    - "Not Tilted"
+                    - "Tilted"
+                 value_template: >-
+                   {% set tiltness = {0: "Undefined", 1: "Not Tilted", 2: "Tilted"} %}
+                   {{ tiltness[value_json.WS] }}
+            - component: event
+              name: "button_right"
+              config:
+                 name: "Button right"
+                 state_topic: "MT0"
+                 device_class: "button"
+                 availability_topic: "MT0"
+                 availability_template: >-
+                   {% if value_json.BR >= 3 %}
+                     offline
+                   {% else %}
+                     online
+                   {% endif %}
+                 event_types:
+                    - "No change"
+                    - "Button pressed"
+                    - "Button released"
+                 value_template: >-
+                   {% set button_activity = {0: "No change", 1: "Button pressed", 2: "Button released"} %}
+                   {{ button_activity[value_json.BR] }}
+            - component: event
+              name: "button_left"
+              config:
+                 name: "Button left"
+                 state_topic: "MT0"
+                 device_class: "button"
+                 availability_topic: "MT0"
+                 availability_template: >-
+                   {% if value_json.BL >= 3 %}
+                     offline
+                   {% else %}
+                     online
+                   {% endif %}
+                 event_types:
+                    - "No change"
+                    - "Button pressed"
+                    - "Button released"
+                 value_template: >-
+                   {% set button_activity = {0: "No change", 1: "Button pressed", 2: "Button released"} %}
+                   {{ button_activity[value_json.BL] }}
+            - component: binary_sensor
+              name: "Motion"
+              config:
+                 state_topic: "MT0"
+                 device_class: "motion"
+                 availability_topic: "MT0"
+                 availability_template: >-
+                   {% if value_json.M >= 2 %}
+                     offline
+                   {% else %}
+                     online
+                   {% endif %}
+                 payload_off: "0"
+                 payload_on: "1"
+                 value_template: "{{ value_json.M }}"
+            - component: sensor
+              name: "Temperature"
+              config:
+                 state_topic: "MT0"
+                 device_class: "temperature"
+                 availability_topic: "MT0"
+                 availability_template: >-
+                   {% if value_json.T >= 251 %}
+                     offline
+                   {% else %}
+                     online
+                   {% endif %}
+                 value_template: "{{ ((value_json.T * 0.32) - 20) | round(1) }}"
+                 unit_of_measurement: "°C"
+            - component: sensor
+              name: "Humidity"
+              config:
+                 state_topic: "MT0"
+                 device_class: "humidity"
+                 availability_topic: "MT0"
+                 availability_template: >-
+                   {% if value_json.H >= 201 %}
+                     offline
+                   {% else %}
+                     online
+                   {% endif %}
+                 value_template: "{{ value_json.H * 0.5 }}"
+                 unit_of_measurement: "%"
+            - component: sensor
+              name: "Illumination"
+              config:
+                 state_topic: "MT0"
+                 device_class: "illuminance"
+                 availability_topic: "MT0"
+                 availability_template: >-
+                   {% if value_json.I >= 60001 %}
+                     offline
+                   {% else %}
+                     online
+                   {% endif %}
+                 value_template: "{{ value_json.I }}"
+                 unit_of_measurement: "lx"
+            - component: sensor
+              name: "Battery"
+              config:
+                 state_topic: "MT0"
+                 device_class: "battery"
+                 value_template: "{{ value_json.BS * 5 }}"
+                 unit_of_measurement: "%"
+            - component: sensor
+              name: "power_ons"
+              config:
+                 name: "Power ons"
+                 state_topic: "MT32"
+                 entity_category: "diagnostic"
+                 value_template: "{{ value_json.PON }}"
+            - component: sensor
+              name: "Alarms"
+              config:
+                 state_topic: "MT32"
+                 entity_category: "diagnostic"
+                 value_template: "{{ value_json.ALL }}"
+            - component: sensor
+              name: "handle_movements_closed"
+              config:
+                 name: "Handle movements closed"
+                 state_topic: "MT33"
+                 entity_category: "diagnostic"
+                 value_template: "{{ value_json.HMC }}"
+            - component: sensor
+              name: "handle_movements_opened"
+              config:
+                 name: "Handle movements opened"
+                 state_topic: "MT33"
+                 entity_category: "diagnostic"
+                 value_template: "{{ value_json.HMO }}"
+            - component: sensor
+              name: "handle_movements_tilted"
+              config:
+                 name: "Handle movements tilted"
+                 state_topic: "MT33"
+                 entity_category: "diagnostic"
+                 value_template: "{{ value_json.HMT }}"
+            - component: sensor
+              name: "window_tilts"
+              config:
+                 name: "Window tilts"
+                 state_topic: "MT34"
+                 entity_category: "diagnostic"
+                 value_template: "{{ value_json.WT }}"
+            - component: sensor
+              name: "button_right_presses"
+              config:
+                 name: "Button right presses"
+                 state_topic: "MT35"
+                 entity_category: "diagnostic"
+                 value_template: "{{ value_json.BRP }}"
+            - component: sensor
+              name: "button_left_presses"
+              config:
+                 name: "Button left presses"
+                 state_topic: "MT35"
+                 entity_category: "diagnostic"
+                 value_template: "{{ value_json.BLP }}"
+            - component: button
+              name: "get_configuration_settings"
+              config:
+                 name: "Get configuration settings"
+                 command_topic: "req"
+                 entity_category: "config"
+                 icon: "mdi:download"
+                 command_template: >-
+                   {% set ns = namespace() %}
+                   {% for entity in device_entities(device_id(entity_id)) %}
+                    {% if entity is search('vacation_mode',ignorecase=True) %}
+                     {% if is_state(entity, true) %}
+                      {% set ns.vacation_mode = 1 %}
+                     {% else %}
+                      {% set ns.vacation_mode = 0 %}
+                     {% endif %}
+                    {% endif %}
+                   {% endfor %}
+                   {"MT": "128", "GCS":"1","GLD":"0","VMS":"{{ns.vacation_mode}}","HCCS":"0","BLCS":"0","SUIS":"0","VBIS":"0","send":"clear"}
+            - component: button
+              name: "get_log_data"
+              config:
+                 name: "Get log data"
+                 command_topic: "req"
+                 entity_category: "diagnostic"
+                 icon: "mdi:download"
+                 command_template: >-
+                   {% set ns = namespace() %}
+                   {% for entity in device_entities(device_id(entity_id)) %}
+                    {% if entity is search('vacation_mode',ignorecase=True) %}
+                     {% if is_state(entity, true) %}
+                      {% set ns.vacation_mode = 1 %}
+                     {% else %}
+                      {% set ns.vacation_mode = 0 %}
+                     {% endif %}
+                    {% endif %}
+                   {% endfor %}
+                   {"MT":"128","GCS":"0","GLD":"1","VMS":"{{ns.vacation_mode}}","HCCS":"0","BLCS":"0","SUIS":"0","VBIS":"0","send":"clear"}
+            - component: switch
+              name: "vacation_mode"
+              config:
+                 name: "Vacation mode"
+                 statc_topic: "MT16"
+                 command_topic: "req"
+                 icon: "mdi:airplane"
+                 availability_topic: "MT0"
+                 availability_template: >-
+                   {% if value_json.V >= 3 %}
+                     offline
+                   {% else %}
+                     online
+                   {% endif %}
+                 payload_on: >-
+                   {"MT": "128", "GCS":"0","GLD":"0","VMS":"1","HCCS":"0","BLCS":"0","SUIS":"0","VBIS":"0","send":"clear"}
+                 payload_off: >-
+                   {"MT": "128", "GCS":"0","GLD":"0","VMS":"0","HCCS":"0","BLCS":"0","SUIS":"0","VBIS":"0","send":"clear"}
+                 state_on: "1"
+                 state_off: "0"
+                 value_template: "{{ value_json.VMR }}"
+            - component: switch
+              name: "handle_closed_click"
+              config:
+                 name: "Handle closed click"
+                 statc_topic: "MT16"
+                 command_topic: "req"
+                 entity_category: "config"
+                 command_template: >-
+                   {% set ns = namespace() %}
+                   {% for entity in device_entities(device_id(entity_id)) %}
+                    {% if entity is search('vacation_mode',ignorecase=True) %}
+                     {% if is_state(entity, true) %}
+                      {% set ns.vacation_mode = 1 %}
+                     {% else %}
+                      {% set ns.vacation_mode = 0 %}
+                     {% endif %}
+                    {% endif %}
+                   {% endfor %}
+                   {"MT": "128", "GCS":"0","GLD":"0","VMS":"{{ns.vacation_mode}}","HCCS":"{{value}}","BLCS":"0","SUIS":"0","VBIS":"0","send":"clear"}
+                 payload_on: "2"
+                 payload_off: "1"
+                 state_on: "1"
+                 state_off: "0"
+                 value_template: "{{ value_json.HCCR }}"
+            - component: switch
+              name: "battery_low_click"
+              config:
+                 name: "Battery low click"
+                 statc_topic: "MT16"
+                 command_topic: "req"
+                 entity_category: "config"
+                 device_class: "switch"
+                 command_template: >-
+                   {% set ns = namespace() %}
+                   {% for entity in device_entities(device_id(entity_id)) %}
+                    {% if entity is search('vacation_mode',ignorecase=True) %}
+                     {% if is_state(entity, true) %}
+                      {% set ns.vacation_mode = 1 %}
+                     {% else %}
+                      {% set ns.vacation_mode = 0 %}
+                     {% endif %}
+                    {% endif %}
+                   {% endfor %}
+                   {"MT": "128", "GCS":"0","GLD":"0","VMS":"{{ns.vacation_mode}}","HCCS":"0","BLCS":"{{value}}","SUIS":"0","VBIS":"0","send":"clear"}
+                 payload_on: "2"
+                 payload_off: "1"
+                 state_on: "1"
+                 state_off: "0"
+                 value_template: "{{ value_json.BLCR }}"
+            - component: number
+              name: "sensor_update_interval"
+              config:
+                 name: "Sensor update interval"
+                 state_topic: "MT16"
+                 command_topic: "req"
+                 entity_category: "config"
+                 mode: "box"
+                 min: 5
+                 max: 65535
+                 unit_of_measurement: "s"
+                 command_template: >-
+                   {% set ns = namespace() %}
+                   {% for entity in device_entities(device_id(entity_id)) %}
+                    {% if entity is search('vacation_mode',ignorecase=True) %}
+                     {% if is_state(entity, true) %}
+                      {% set ns.vacation_mode = 1 %}
+                     {% else %}
+                      {% set ns.vacation_mode = 0 %}
+                     {% endif %}
+                    {% endif %}
+                   {% endfor %}
+                   {"MT": "128", "GCS":"0","GLD":"0","VMS":"{{ns.vacation_mode}}","HCCS":"0","BLCS":"0","SUIS":"{{value}}","VBIS":"0","send":"clear"}
+                 value_template: "{{ value_json.SUIR }}"
+            - component: number
+              name: "vacation_blink_interval"
+              config:
+                 name: "Vacation blink interval"
+                 state_topic: "MT16"
+                 command_topic: "req"
+                 entity_category: "config"
+                 mode: "box"
+                 min: 3
+                 max: 255
+                 unit_of_measurement: "s"
+                 command_template: >-
+                   {% set ns = namespace() %}
+                   {% for entity in device_entities(device_id(entity_id)) %}
+                    {% if entity is search('vacation_mode',ignorecase=True) %}
+                     {% if is_state(entity, true) %}
+                      {% set ns.vacation_mode = 1 %}
+                     {% else %}
+                      {% set ns.vacation_mode = 0 %}
+                     {% endif %}
+                    {% endif %}
+                   {% endfor %}
+                   {"MT": "128", "GCS":"0","GLD":"0","VMS":"{{ns.vacation_mode}}","HCCS":"0","BLCS":"0","SUIS":"0","VBIS":"{{value}}","send":"clear"}
+                 value_template: "{{ value_json.VBIR }}"
    0x14:
       0x30:
          device_config:
@@ -1329,6 +1727,97 @@
                    {% else %}Error
                    {% endif %}
                  icon: "mdi:weather-windy"
+      0x41:
+         device_config:
+            command: ""
+            channel: ""
+            log_learn: ""
+            direction: ""
+            answer: ""
+         entities:
+            - component: "sensor"
+              name: "t_raw"
+              config:
+                 state_topic: ""
+                 value_template: "{{ value_json.TMP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
+                 enabled_by_default: "false"
+            - component: "sensor"
+              name: "tempC"
+              config:
+                 state_topic: ""
+                 value_template: "{{ value_json.TMP | round(1) }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
+            - component: "sensor"
+              name: "h_raw"
+              config:
+                 state_topic: ""
+                 value_template: "{{ value_json.HUM }}"
+                 device_class: "humidity"
+                 state_class: "measurement"
+                 unit_of_measurement: "%"
+                 enabled_by_default: "false"
+            - component: "sensor"
+              name: "hum"
+              config:
+                 state_topic: ""
+                 value_template: "{{ value_json.HUM | round(1) }}"
+                 device_class: "humidity"
+                 state_class: "measurement"
+                 unit_of_measurement: "%"
+            - component: "sensor"
+              name: "lux"
+              config:
+                 state_topic: ""
+                 value_template: "{{ value_json.ILL }}"
+                 device_class: "illuminance"
+                 state_class: "measurement"
+                 unit_of_measurement: "lx"
+            - component: "sensor"
+              name: "acceleration"
+              config:
+                 state_topic: ""
+                 value_template: >-
+                   {% if value_json.ACC == 0 %}Periodic Update
+                   {% elif value_json.ACC == 1 %}Threshold 1 exceeded
+                   {% elif value_json.ACC == 2 %}Threshold 2 exceeded
+                   {% else %}Error
+                   {% endif %}
+            - component: "sensor"
+              name: "ACX"
+              config:
+                 state_topic: ""
+                 value_template: "{{ value_json.ACX }}"
+                 device_class: "weight"
+                 state_class: "measurement"
+                 unit_of_measurement: "g"
+            - component: "sensor"
+              name: "ACY"
+              config:
+                 state_topic: ""
+                 value_template: "{{ value_json.ACY }}"
+                 device_class: "weight"
+                 state_class: "measurement"
+                 unit_of_measurement: "g"
+            - component: "sensor"
+              name: "ACZ"
+              config:
+                 state_topic: ""
+                 value_template: "{{ value_json.ACZ }}"
+                 device_class: "weight"
+                 state_class: "measurement"
+                 unit_of_measurement: "g"
+            - component: binary_sensor
+              name: "contact"
+              config:
+                 state_topic: ""
+                 value_template: "{{ value_json.CO }}"
+                 payload_on: "0"
+                 payload_off: "1"
    0x50:
       0x00:
          device_config:
@@ -1412,6 +1901,20 @@
                  state_topic: "MT2"
                  value_template: "{{ value_json.EXHFS }}"
                  unit_of_measurement: "rpm"
+            - component: "sensor"
+              name: "air_quality_sensor"
+              config:
+                 state_topic: "MT2"
+                 value_template: "{{ value_json.AQS1 }}"
+                 unit_of_measurement: "%"
+            - component: binary_sensor
+              name: "filter_maintenance_required"
+              config:
+                 state_topic: "MT2"
+                 payload_on: "on"
+                 payload_off: "off"
+                 value_template: >-
+                    {% if value_json.FMS == 1 %}on{% else %}off{% endif %}
       0x01:
          device_config:
             command: "MT"
@@ -2144,7 +2647,7 @@
               config:
                  state_topic: ""
                  value_template: >-
-                   {% if value_json.PIRS == 1 %}ON{% else %}OFF{% endif %}
+                   {% if value_json.PIRS >= 128 %}ON{% else %}OFF{% endif %}
                  device_class: "occupancy"
       0x02:
          device_config:
@@ -2454,10 +2957,19 @@
             answer: ""
          entities:
             - component: "sensor"
+              name: "h_raw"
+              config:
+                state_topic: ""
+                value_template: "{{ value_json.HUM }}"
+                device_class: "humidity"
+                state_class: "measurement"
+                unit_of_measurement: "%"
+                enabled_by_default: "false"
+            - component: "sensor"
               name: "humidity"
               config:
                  state_topic: ""
-                 value_template: "{{ value_json.HUM }}"
+                 value_template: "{{ value_json.HUM | round(1) }}"
                  device_class: "humidity"
                  state_class: "measurement"
                  unit_of_measurement: "%"
@@ -2470,10 +2982,19 @@
                  state_class: "measurement"
                  unit_of_measurement: "ppm"
             - component: "sensor"
+              name: "t_raw"
+              config:
+                state_topic: ""
+                value_template: "{{ value_json.TMP }}"
+                device_class: "temperature"
+                state_class: "measurement"
+                unit_of_measurement: "°C"
+                enabled_by_default: "false"
+            - component: "sensor"
               name: "temperature"
               config:
                  state_topic: ""
-                 value_template: "{{ value_json.TMP }}"
+                 value_template: "{{ value_json.TMP | round(1) }}"
                  device_class: "temperature"
                  state_class: "measurement"
                  unit_of_measurement: "°C"
@@ -2489,6 +3010,22 @@
                  state_topic: ""
                  value_template: >-
                    {% if value_json.TSN == 0 %}OFF{% else %}ON{% endif %}
+      0x0C:
+         device_config:
+            command: ""
+            channel: "VOC_ID"
+            log_learn: ""
+            direction: ""
+            answer: ""
+         entities:
+            - component: "sensor"
+              name: "VOCT"
+              config:
+                 state_class: "measurement"
+                 state_topic: "VOC_ID0"
+                 value_template: "{{ value_json.Conc*0.01*(10**value_json.SCM) }}"
+                 device_class: "volatile_organic_compounds_parts"
+                 unit_of_measurement: "ppb"
    0x10:
       0x01:
          device_config:
@@ -2516,6 +3053,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -2552,6 +3092,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -2582,6 +3125,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -2618,6 +3164,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "t_raw"
               config:
@@ -2694,6 +3243,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "h_raw"
               config:
@@ -2747,6 +3299,9 @@
               config:
                  state_topic: ""
                  value_template: "{{ value_json.SP }}"
+                 device_class: "temperature"
+                 state_class: "measurement"
+                 unit_of_measurement: "°C"
             - component: "sensor"
               name: "h_raw"
               config:
@@ -4496,6 +5051,23 @@
                  value_template: >-
                    {% if value_json.KC == 112 %}ON{% else %}OFF{% endif %}
    0x05:
+      0x01:
+         device_config:
+            command: ""
+            channel: ""
+            log_learn: ""
+            direction: ""
+            answer: ""
+         entities:
+            - component: "device_automation"
+              name: "trig_water"
+              config:
+                 automation_type: "trigger"
+                 type: "water_detected"
+                 subtype: "sensor"
+                 topic: ""
+                 payload: "17"
+                 value_template: "{{ value_json.WAS }}"
       0x02:
          device_config:
             command: ""
@@ -5047,6 +5619,77 @@ eltako:
                 {% endif %}
    fud61: *fud14
    fdg14: *fud14
+   fttb:
+      device_config:
+         - rorg: "0xA5"
+           func: "0x07"
+           type: "0x01"
+           command: ""
+           channel: ""
+           log_learn: ""
+           direction: ""
+           answer: ""
+         - rorg: "0xF6"
+           func: "0x01"
+           type: "0x01"
+           command: ""
+           channel: ""
+           log_learn: ""
+           direction: ""
+           answer: ""
+      entities:
+         - component: "binary_sensor"
+           name: "Presence"
+           config:
+              state_topic: "a5"
+              value_template: >-
+                {% if value_json.PIRS >= 128 %}
+                  ON
+                {% else %}
+                  OFF
+                {% endif %}
+              device_class: "presence"
+              off_delay: 60
+         - component: "sensor"
+           name: "v_raw"
+           config:
+              state_topic: "a5"
+              value_template: >- 
+                {{ value_json.SVC }}
+              enabled_by_default: "false"
+              availability_topic: "a5"
+              availability_template: >-
+                {% if value_json.SVA == 1 %}
+                  online
+                {% else %}
+                  offline
+                {% endif %}
+              device_class: "voltage"
+              state_class: "measurement"
+              unit_of_measurement: "V"
+         - component: "sensor"
+           name: "voltage"
+           config:
+              state_topic: "a5"
+              value_template: >- 
+                {{ value_json.SVC | round(2) }}
+              availability_topic: "a5"
+              availability_template: >-
+                {% if value_json.SVA == 1 %}
+                  online
+                {% else %}
+                  offline
+                {% endif %}
+              device_class: "voltage"
+              state_class: "measurement"
+              unit_of_measurement: "V"
+         - component: "binary_sensor"
+           name: "Button"
+           config:
+              state_topic: "f6"
+              value_template: "{{ value_json.PB }}"
+              payload_on: "1"
+              payload_off: "0"
 
 # Below are mappings common to all EEPs
 common:

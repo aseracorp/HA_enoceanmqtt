@@ -18,16 +18,14 @@ ENV TZ=Europe/London
 
 # Install enoceanmqtt and requirements
 COPY docker/requirements.txt .
-RUN apk add --no-cache python3 py3-pip git && \
-    python3 -m venv /app/venv && \
-    . /app/venv/bin/activate && \
+RUN apk add --no-cache git && \
     python3 -m pip install --upgrade pip && \
     pip3 install -r requirements.txt && \
-    pip3 install git+https://github.com/aseracorp/enocean.git && \
+    pip3 install git+https://github.com/ChristopheHD/enocean.git && \
     git clone -b master --single-branch --depth 1 https://github.com/embyt/enocean-mqtt.git && \
     cd enocean-mqtt && python3 setup.py develop && cd .. && \
     echo "Installing from repository head" && \
-    git clone -b develop --single-branch --depth 1 https://github.com/aseracorp/HA_enoceanmqtt.git ; \
+    git clone -b develop --single-branch --depth 1 https://github.com/ChristopheHD/HA_enoceanmqtt.git ; \
     cp -rf ./HA_enoceanmqtt/enoceanmqtt enocean-mqtt && \
     rm -rf ./HA_enoceanmqtt
 
