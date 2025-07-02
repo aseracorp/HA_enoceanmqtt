@@ -56,13 +56,13 @@ class HACommunicator(Communicator):
                 cur_sensor['log_learn'] = devcfg.get('log_learn')
                 cur_sensor['direction'] = devcfg.get('direction')
                 cur_sensor['answer']    = devcfg.get('answer')
+                cur_sensor['persistent']   = devcfg.get('persistent", "true")
 
                 # Better to work with JSON in HA so force JSON usage
-                # Also force publish_rssi, publish_date and persistent
+                # Also force publish_rssi and publish_date
                 cur_sensor['publish_json'] = "1"
                 cur_sensor['publish_rssi'] = "1"
                 cur_sensor['publish_date'] = "1"
-                cur_sensor['persistent']   = "1"
 
         # Create sensors from models
         for cur_model in models:
