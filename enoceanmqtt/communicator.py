@@ -317,7 +317,6 @@ class Communicator:
 
         # Retain the to-be-published message ?
         retain = str(sensor.get('persistent')) in ("True", "true", "1")
-        logging.debug("persistent %s retain %s", str(sensor.get('persistent')), retain)
 
         # Is grouping enabled on this sensor
         channel_id = sensor.get('channel')
@@ -362,7 +361,7 @@ class Communicator:
         if mqtt_json not in (None, ""):
             value = json.dumps(mqtt_json)
             logging.debug("%s: Sent MQTT: %s", topic, value)
-        else
+        else:
             retain = False
             logging.debug("Clearing retained packets")
 
