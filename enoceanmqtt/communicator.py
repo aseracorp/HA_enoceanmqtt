@@ -317,7 +317,7 @@ class Communicator:
 
         # Retain the to-be-published message ?
         retain = str(sensor.get('persistent')) in ("True", "true", "1")
-        logging.debug("%s: persistent %s retain %s", topic, str(sensor.get('persistent')), retain)
+        logging.debug("persistent %s retain %s", str(sensor.get('persistent')), retain)
 
         # Is grouping enabled on this sensor
         channel_id = sensor.get('channel')
