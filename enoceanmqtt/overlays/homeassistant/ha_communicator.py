@@ -93,7 +93,7 @@ class HACommunicator(Communicator):
                     new_sens['publish_json'] = "1"
                     new_sens['publish_rssi'] = "1"
                     new_sens['publish_date'] = "1"
-                    new_sens.setdefault('persistent', 1)
+                    new_sens.setdefault('persistent', "1")
                     sensors.append(new_sens)
                     logging.debug("Created sensor: %s", new_sens)
 
