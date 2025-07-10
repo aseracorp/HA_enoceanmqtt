@@ -4931,6 +4931,7 @@
             log_learn: ""
             direction: ""
             answer: ""
+            persistent: false
          entities:
             - component: binary_sensor
               name: "pressed"
