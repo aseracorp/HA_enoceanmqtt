@@ -359,7 +359,7 @@ class Communicator:
                 del mqtt_json[cur_id]
 
         # Publish packet data to MQTT
-        if mqtt_json not in (None, "")
+        if mqtt_json not in (None, ""):
             value = json.dumps(mqtt_json)
             logging.debug("%s: Sent MQTT: %s", topic, value)
         else
