@@ -379,7 +379,7 @@ class HACommunicator(Communicator):
                               json.dumps(cfg), retain=True)
         
             # Clean up retained sensor topics if persistent is False
-            if not str(sensor.get('persistent')) in ("True", "true", "1")
+            if not str(sensor.get('persistent')) in ("True", "true", "1"):
                 _publish_mqtt(sensor, "")
 
         if sensor_cfgtopics:
@@ -504,7 +504,7 @@ class HACommunicator(Communicator):
                               json.dumps(cfg), retain=True)
             
             # Clean up retained sensor topics if persistent is False
-            if not str(sensor.get('persistent')) in ("True", "true", "1")
+            if not str(sensor.get('persistent')) in ("True", "true", "1"):
                 _publish_mqtt(sensor, "")
 
         if sensor_cfgtopics:
