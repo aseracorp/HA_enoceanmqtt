@@ -363,6 +363,7 @@ class Communicator:
             logging.debug("%s: Sent MQTT: %s", topic, value)
         else:
             retain = True
+            value = None
             logging.debug("Clearing retained packets")
 
         if mqtt_publish_json:
