@@ -1073,7 +1073,7 @@
             command: ""
             channel: ""
             log_learn: ""
-            persistent: false
+            persistent: "false"
          entities:
             - component: "sensor"
               name: "battery"
@@ -5059,7 +5059,7 @@
             log_learn: ""
             direction: ""
             answer: ""
-            persistent: false
+            persistent: "false"
          entities:
             - component: "device_automation"
               name: "trig_water"
