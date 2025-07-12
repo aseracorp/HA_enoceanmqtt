@@ -5685,13 +5685,9 @@ eltako:
                   {% set ns.dim_speed = '%02x' % (transition|int(default=0)) %}
                 {% endif %}
                 {"raw_data":"02:00:{{ns.dim_speed}}:08","send":"clear+raw_data"}
-              state_topic: "+"
+              state_topic: "f6"
               state_template: >-
-                {% if value_json._RAW_DATA_.split(":")|length == 2 %}
-                  {% if value_json._RAW_DATA_.split(":")[0]=="70" %}on{% elif value_json._RAW_DATA_.split(":")[0]=="50" %}off{% endif %}
-                {% elif value_json._RAW_DATA_.split(":")|length == 5 %}
-                  {% if value_json._RAW_DATA_.split(":")[3]=="09" %}on{% elif value_json._RAW_DATA_.split(":")[3]=="08" %}off{% endif %}
-                {% endif %}
+                {% if value_json._RAW_DATA_.split(":")[0]=="70" %}on{% elif value_json._RAW_DATA_.split(":")[0]=="50" %}off{% endif %}
               brightness_template: >-
                 {% if value_json._RAW_DATA_.split(":")|length == 5 %}
                   {{ (value_json._RAW_DATA_.split(":")[1]|int(default=0,base=16)*255/100)|int }}
