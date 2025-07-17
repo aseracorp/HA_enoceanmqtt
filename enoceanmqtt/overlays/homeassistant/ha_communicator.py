@@ -56,13 +56,13 @@ class HACommunicator(Communicator):
                 cur_sensor['log_learn'] = devcfg.get('log_learn')
                 cur_sensor['direction'] = devcfg.get('direction')
                 cur_sensor['answer']    = devcfg.get('answer')
+                cur_sensor['persistent']   = devcfg.get('persistent', "1")
 
                 # Better to work with JSON in HA so force JSON usage
-                # Also force publish_rssi, publish_date and persistent
+                # Also force publish_rssi and publish_date
                 cur_sensor['publish_json'] = "1"
                 cur_sensor['publish_rssi'] = "1"
                 cur_sensor['publish_date'] = "1"
-                cur_sensor['persistent']   = "1"
 
         # Create sensors from models
         for cur_model in models:
@@ -89,11 +89,11 @@ class HACommunicator(Communicator):
                     new_sens['func'] = int(new_sens['func'],0)
                     new_sens['type'] = int(new_sens['type'],0)
                     # Better to work with JSON in HA so force JSON usage
-                    # Also force publish_rssi, publish_date and persistent
+                    # Also force publish_rssi and publish_date
                     new_sens['publish_json'] = "1"
                     new_sens['publish_rssi'] = "1"
                     new_sens['publish_date'] = "1"
-                    new_sens['persistent']   = "1"
+                    new_sens.setdefault('persistent', "1")
                     sensors.append(new_sens)
                     logging.debug("Created sensor: %s", new_sens)
 
@@ -377,6 +377,10 @@ class HACommunicator(Communicator):
             # Publish the device configuration to MQTT for discovery
             self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
                               json.dumps(cfg), retain=True)
+        
+            # Clean up retained sensor topics if persistent is False
+            if not str(sensor.get('persistent')) in ("True", "true", "1"):
+                self._publish_mqtt(sensor, "")
 
         if sensor_cfgtopics:
             # Subscribe to one config topic so that we can detect when MQTT delete is pressed
@@ -498,6 +502,10 @@ class HACommunicator(Communicator):
             # Publish the device configuration to MQTT for discovery
             self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
                               json.dumps(cfg), retain=True)
+            
+            # Clean up retained sensor topics if persistent is False
+            if not str(sensor.get('persistent')) in ("True", "true", "1"):
+                self._publish_mqtt(sensor, "")
 
         if sensor_cfgtopics:
             # Subscribe to one config topic so that we can detect when MQTT delete is pressed

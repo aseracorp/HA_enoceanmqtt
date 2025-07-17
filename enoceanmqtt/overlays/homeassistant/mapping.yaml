@@ -1073,6 +1073,7 @@
             command: ""
             channel: ""
             log_learn: ""
+            persistent: "false"
          entities:
             - component: "sensor"
               name: "battery"
@@ -4930,6 +4931,7 @@
             log_learn: ""
             direction: ""
             answer: ""
+            persistent: false
          entities:
             - component: binary_sensor
               name: "pressed"
@@ -5058,6 +5060,7 @@
             log_learn: ""
             direction: ""
             answer: ""
+            persistent: "false"
          entities:
             - component: "device_automation"
               name: "trig_water"

@@ -359,7 +359,12 @@ class Communicator:
 
         # Publish packet data to MQTT
         value = json.dumps(mqtt_json)
-        logging.debug("%s: Sent MQTT: %s", topic, value)
+        if mqtt_json not in (None, ""):
+            logging.debug("%s: Sent MQTT: %s", topic, value)
+        else:
+            retain = True
+            value = None
+            logging.debug("Clearing retained packets")
 
         if mqtt_publish_json:
             self.mqtt.publish(topic, value, retain=retain)
