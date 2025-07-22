@@ -5622,6 +5622,81 @@ eltako:
                 {% endif %}
    fud61: *fud14
    fdg14: *fud14
+   tf61d:
+      device_config:
+         - rorg: "0xA5"
+           func: "0x38"
+           type: "0x08"
+           command: ""
+           channel: ""
+           log_learn: ""
+           direction: ""
+           answer: ""
+         - rorg: "0xF6"
+           func: "0x02"
+           type: "0x01"
+           command: ""
+           channel: ""
+           log_learn: ""
+           direction: ""
+           answer: ""
+      entities:
+         - component: "button"
+           name: "pairing"
+           config:
+              command_topic: "a5/req"
+              payload_press: >-
+                {"raw_data":"E0:40:0D:80","send":"clear+learn+raw_data"}
+              icon: "mdi:connection"
+         - component: "number"
+           name: "speed"
+           config:
+              command_topic: "a5/__trash"
+              min: "0"
+              max: "255"
+              step: "1"
+              mode: "slider"
+              icon: "mdi:speedometer"
+         - component: "light"
+           name: "light"
+           config:
+              schema: "template"
+              command_topic: "a5/req"
+              command_on_template: >-
+                {% set ns = namespace() %}
+                {% for entity in device_entities(device_id(entity_id)) %}
+                  {% if entity is search('speed$',ignorecase=True) %}
+                    {% set ns.dim_speed = '%02x' % (states(entity)|int(default=0)) %}
+                  {% endif %}
+                {% endfor %}
+                {% if transition is defined %}
+                  {% set ns.dim_speed = '%02x' % (transition|int(default=0)) %}
+                {% endif %}
+                {% set ns.dim_val = "FF" %}
+                {% if brightness is defined %}
+                  {% set ns.dim_val = '%02x' % (((brightness|int(default=255))*100/255)|int) %}
+                {% endif %}
+                {"raw_data":"02:{{ns.dim_val}}:{{ns.dim_speed}}:09","send":"clear+raw_data"}
+              command_off_template: >-
+                {% set ns = namespace() %}
+                {% for entity in device_entities(device_id(entity_id)) %}
+                  {% if entity is search('speed$',ignorecase=True) %}
+                    {% set ns.dim_speed = '%02x' % (states(entity)|int(default=0)) %}
+                  {% endif %}
+                {% endfor %}
+                {% if transition is defined %}
+                  {% set ns.dim_speed = '%02x' % (transition|int(default=0)) %}
+                {% endif %}
+                {"raw_data":"02:00:{{ns.dim_speed}}:08","send":"clear+raw_data"}
+              state_topic: "f6"
+              state_template: >-
+                {% if value_json._RAW_DATA_.split(":")[0]=="70" %}on{% elif value_json._RAW_DATA_.split(":")[0]=="50" %}off{% endif %}
+              brightness_template: >-
+                {% if value_json._RAW_DATA_.split(":")|length == 5 %}
+                  {{ (value_json._RAW_DATA_.split(":")[1]|int(default=0,base=16)*255/100)|int }}
+                {% else %}
+                  {{ states(entity_id)|int(default=0) }}
+                {% endif %}
    fttb:
       device_config:
          - rorg: "0xA5"
