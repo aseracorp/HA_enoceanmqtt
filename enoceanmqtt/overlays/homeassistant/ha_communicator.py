@@ -249,7 +249,7 @@ class HACommunicator(Communicator):
             cfg['device']['name'] = 'ENOCEANMQTT'
             cfg['device']['identifiers'] = sender_hex
             cfg['device']['model'] = 'Virtual @'+sender_hex
-            cfg['device']['manufacturer'] = 'https://github.com/aseracorp/HA_enoceanmqtt'
+            cfg['device']['manufacturer'] = 'https://github.com/ChristopheHD/HA_enoceanmqtt'
 
             # The configuration topic defined for MQTT Discovery
             cfgtopic = f"{self._mqtt_discovery_prefix}{entity['component']}/{uid}/config"
