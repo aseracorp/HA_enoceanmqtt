@@ -296,7 +296,7 @@ class Communicator:
 
         if profile:
             # Loop over profile contents
-            for source in profile.contents:
+            for source in list(profile):
                if not source.name:
                    continue
                # Check the current shortcut matches the command shortcut
