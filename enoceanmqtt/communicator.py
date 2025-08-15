@@ -296,11 +296,11 @@ class Communicator:
 
         if profile:
             # Loop over profile contents
-            for source in profile.contents:
-               if not source.name:
+            for source in list(profile):
+               if not source.tag:
                    continue
                # Check the current shortcut matches the command shortcut
-               if source['shortcut'] == sensor.get('command'):
+               if source.get('shortcut') == sensor.get('command'):
                    return packet.eep._get_raw(source, packet._bit_data)
 
         # If profile or command shortcut not found,
