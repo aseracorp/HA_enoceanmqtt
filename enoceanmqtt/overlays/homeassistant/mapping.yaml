@@ -1001,7 +1001,7 @@
                  payload_off: "off"
                  value_template: >-
                     {% if value_json.LC == 1 %}on{% else %}off{% endif %}
-      0x12:
+      0x11: &D20111
          device_config:
             command: "CMD"
             channel: "IO/CMD"
@@ -1067,6 +1067,7 @@
                  command_topic: "req"
                  payload_press: >-
                    {"CMD":"3","IO":"30","send":"clear"}
+      0x12: *D20111
    0x03:
       0x0A:
          device_config:
