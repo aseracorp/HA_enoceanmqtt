@@ -5305,6 +5305,7 @@ eltako:
            log_learn: ""
            direction: ""
            answer: ""
+           persistent: "false"
          - rorg: "0xF6"
            func: "0x02"
            type: "0x01"
@@ -5313,6 +5314,7 @@ eltako:
            log_learn: ""
            direction: ""
            answer: ""
+           persistent: "false"
       entities:
          - component: "button"
            name: "pairing"
@@ -5386,6 +5388,7 @@ eltako:
                 {% if value_json._RAW_DATA_.split(":")|length == 2 %}
                   {% if value_json._RAW_DATA_.split(":")[0]=="70" %}{{position_open}}
                   {% elif value_json._RAW_DATA_.split(":")[0]=="50" %}{{position_closed}}
+                  {% else %}{{ state_attr(entity_id, "current_position") | int(default=0) }}
                   {% endif %}
                 {% elif value_json._RAW_DATA_.split(":")|length == 5 %}
                   {% set drive_time_sec = (value_json.DB3*256+value_json.DB2)|int(default=0)/10 %}
