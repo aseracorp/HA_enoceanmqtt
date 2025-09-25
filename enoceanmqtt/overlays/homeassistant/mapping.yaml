@@ -5777,6 +5777,7 @@ eltako:
               value_template: "{{ value_json.PB }}"
               payload_on: "1"
               payload_off: "0"
+   tf100l: *fsr14
 
 # Mapping for Afriso devices
 afriso:
