@@ -1742,15 +1742,6 @@
             answer: ""
          entities:
             - component: "sensor"
-              name: "t_raw"
-              config:
-                 state_topic: ""
-                 value_template: "{{ value_json.TMP }}"
-                 device_class: "temperature"
-                 state_class: "measurement"
-                 unit_of_measurement: "°C"
-                 enabled_by_default: "false"
-            - component: "sensor"
               name: "tempC"
               config:
                  state_topic: ""
@@ -1758,15 +1749,6 @@
                  device_class: "temperature"
                  state_class: "measurement"
                  unit_of_measurement: "°C"
-            - component: "sensor"
-              name: "h_raw"
-              config:
-                 state_topic: ""
-                 value_template: "{{ value_json.HUM }}"
-                 device_class: "humidity"
-                 state_class: "measurement"
-                 unit_of_measurement: "%"
-                 enabled_by_default: "false"
             - component: "sensor"
               name: "hum"
               config:
@@ -1779,51 +1761,55 @@
               name: "lux"
               config:
                  state_topic: ""
-                 value_template: "{{ value_json.ILL }}"
+                 value_template: "{{ value_json.ILL | round (1) }}"
                  device_class: "illuminance"
                  state_class: "measurement"
                  unit_of_measurement: "lx"
             - component: "sensor"
               name: "acceleration"
+              device_class: "enum"
+              options:
+                 - "Periodic update"
+                 - "Threshold 1 exceeded"
+                 - "Threshold 2 exceeded"
               config:
                  state_topic: ""
                  value_template: >-
-                   {% if value_json.ACC == 0 %}Periodic Update
-                   {% elif value_json.ACC == 1 %}Threshold 1 exceeded
-                   {% elif value_json.ACC == 2 %}Threshold 2 exceeded
-                   {% else %}Error
+                   {% if value_json.ACC == 0 %} Periodic update
+                   {% elif value_json.ACC == 1 %} Threshold 1 exceeded
+                   {% elif value_json.ACC == 2 %} Threshold 2 exceeded
                    {% endif %}
             - component: "sensor"
               name: "ACX"
               config:
                  state_topic: ""
-                 value_template: "{{ value_json.ACX }}"
-                 device_class: "weight"
+                 value_template: "{{ value_json.ACX | round (3) }}"
                  state_class: "measurement"
                  unit_of_measurement: "g"
             - component: "sensor"
               name: "ACY"
               config:
                  state_topic: ""
-                 value_template: "{{ value_json.ACY }}"
-                 device_class: "weight"
+                 value_template: "{{ value_json.ACY | round (3) }}"
                  state_class: "measurement"
                  unit_of_measurement: "g"
             - component: "sensor"
               name: "ACZ"
               config:
                  state_topic: ""
-                 value_template: "{{ value_json.ACZ }}"
-                 device_class: "weight"
+                 value_template: "{{ value_json.ACZ | round (3) }}"
                  state_class: "measurement"
                  unit_of_measurement: "g"
             - component: binary_sensor
               name: "contact"
               config:
                  state_topic: ""
-                 value_template: "{{ value_json.CO }}"
-                 payload_on: "0"
-                 payload_off: "1"
+                 device_class: "door"
+                 value_template: >-
+                    {% if value_json.CO == 0 %} ON
+                    {% elif value_json.CO == 1 %} OFF
+                    {% endif %}
+                 icon: "mdi:door"
    0x50:
       0x00:
          device_config:
