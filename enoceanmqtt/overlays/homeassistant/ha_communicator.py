@@ -226,7 +226,9 @@ class HACommunicator(Communicator):
         for entity in device_map:
             cfg = entity['config']
             # Wait for the transmitter ID
-            while True:
+            attempt = 0
+            while attempt < 10:
+                attempt++
                 try:
                     if self.enocean_sender is not None:
                         break
@@ -234,6 +236,9 @@ class HACommunicator(Communicator):
                     pass
                 time.sleep(1)
                 logging.info("Waiting for device base ID")
+            if self.enocean_sender is None:
+                logging.fatal("Device base ID not received !")
+                sys.exit("Device base ID not received")
 
             # Create a unique ID for the entity based on the transmitter ID
             sender = enocean.utils.combine_hex(self.enocean_sender)
