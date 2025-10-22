@@ -228,7 +228,7 @@ class HACommunicator(Communicator):
             # Wait for the transmitter ID
             attempt = 0
             while attempt < 10:
-                attempt++
+                attempt += 1
                 try:
                     if self.enocean_sender is not None:
                         break
