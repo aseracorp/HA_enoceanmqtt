@@ -18,7 +18,6 @@ class HACommunicator(Communicator):
     _devmgr = None
     _first_mqtt_connect = True
     _system_status_topic = {}
-    _dev_name_in_entity = False
 
     def __init__(self, config, sensors):
         # Read mapping file
@@ -99,11 +98,6 @@ class HACommunicator(Communicator):
 
         # Create device manager
         self._devmgr = DeviceManager(config)
-
-        # Starting from HA 2024.2.0, device name should not be used in entity names
-        # Get how this should be handled as specified by the user
-        if str(config.get('ha_dev_name_in_entity')) in ("True", "true", "1"):
-            self._dev_name_in_entity = True
 
         # Retrieve MQTT discovery prefix from configuration and make sure there is a trailing '/'
         self._mqtt_discovery_prefix = config.get('mqtt_discovery_prefix', 'homeassistant/')
@@ -344,10 +338,7 @@ class HACommunicator(Communicator):
             cfg['unique_id'] = uid
 
             # The entity name to be displayed in HA
-            if self._dev_name_in_entity:
-                cfg['name'] = dev_name+'_'+entity['name']
-            else:
-                cfg['name'] = entity['name']
+            cfg['name'] = entity['name']
 
             # Associate all entities to the device in HA
             cfg['device'] = {}
@@ -470,10 +461,7 @@ class HACommunicator(Communicator):
             cfg['unique_id'] = uid
 
             # The entity name to be displayed in HA
-            if self._dev_name_in_entity:
-                cfg['name'] = dev_name+'_'+entity['name']
-            else:
-                cfg['name'] = entity['name']
+            cfg['name'] = entity['name']
 
             # Associate all entities to the device in HA
             cfg['device'] = {}
