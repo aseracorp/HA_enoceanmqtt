@@ -7,6 +7,7 @@ import os
 import time
 import json
 import yaml
+import sys
 
 import enocean.utils
 from enoceanmqtt.communicator import Communicator
