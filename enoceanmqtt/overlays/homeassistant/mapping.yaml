@@ -5617,6 +5617,7 @@ eltako:
                 {% endif %}
    fud61: *fud14
    fdg14: *fud14
+   fld61: *fud14
    tf61d:
       device_config:
          - rorg: "0xA5"
