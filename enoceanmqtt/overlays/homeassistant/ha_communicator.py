@@ -7,7 +7,6 @@ import os
 import time
 import json
 import yaml
-import sys
 
 import enocean.utils
 from enoceanmqtt.communicator import Communicator
@@ -239,7 +238,7 @@ class HACommunicator(Communicator):
                 logging.info("Waiting for device base ID")
             if self.enocean_sender is None:
                 logging.fatal("Device base ID not received !")
-                sys.exit("Device base ID not received")
+                os._exit(1)
 
             # Create a unique ID for the entity based on the transmitter ID
             sender = enocean.utils.combine_hex(self.enocean_sender)
@@ -545,21 +544,6 @@ class HACommunicator(Communicator):
                     self.mqtt.publish(self._system_status_topic['learn'],
                                       'ON' if self.enocean.teach_in else 'OFF',
                                       retain=True)
-            ## Device system request
-            #else:
-                #sensor = self._devmgr.db_get_device_by_name(target_name)
-                #action = msg.payload.decode('UTF-8')
-                #logging.debug("Action %s received for sensor %s", action, str(sensor['name']))
-                #if sensor not in ([], None):
-                    ## Handle delete sensor request
-                    #if action == "delete":
-                        ## Remove all sensor's entities
-                        #for cfgtopic in sensor['cfgtopics']:
-                            #self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
-                                               #"", retain=True)
-                        ## Remove the sensor from the database
-                        #self._devmgr.db_remove_device_by_address(sensor['address'])
-
 
     #=============================================================================================
     # ENOCEAN TO MQTT
