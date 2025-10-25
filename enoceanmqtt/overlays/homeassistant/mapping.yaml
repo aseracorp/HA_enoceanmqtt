@@ -1,4 +1,5 @@
 # Author: Marc Alexandre K. <marcalexandrek-developer@yahoo.fr>
+# Maintainer: ChristopheHD
 
 # Mapping of EEPs to Home Assistant Entities
 0xD2:
@@ -1161,36 +1162,6 @@
             direction: ""
             answer: ""
          entities:
-            - component: "cover"
-              name: "cover"
-              config:
-                 command_topic: "req"
-                 payload_open: >-
-                   {"CMD":"1","POS":"0","ANG":"127","REPO":"0","LOCK":"0","CHN":"0","send":"clear"}
-                 payload_close: >-
-                   {"CMD":"1","POS":"100","ANG":"127","REPO":"0","LOCK":"0","CHN":"0","send":"clear"}
-                 payload_stop: >-
-                   {"CMD":"2","CHN":"0","send":"clear"}
-                 position_topic: "CMD4"
-                 position_template: >-
-                   {% if (value_json.POS <= 100) and (value_json.POS >= 0) %}
-                     {{ value_json.POS }}
-                   {% else %}
-                     {{ state_attr(entity_id,"current_position")|int(default=0) }}
-                   {% endif %}
-                 set_position_topic: "req"
-                 set_position_template: >-
-                   {"CMD":"1","POS":"{{ position }}","ANG":"127","REPO":"0","LOCK":"0","CHN":"0","send":"clear"}
-                 tilt_status_topic: "CMD4"
-                 tilt_status_template: >-
-                   {% if (value_json.ANG <= 100) and (value_json.ANG >= 0) %}
-                     {{ value_json.ANG }}
-                   {% else %}
-                     {{ state_attr(entity_id,"current_tilt_position")|int(default=0) }}
-                   {% endif %}
-                 tilt_command_topic: "req"
-                 tilt_command_template: >-
-                   {"CMD":"1","POS":"127","ANG":"{{ tilt_position }}","REPO":"0","LOCK":"0","CHN":"0","send":"clear"}
             - component: "cover"
               name: "cover2"
               config:
