@@ -1158,8 +1158,7 @@
             answer: ""
          entities:
             - component: "cover"
-              name: "cover"
-              object_id: "cover2" # This ID is here to handle the continuity with version <=0.1.40
+              name: "cover2"
               config:
                  command_topic: "req"
                  payload_open: >-
