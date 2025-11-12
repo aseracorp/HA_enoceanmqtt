@@ -5770,6 +5770,128 @@ eltako:
                  value_template: >-
                    {% if value_json.PIRS == 0 %}ON{% else %}OFF{% endif %}
                  device_class: "occupancy"
+   futh65d: &futh65d
+      device_config:
+        - rorg: "0xA5"
+          func: "0x10"
+          type: "0x06"
+          command: ""
+          channel: ""
+          log_learn: ""
+          direction: ""
+          answer: ""
+        - rorg: "0xA5"
+          func: "0x10"
+          type: "0x12"
+          command: ""
+          channel: ""
+          log_learn: ""
+          direction: ""
+          answer: ""
+      entities:
+         - component: "number"
+           name: "night_reduction"
+           config:
+              state_topic: "a5"
+              command_topic: "a5/req"
+              device_class: "temperature_delta"
+              icon: "mdi:weather-night"
+              unit_of_measurement: "K"
+              min: 0
+              max: 5
+              mode: "box"
+              value_template: >-
+               {% if value_json._RAW_DATA_.split(":")[3]=="0F" %}
+                  {{ value_json._RAW_DATA_.split(":")[0]|int(base=16)/6 }}
+               {% endif %}
+              command_template: >-
+                {% set ns = namespace() %}
+                {% for entity in device_entities(device_id(entity_id)) %}
+                  {% if entity is search('setpoint_temperature$',ignorecase=True) %}
+                    {% set ns.sp = '%02x' % (states(entity)*255/40|int(default=0)) %}
+                  {% endif %}
+                {% endfor %}
+                {% set ns.nr = '%02x' % (value*6|int(default=0)) %}
+                {"raw_data":"{{ns.nr}}:{{ns.sp}}:00:0F","send":"clear+raw_data"}
+         - component: "number"
+           name: "setpoint_temperature"
+           config:
+              state_topic: "a5"
+              command_topic: "a5/req"
+              device_class: "temperature"
+              icon: "mdi:thermostat"
+              unit_of_measurement: "°C"
+              min: 0
+              max: 40
+              step: 0.5
+              mode: "box"
+              value_template: >-
+               {% if value_json._RAW_DATA_.split(":")[3]=="0F" %}
+                  {{ (value_json.SP / 255 * 40 * 2) | round / 2 }}
+               {% endif %}
+              command_template: >-
+                {% set ns = namespace() %}
+                {% for entity in device_entities(device_id(entity_id)) %}
+                  {% if entity is search('night_reduction$',ignorecase=True) %}
+                    {% set ns.nr = '%02x' % (states(entity)*6|int(default=0)) %}
+                  {% endif %}
+                {% endfor %}
+                {% set ns.sp = '%02x' % (value*255/40|int(default=0)) %}
+                {"raw_data":"{{ns.nr}}:{{ns.sp}}:00:0F","send":"clear+raw_data"}
+         - component: "sensor"
+           name: "temperature"
+           config:
+              state_topic: "a5"
+              device_class: "temperature"
+              icon: "mdi:thermometer"
+              unit_of_measurement: "°C"
+              value_template: "{{ value_json.TMP }}"
+         - component: "button"
+           name: "pair_temperature"
+           config:
+              command_topic: "a5/req"
+              payload_press: >-
+                {"raw_data":"40:30:0D:87","send":"clear+learn+raw_data"}
+              icon: "mdi:connection"
+              entity_category: "config"
+         - component: "number"
+           name: "setpoint_humidity"
+           config:
+              state_topic: "a5"
+              command_topic: "a5/req"
+              device_class: "humidity"
+              icon: "mdi:air-humidifier"
+              unit_of_measurement: "%"
+              min: 10
+              max: 90
+              mode: box
+              value_template: >-
+               {% if value_json._RAW_DATA_.split(":")[3]=="08" %}
+                  {{ (value_json.SP / 255 * 100) | round }}
+               {% endif %}
+              command_template: >-
+                {"SP":"{{(value*255/100)|round}}","HUM":"0","TMP":"0","send":"clear"}
+         - component: "sensor"
+           name: "humidity"
+           config:
+              state_topic: "a5"
+              device_class: "humidity"
+              icon: "mdi:water-percent"
+              unit_of_measurement: "%"
+              value_template: >-
+               {% if value_json._RAW_DATA_.split(":")[3]=="08" %}
+                  {{ value_json.HUM }}
+               {% endif %}
+         - component: "button"
+           name: "pair_humidity"
+           config:
+              command_topic: "a5/req"
+              payload_press: >-
+                {"raw_data":"40:90:0D:80","send":"clear+learn+raw_data"}
+              icon: "mdi:connection"
+              entity_category: "config"
+   futh55d: *futh65d
+   futh55ed: *futh65d
 
 # Mapping for Afriso devices
 afriso:
