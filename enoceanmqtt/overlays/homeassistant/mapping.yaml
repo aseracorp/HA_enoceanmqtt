@@ -5770,40 +5770,6 @@ eltako:
                  value_template: >-
                    {% if value_json.PIRS == 0 %}ON{% else %}OFF{% endif %}
                  device_class: "occupancy"
-  fbh55esb:
-    device_config:
-      - rorg: "0xA5"
-        func: "0x08"
-        type: "0x01"
-        command: ""
-        channel: ""
-        log_learn: ""
-        direction: ""
-        answer: ""
-    entities:
-      - component: "sensor"
-        name: "voltage"
-        config:
-          state_topic: "a5"
-          value_template: "{{ value_json.SVC | round(2) }}"
-          device_class: "voltage"
-          state_class: "measurement"
-          unit_of_measurement: "V"
-      - component: "sensor"
-        name: "lux"
-        config:
-          state_topic: "a5"
-          value_template: "{{ value_json.ILL | round(1) }}"
-          device_class: "illuminance"
-          state_class: "measurement"
-          unit_of_measurement: "lx"
-      - component: binary_sensor
-        name: "pir"
-        config:
-          state_topic: "a5"
-          value_template: >-
-            {% if value_json.PIRS == 0 %}ON{% else %}OFF{% endif %}
-          device_class: "occupancy"
   futh65d: &futh65d
     device_config:
       - rorg: "0xA5"
