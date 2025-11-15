@@ -5770,7 +5770,7 @@ eltako:
                  value_template: >-
                    {% if value_json.PIRS == 0 %}ON{% else %}OFF{% endif %}
                  device_class: "occupancy"
-  futh65d: &futh65d
+   futh65d: &futh65d
     device_config:
       - rorg: "0xA5"
         func: "0x10"
