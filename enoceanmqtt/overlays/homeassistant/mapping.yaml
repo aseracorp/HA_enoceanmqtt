@@ -5885,7 +5885,7 @@ eltako:
           unit_of_measurement: "%"
           value_template: >-
             {% if value_json._RAW_DATA_.split(":")[3]=="08" %}
-              {{ ((value_json._RAW_DATA_.split(":")[1]|int(default=0,base=16))*250/100)|round }}
+              {{ ((value_json._RAW_DATA_.split(":")[1]|int(default=0,base=16))/250*100)|round }}
             {% endif %}
       - component: "button"
         name: "pair_humidity"
