@@ -5846,8 +5846,6 @@ eltako:
           icon: "mdi:thermometer"
           unit_of_measurement: "°C"
           value_template: >-
-            {% if value_json._RAW_DATA_.split(":")[3]=="0F" %}
-               {{ value_json.TMP | round(1)  }}
             {% if value_json._RAW_DATA_.split(":")[3]=="08" %}
               {{ ((255-(value_json.RAW_DATA.split(":")[1]|int(default=0,base=16)))/255*40)|round(1)  }}
             {% endif %}
