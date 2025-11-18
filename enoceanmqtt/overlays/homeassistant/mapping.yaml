@@ -5848,11 +5848,11 @@ eltako:
           value_template: >-
             {% if value_json._RAW_DATA_.split(":")[3]=="0F" %}
                {{ value_json.TMP | round(1)  }}
-            {% elif value_json._RAW_DATA_.split(":")[3]=="08" %}
-              {{ ((value_json._RAW_DATA_.split(":")[2]|int(default=0,base=16))/250*40)|round(1)  }}
+            {% if value_json._RAW_DATA_.split(":")[3]=="08" %}
+              {{ ((255-(value_json.RAW_DATA.split(":")[1]|int(default=0,base=16)))/255*40)|round(1)  }}
             {% endif %}
       - component: "button"
-        name: "pair_temperature"
+        name: "pairing"
         config:
           command_topic: "a5/req"
           payload_press: >-
@@ -5887,14 +5887,6 @@ eltako:
             {% if value_json._RAW_DATA_.split(":")[3]=="08" %}
               {{ ((value_json._RAW_DATA_.split(":")[1]|int(default=0,base=16))/250*100)|round }}
             {% endif %}
-      - component: "button"
-        name: "pair_humidity"
-        config:
-          command_topic: "a5/req"
-          payload_press: >-
-            {"raw_data":"40:90:0D:80","send":"clear+learn+raw_data"}
-          icon: "mdi:connection"
-          entity_category: "config"
    futh55d: *futh65d
    futh55ed: *futh65d
 
