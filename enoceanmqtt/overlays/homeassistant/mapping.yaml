@@ -5789,30 +5789,18 @@ eltako:
         direction: ""
         answer: ""
     entities:
-      - component: "number"
+      - component: "sensor"
         name: "night_reduction"
         config:
           state_topic: "a5"
-          command_topic: "a5/req"
           device_class: "temperature_delta"
           icon: "mdi:weather-night"
           unit_of_measurement: "K"
-          min: 0
-          max: 5
-          mode: "box"
+          entity_category: "config"
           value_template: >-
             {% if value_json._RAW_DATA_.split(":")[3]=="0F" %}
                {{ value_json._RAW_DATA_.split(":")[0]|int(base=16)/6 }}
             {% endif %}
-          command_template: >-
-            {% set ns = namespace() %}
-            {% for entity in device_entities(device_id(entity_id)) %}
-              {% if entity is search('setpoint_temperature$',ignorecase=True) %}
-                {% set ns.sp = '%02x' % (states(entity)*255/40|int(default=0)) %}
-              {% endif %}
-            {% endfor %}
-            {% set ns.nr = '%02x' % (value*6|int(default=0)) %}
-            {"raw_data":"{{ns.nr}}:{{ns.sp}}:00:0F","send":"clear+raw_data"}
       - component: "number"
         name: "setpoint_temperature"
         config:
@@ -5830,14 +5818,7 @@ eltako:
                {{ (value_json.SP / 255 * 40 * 2) | round / 2 }}
             {% endif %}
           command_template: >-
-            {% set ns = namespace() %}
-            {% for entity in device_entities(device_id(entity_id)) %}
-              {% if entity is search('night_reduction$',ignorecase=True) %}
-                {% set ns.nr = '%02x' % ((states(entity)*6)|int(default=0)) %}
-              {% endif %}
-            {% endfor %}
-            {% set ns.sp = '%02x' % ((value*255/40)|int(default=0)) %}
-            {"raw_data":"{{ns.nr}}:{{ns.sp}}:00:0F","send":"clear+raw_data"}
+            {"SP":"{{(value*255/40)|int(default=0)}}","HUM":"0","TMP":"0","send":"clear"}
       - component: "sensor"
         name: "temperature"
         config:
@@ -5857,23 +5838,18 @@ eltako:
             {"raw_data":"40:30:0D:85","send":"clear+learn+raw_data"}
           icon: "mdi:connection"
           entity_category: "config"
-      - component: "number"
+      - component: "sensor"
         name: "setpoint_humidity"
         config:
           state_topic: "a5"
-          command_topic: "a5/req"
           device_class: "humidity"
           icon: "mdi:air-humidifier"
           unit_of_measurement: "%"
-          min: 10
-          max: 90
-          mode: box
+          entity_category: "config"
           value_template: >-
             {% if value_json._RAW_DATA_.split(":")[3]=="08" %}
                {{ (value_json.SP / 255 * 100) | round }}
             {% endif %}
-          command_template: >-
-            {"SP":"{{(value*255/100)|round}}","HUM":"0","TMP":"0","send":"clear"}
       - component: "sensor"
         name: "humidity"
         config:
