@@ -47,7 +47,7 @@ jobs:
       # This step uses [docker/metadata-action](https://github.com/docker/metadata-action#about) to extract tags and labels that will be applied to the specified image. The `id` "meta" allows the output of this step to be referenced in a subsequent step. The `images` value provides the base name for the tags and labels.
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v5.10.0
         with:
           tags: type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'develop') }}
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -64,8 +64,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
-#          cache-from: type=local,src=/tmp/.buildx-cache
-#          cache-to: type=local,dest=/tmp/.buildx-cache
       
       # This step generates an artifact attestation for the image, which is an unforgeable statement about where and how it was built. It increases supply chain security for people who consume the image. For more information, see "[AUTOTITLE](/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)." 
       - name: Generate artifact attestation
