@@ -5810,7 +5810,7 @@ nodon:
     - rorg: "0xD1"
       func: "0x46"
       type: "0x00"
-      command: ""
+      command: "CMD"
       channel: ""
       log_learn: ""
       direction: ""
