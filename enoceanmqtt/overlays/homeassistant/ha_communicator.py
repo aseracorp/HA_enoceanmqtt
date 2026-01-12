@@ -50,11 +50,18 @@ class HACommunicator(Communicator):
                     pass
 
                 # Set EEP-related device configuration
-                cur_sensor['command']   = devcfg.get('command')
-                cur_sensor['channel']   = devcfg.get('channel')
-                cur_sensor['log_learn'] = devcfg.get('log_learn')
-                cur_sensor['direction'] = devcfg.get('direction')
-                cur_sensor['answer']    = devcfg.get('answer')
+                # Only set fields if they have non-empty values to avoid passing empty strings
+                # to the EnOcean library which expects None for unset parameters
+                if devcfg.get('command'):
+                    cur_sensor['command'] = devcfg.get('command')
+                if devcfg.get('channel'):
+                    cur_sensor['channel'] = devcfg.get('channel')
+                if devcfg.get('log_learn'):
+                    cur_sensor['log_learn'] = devcfg.get('log_learn')
+                if devcfg.get('direction'):
+                    cur_sensor['direction'] = devcfg.get('direction')
+                if devcfg.get('answer'):
+                    cur_sensor['answer'] = devcfg.get('answer')
                 cur_sensor['persistent']   = devcfg.get('persistent', "1")
 
                 # Better to work with JSON in HA so force JSON usage
@@ -373,10 +380,6 @@ class HACommunicator(Communicator):
             # Publish the device configuration to MQTT for discovery
             self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
                               json.dumps(cfg), retain=True)
-        
-            # Clean up retained sensor topics if persistent is False
-            if not str(sensor.get('persistent')) in ("True", "true", "1"):
-                self._publish_mqtt(sensor, "")
 
         if sensor_cfgtopics:
             # Subscribe to one config topic so that we can detect when MQTT delete is pressed
@@ -495,10 +498,6 @@ class HACommunicator(Communicator):
             # Publish the device configuration to MQTT for discovery
             self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
                               json.dumps(cfg), retain=True)
-            
-            # Clean up retained sensor topics if persistent is False
-            if not str(sensor.get('persistent')) in ("True", "true", "1"):
-                self._publish_mqtt(sensor, "")
 
         if sensor_cfgtopics:
             # Subscribe to one config topic so that we can detect when MQTT delete is pressed
