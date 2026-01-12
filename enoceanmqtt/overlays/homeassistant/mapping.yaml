@@ -5827,8 +5827,10 @@ eltako:
           icon: "mdi:thermometer"
           unit_of_measurement: "°C"
           value_template: >-
-            {% if value_json._RAW_DATA_.split(":")[3]=="08" %}
-              {{ ((255-(value_json.RAW_DATA.split(":")[1]|int(default=0,base=16)))/255*40)|round(1)  }}
+            {% if value_json._RAW_DATA_.split(":")[3]=="0F" %}
+              {{ ((255 - (value_json._RAW_DATA_.split(":")[2]|int(default=0,base=16))) / 255 * 40)|round(1)  }}
+            {% elif value_json._RAW_DATA_.split(":")[3]=="08" %}
+              {{ ((value_json._RAW_DATA_.split(":")[2]|int(default=0,base=16)) / 250 * 40)|round(1)  }}
             {% endif %}
       - component: "button"
         name: "pairing"
