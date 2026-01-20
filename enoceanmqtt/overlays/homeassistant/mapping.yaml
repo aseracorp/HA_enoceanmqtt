@@ -5770,19 +5770,11 @@ eltako:
         value_template: >-
           {% if value_json.PIRS == 0 %}ON{% else %}OFF{% endif %}
         device_class: "occupancy"
-  futh65d: &futh65d
+  futh65d_heating: &futh65d_heating
     device_config:
     - rorg: "0xA5"
       func: "0x10"
       type: "0x06"
-      command: ""
-      channel: ""
-      log_learn: ""
-      direction: ""
-      answer: ""
-    - rorg: "0xA5"
-      func: "0x10"
-      type: "0x12"
       command: ""
       channel: ""
       log_learn: ""
@@ -5840,6 +5832,38 @@ eltako:
           {"raw_data":"40:30:0D:85","send":"clear+learn+raw_data"}
         icon: "mdi:connection"
         entity_category: "config"
+  futh65d_hygro: &futh65d_hygro
+    device_config:
+    - rorg: "0xA5"
+      func: "0x10"
+      type: "0x12"
+      command: ""
+      channel: ""
+      log_learn: ""
+      direction: ""
+      answer: ""
+    entities:
+    - component: "sensor"
+      name: "temperature"
+      config:
+        state_topic: "a5"
+        device_class: "temperature"
+        icon: "mdi:thermometer"
+        unit_of_measurement: "°C"
+        value_template: >-
+          {% if value_json._RAW_DATA_.split(":")[3]=="0F" %}
+            {{ ((255 - (value_json._RAW_DATA_.split(":")[2]|int(default=0,base=16))) / 255 * 40)|round(1)  }}
+          {% elif value_json._RAW_DATA_.split(":")[3]=="08" %}
+            {{ ((value_json._RAW_DATA_.split(":")[2]|int(default=0,base=16)) / 250 * 40)|round(1)  }}
+          {% endif %}
+    - component: "button"
+      name: "pairing"
+      config:
+        command_topic: "a5/req"
+        payload_press: >-
+          {"raw_data":"40:30:0D:85","send":"clear+learn+raw_data"}
+        icon: "mdi:connection"
+        entity_category: "config"
     - component: "sensor"
       name: "setpoint_humidity"
       config:
@@ -5863,8 +5887,10 @@ eltako:
           {% if value_json._RAW_DATA_.split(":")[3]=="08" %}
             {{ ((value_json._RAW_DATA_.split(":")[1]|int(default=0,base=16))/250*100)|round }}
           {% endif %}
-  futh55d: *futh65d
-  futh55ed: *futh65d
+  futh55d_heating: *futh65d_heating
+  futh55d_hygro: *futh65d_hygro
+  futh55ed_heating: *futh65d_heating
+  futh55ed_hygro: *futh65d_hygro
 
 # Mapping for Afriso devices
 afriso:
