@@ -5811,6 +5811,14 @@ eltako:
           {% endif %}
         command_template: >-
           {"SP":"{{(value*255/40)|int(default=0)}}","HUM":"0","TMP":"0","send":"clear"}
+    - component: "button"
+      name: "priority_temperature"
+      config:
+        state_topic: "a5"
+        payload_press: >-
+          {"SP":"0","HUM":"0","TMP":"0","send":"clear"}
+        icon: "mdi:thermometer-check"
+        entity_category: "config"
     - component: "sensor"
       name: "temperature"
       config:
