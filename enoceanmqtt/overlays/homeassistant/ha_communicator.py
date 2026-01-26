@@ -18,7 +18,6 @@ class HACommunicator(Communicator):
     _devmgr = None
     _first_mqtt_connect = True
     _system_status_topic = {}
-    _dev_name_in_entity = False
 
     def __init__(self, config, sensors):
         # Read mapping file
@@ -51,18 +50,25 @@ class HACommunicator(Communicator):
                     pass
 
                 # Set EEP-related device configuration
-                cur_sensor['command']   = devcfg.get('command')
-                cur_sensor['channel']   = devcfg.get('channel')
-                cur_sensor['log_learn'] = devcfg.get('log_learn')
-                cur_sensor['direction'] = devcfg.get('direction')
-                cur_sensor['answer']    = devcfg.get('answer')
+                # Only set fields if they have non-empty values to avoid passing empty strings
+                # to the EnOcean library which expects None for unset parameters
+                if devcfg.get('command'):
+                    cur_sensor['command'] = devcfg.get('command')
+                if devcfg.get('channel'):
+                    cur_sensor['channel'] = devcfg.get('channel')
+                if devcfg.get('log_learn'):
+                    cur_sensor['log_learn'] = devcfg.get('log_learn')
+                if devcfg.get('direction'):
+                    cur_sensor['direction'] = devcfg.get('direction')
+                if devcfg.get('answer'):
+                    cur_sensor['answer'] = devcfg.get('answer')
+                cur_sensor['persistent']   = devcfg.get('persistent', "1")
 
                 # Better to work with JSON in HA so force JSON usage
-                # Also force publish_rssi, publish_date and persistent
+                # Also force publish_rssi and publish_date
                 cur_sensor['publish_json'] = "1"
                 cur_sensor['publish_rssi'] = "1"
                 cur_sensor['publish_date'] = "1"
-                cur_sensor['persistent']   = "1"
 
         # Create sensors from models
         for cur_model in models:
@@ -89,21 +95,16 @@ class HACommunicator(Communicator):
                     new_sens['func'] = int(new_sens['func'],0)
                     new_sens['type'] = int(new_sens['type'],0)
                     # Better to work with JSON in HA so force JSON usage
-                    # Also force publish_rssi, publish_date and persistent
+                    # Also force publish_rssi and publish_date
                     new_sens['publish_json'] = "1"
                     new_sens['publish_rssi'] = "1"
                     new_sens['publish_date'] = "1"
-                    new_sens['persistent']   = "1"
+                    new_sens.setdefault('persistent', "1")
                     sensors.append(new_sens)
                     logging.debug("Created sensor: %s", new_sens)
 
         # Create device manager
         self._devmgr = DeviceManager(config)
-
-        # Starting from HA 2024.2.0, device name should not be used in entity names
-        # Get how this should be handled as specified by the user
-        if str(config.get('ha_dev_name_in_entity')) in ("True", "true", "1"):
-            self._dev_name_in_entity = True
 
         # Retrieve MQTT discovery prefix from configuration and make sure there is a trailing '/'
         self._mqtt_discovery_prefix = config.get('mqtt_discovery_prefix', 'homeassistant/')
@@ -226,7 +227,9 @@ class HACommunicator(Communicator):
         for entity in device_map:
             cfg = entity['config']
             # Wait for the transmitter ID
-            while True:
+            attempt = 0
+            while attempt < 10:
+                attempt += 1
                 try:
                     if self.enocean_sender is not None:
                         break
@@ -234,6 +237,9 @@ class HACommunicator(Communicator):
                     pass
                 time.sleep(1)
                 logging.info("Waiting for device base ID")
+            if self.enocean_sender is None:
+                logging.fatal("Device base ID not received !")
+                os._exit(1)
 
             # Create a unique ID for the entity based on the transmitter ID
             sender = enocean.utils.combine_hex(self.enocean_sender)
@@ -249,7 +255,7 @@ class HACommunicator(Communicator):
             cfg['device']['name'] = 'ENOCEANMQTT'
             cfg['device']['identifiers'] = sender_hex
             cfg['device']['model'] = 'Virtual @'+sender_hex
-            cfg['device']['manufacturer'] = 'https://github.com/aseracorp/HA_enoceanmqtt'
+            cfg['device']['manufacturer'] = 'https://github.com/ChristopheHD/HA_enoceanmqtt'
 
             # The configuration topic defined for MQTT Discovery
             cfgtopic = f"{self._mqtt_discovery_prefix}{entity['component']}/{uid}/config"
@@ -344,10 +350,7 @@ class HACommunicator(Communicator):
             cfg['unique_id'] = uid
 
             # The entity name to be displayed in HA
-            if self._dev_name_in_entity:
-                cfg['name'] = dev_name+'_'+entity['name']
-            else:
-                cfg['name'] = entity['name']
+            cfg['name'] = entity['name']
 
             # Associate all entities to the device in HA
             cfg['device'] = {}
@@ -466,10 +469,7 @@ class HACommunicator(Communicator):
             cfg['unique_id'] = uid
 
             # The entity name to be displayed in HA
-            if self._dev_name_in_entity:
-                cfg['name'] = dev_name+'_'+entity['name']
-            else:
-                cfg['name'] = entity['name']
+            cfg['name'] = entity['name']
 
             # Associate all entities to the device in HA
             cfg['device'] = {}
@@ -531,21 +531,6 @@ class HACommunicator(Communicator):
                     self.mqtt.publish(self._system_status_topic['learn'],
                                       'ON' if self.enocean.teach_in else 'OFF',
                                       retain=True)
-            ## Device system request
-            #else:
-                #sensor = self._devmgr.db_get_device_by_name(target_name)
-                #action = msg.payload.decode('UTF-8')
-                #logging.debug("Action %s received for sensor %s", action, str(sensor['name']))
-                #if sensor not in ([], None):
-                    ## Handle delete sensor request
-                    #if action == "delete":
-                        ## Remove all sensor's entities
-                        #for cfgtopic in sensor['cfgtopics']:
-                            #self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
-                                               #"", retain=True)
-                        ## Remove the sensor from the database
-                        #self._devmgr.db_remove_device_by_address(sensor['address'])
-
 
     #=============================================================================================
     # ENOCEAN TO MQTT
