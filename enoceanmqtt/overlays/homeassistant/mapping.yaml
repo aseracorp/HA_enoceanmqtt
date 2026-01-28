@@ -5788,11 +5788,8 @@ eltako:
         device_class: "temperature_delta"
         icon: "mdi:weather-night"
         unit_of_measurement: "K"
-        entity_category: "config"
         value_template: >-
-          {% if value_json._RAW_DATA_.split(":")[3]=="0F" %}
-            {{ value_json._RAW_DATA_.split(":")[0]|int(base=16)/6 }}
-          {% endif %}
+          {{ value_json._RAW_DATA_.split(":")[0]|int(base=16)/6 }}
     - component: "number"
       name: "setpoint_temperature"
       config:
@@ -5811,14 +5808,6 @@ eltako:
           {% endif %}
         command_template: >-
           {"SP":"{{(value*255/40)|int(default=0)}}","HUM":"0","TMP":"0","send":"clear"}
-    - component: "button"
-      name: "priority_temperature"
-      config:
-        state_topic: "a5"
-        payload_press: >-
-          {"SP":"0","HUM":"0","TMP":"0","send":"clear"}
-        icon: "mdi:thermometer-check"
-        entity_category: "config"
     - component: "sensor"
       name: "temperature"
       config:
@@ -5879,11 +5868,8 @@ eltako:
         device_class: "humidity"
         icon: "mdi:air-humidifier"
         unit_of_measurement: "%"
-        entity_category: "config"
         value_template: >-
-          {% if value_json._RAW_DATA_.split(":")[3]=="08" %}
-            {{ (value_json.SP / 255 * 100) | round }}
-          {% endif %}
+          {{ (value_json.SP / 255 * 100) | round }}
     - component: "sensor"
       name: "humidity"
       config:
