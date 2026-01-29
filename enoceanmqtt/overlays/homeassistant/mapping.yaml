@@ -5804,6 +5804,37 @@ afriso:
         state_class: "measurement"
         unit_of_measurement: "°C"
 
+nodon:
+  repeater:
+    device_config:
+    - rorg: "0xD1"
+      func: "0x46"
+      type: "0x00"
+      command: "CMD"
+      channel: ""
+      log_learn: ""
+      direction: ""
+      answer: ""
+    entities:
+    - component: "select"
+      name: "repeater_level"
+      config:
+        command_topic: "d1/req"
+        command_template: >-
+          {% if value == "1" %}
+            {"MID":"70","CMD":"8","RS":"1","RL":"1","send":"clear"}
+          {% elif value == "2" %}
+            {"MID":"70","CMD":"8","RS":"1","RL":"2","send":"clear"}
+          {% else %}
+            {"MID":"70","CMD":"8","RS":"0","RL":"0","send":"clear"}
+          {% endif %}
+        entity_category: "config"
+        icon: "mdi:repeat"
+        options:
+        - "0"
+        - "1"
+        - "2"
+
 # Below are mappings common to all EEPs
 common:
   rssi:
