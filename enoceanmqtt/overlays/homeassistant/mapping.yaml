@@ -5822,11 +5822,11 @@ nodon:
         command_topic: "d1/req"
         command_template: >-
           {% if value == "1" %}
-            {"raw_data":"00:46:08:01","send":"clear+raw_data"}
+            {"MID":"70","CMD":"8","RS":"1","RL":"1","send":"clear"}
           {% elif value == "2" %}
-            {"raw_data":"00:46:08:02","send":"clear+raw_data"}
+            {"MID":"70","CMD":"8","RS":"1","RL":"2","send":"clear"}
           {% else %}
-            {"raw_data":"00:46:08:00","send":"clear+raw_data"}
+            {"MID":"70","CMD":"8","RS":"0","RL":"0","send":"clear"}
           {% endif %}
         entity_category: "config"
         icon: "mdi:repeat"
