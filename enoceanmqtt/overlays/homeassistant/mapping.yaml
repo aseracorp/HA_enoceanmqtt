@@ -5789,7 +5789,7 @@ eltako:
         icon: "mdi:weather-night"
         unit_of_measurement: "K"
         value_template: >-
-          {{ value_json._RAW_DATA_.split(":")[0]|int(base=16)/6 }}
+          {{ (value_json._RAW_DATA_.split(":")[0]|int(base=16)*5/0x01F) | round(0) }}
     - component: "number"
       name: "setpoint_temperature"
       config:
