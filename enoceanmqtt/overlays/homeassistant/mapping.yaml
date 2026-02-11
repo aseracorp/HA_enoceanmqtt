@@ -5807,7 +5807,14 @@ eltako:
             {{ (value_json.SP / 255 * 40 * 2) | round / 2 }}
           {% endif %}
         command_template: >-
-          {"SP":"{{(value*255/40)|int(default=0)}}","HUM":"0","TMP":"0","send":"clear"}
+          {% set ns = namespace() %}
+          {% for entity in device_entities(device_id(entity_id)) %}
+            {% if entity is search('night_reduction$',ignorecase=True) %}
+              {% set ns.night_reduction = '%02x' % ((states(entity)*31/5)|round(method='ceil')|int(default=0)) %}
+            {% endif %}
+          {% endfor %}
+          {% set ns.setpoint = '%02x' % ((value*255/40)|int(default=0)) %}
+          {"raw_data":"{{ns.night_reduction}}:{{ns.setpoint}}:00:00","send":"clear+raw_data"}
     - component: "sensor"
       name: "temperature"
       config:
