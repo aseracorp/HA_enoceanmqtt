@@ -5787,7 +5787,7 @@ eltako:
         state_topic: "a5"
         device_class: "temperature_delta"
         icon: "mdi:weather-night"
-        unit_of_measurement: "K"
+        unit_of_measurement: "°C"
         value_template: >-
           {{ (value_json._RAW_DATA_.split(":")[0]|int(base=16)*5/0x01F) | round(0) }}
     - component: "number"
