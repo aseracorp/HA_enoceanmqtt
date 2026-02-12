@@ -5803,18 +5803,23 @@ eltako:
         step: 0.5
         mode: "box"
         value_template: >-
-          {% if value_json._RAW_DATA_.split(":")[3]=="0F" %}
-            {{ (value_json.SP / 255 * 40 * 2) | round / 2 }}
-          {% endif %}
+          {{ (value_json.SP / 255 * 40 * 2) | round / 2 }}
         command_template: >-  
           {% set ns = namespace() %}
           {% for entity in device_entities(device_id(entity_id)) %}
             {% if entity is search('night_reduction$',ignorecase=True) %}
               {% set ns.night_reduction = '%02x' % ((states(entity)|int(default=0)*31/5)|round(method='ceil')|int(default=0)) %}
             {% endif %}
+            {% if entity is search('night_mode$',ignorecase=True) %}
+              {% if is_state(entity, true) %}
+               {% set ns.night_mode = '0F' %}
+              {% else %}
+               {% set ns.night_mode = '0E' %}
+              {% endif %}
+            {% endif %}
           {% endfor %}
           {% set ns.setpoint = '%02x' % ((value|int(default=0)*255/40)|int(default=0)) %}
-          {"raw_data":"{{ns.night_reduction}}:{{ns.setpoint}}:00:00","send":"clear+raw_data"}
+          {"raw_data":"{{ns.night_reduction}}:{{ns.setpoint}}:00:{{ns.night_mode}}","send":"clear+raw_data"}
     - component: "sensor"
       name: "temperature"
       config:
@@ -5828,6 +5833,13 @@ eltako:
           {% elif value_json._RAW_DATA_.split(":")[3]=="08" %}
             {{ ((value_json._RAW_DATA_.split(":")[2]|int(default=0,base=16)) / 250 * 40)|round(1)  }}
           {% endif %}
+    - component: binary_sensor
+      name: "night_mode"
+      config:
+        state_topic: "a5"
+        icon: "mdi:weather-night"
+        value_template: >-
+          {% if value_json.SLSW == 1 %}OFF{% else %}ON{% endif %}
     - component: "button"
       name: "pairing"
       config:
