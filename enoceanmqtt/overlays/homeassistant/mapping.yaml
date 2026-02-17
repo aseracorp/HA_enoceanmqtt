@@ -5781,15 +5781,6 @@ eltako:
       direction: ""
       answer: ""
     entities:
-    - component: "sensor"
-      name: "night_reduction"
-      config:
-        state_topic: "a5"
-        device_class: "temperature_delta"
-        icon: "mdi:weather-night"
-        unit_of_measurement: "°C"
-        value_template: >-
-          {{ (value_json._RAW_DATA_.split(":")[0]|int(base=16)*5/0x01F) | round(0) }}
     - component: "number"
       name: "setpoint_temperature"
       config:
@@ -5803,23 +5794,9 @@ eltako:
         step: 0.5
         mode: "box"
         value_template: >-
-          {{ (value_json.SP / 255 * 40 * 2) | round / 2 }}
-        command_template: >-  
-          {% set ns = namespace() %}
-          {% for entity in device_entities(device_id(entity_id)) %}
-            {% if entity is search('night_reduction$',ignorecase=True) %}
-              {% set ns.night_reduction = '%02x' % ((states(entity)|int(default=0)*31/5)|round(method='ceil')|int(default=0)) %}
-            {% endif %}
-            {% if entity is search('night_mode$',ignorecase=True) %}
-              {% if is_state(entity, true) %}
-               {% set ns.night_mode = '0F' %}
-              {% else %}
-               {% set ns.night_mode = '0E' %}
-              {% endif %}
-            {% endif %}
-          {% endfor %}
-          {% set ns.setpoint = '%02x' % ((value|int(default=0)*255/40)|int(default=0)) %}
-          {"raw_data":"{{ns.night_reduction}}:{{ns.setpoint}}:00:{{ns.night_mode}}","send":"clear+raw_data"}
+          {{ ((value_json.SP / 255 * 40 * 2) | round / 2) - ((value_json._RAW_DATA_.split(":")[0]|int(base=16)*5/0x01F) | round(0)) }}
+        command_template: >-
+          {"SP":"{{(value*255/40)|int(default=0)}}","HUM":"0","TMP":"0","send":"clear"}
     - component: "sensor"
       name: "temperature"
       config:
