@@ -5796,7 +5796,23 @@ eltako:
         value_template: >-
           {{ ((value_json.SP / 255 * 40 * 2) | round / 2) - ((value_json._RAW_DATA_.split(":")[0]|int(base=16)*5/0x01F) | round(0)) }}
         command_template: >-
-          {"SP":"{{(value*255/40)|int(default=0)}}","HUM":"0","TMP":"0","send":"clear"}
+          {% set ns = namespace() %}
+          {% for entity in device_entities(device_id(entity_id)) %}
+            {% if entity is search('priority',ignorecase=True) %}
+              {% set ns.prio = states(entity) %}
+            {% endif %}
+          {% endfor %}
+          {% set modes = {"Auto (keep state)": "0E", "Priority on": "08", "+/- 3 Kelvin": "0A"} %}
+          {"raw_data":"00:{{'%02X'|format((value*255/40)|int) }}:00:{{modes[ns.prio]}}","send":"clear+raw_data"}
+    - component: "select"
+      name: "priority"
+      config:
+        command_topic: "__trash"
+        icon: "mdi:priority-high"
+        options:
+        - "Auto (keep state)"
+        - "Priority on"
+        - "+/- 3 Kelvin"
     - component: "sensor"
       name: "temperature"
       config:
