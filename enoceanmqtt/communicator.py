@@ -254,7 +254,7 @@ class Communicator:
                     del mqtt_json_payload['send']
 
                 # Parse message content
-                for topic in mqtt_json_payload:
+                for topic in list(mqtt_json_payload):
                     try:
                         mqtt_json_payload[topic] = int(mqtt_json_payload[topic])
                     except ValueError:
