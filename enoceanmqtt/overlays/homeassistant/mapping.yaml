@@ -5770,6 +5770,63 @@ eltako:
         value_template: >-
           {% if value_json.PIRS == 0 %}ON{% else %}OFF{% endif %}
         device_class: "occupancy"
+  futh65d_control: &futh65d_control
+    device_config:
+    - rorg: "0xA5"
+      func: "0x20"
+      type: "0x01"
+      command: ""
+      channel: ""
+      log_learn: ""
+      direction: "2"
+      answer: ""
+    entities:
+    - component: "sensor"
+      name: "valve_position"
+      config:
+        state_topic: "a5"
+        unit_of_measurement: "%"
+        state_class: "measurement"
+        value_template: >-
+          {% if value_json.SPS == 0 %}
+            {{ value_json.SP }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+        icon: "mdi:valve"
+    - component: "sensor"
+      name: "t_setpoint"
+      config:
+        state_topic: "a5"
+        unit_of_measurement: "°C"
+        device_class: "temperature"
+        state_class: "measurement"
+        value_template: >-
+          {% if value_json.SPS == 1 %}
+            {{ (value_json.SP / 255 * 40 * 2) | round / 2 }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+    - component: "sensor"
+      name: "TMP"
+      config:
+        state_topic: "a5"
+        unit_of_measurement: "°C"
+        device_class: "temperature"
+        state_class: "measurement"
+        value_template: "{{ value_json.TMP }}"
+    - component: "binary_sensor"
+      name: "SB"
+      config:
+        state_topic: "a5"
+        value_template: >-
+         {% if value_json.SB == 1 %}ON{% else %}OFF{% endif %}
+    - component: "binary_sensor"
+      name: "SPS"
+      config:
+        state_topic: "a5"
+        value_template: >-
+          {% if value_json.SPS == 1 %}ON{% else %}OFF{% endif %}
   futh65d_heating: &futh65d_heating
     device_config:
     - rorg: "0xA5"
@@ -5794,7 +5851,7 @@ eltako:
         step: 0.5
         mode: "box"
         value_template: >-
-          {{ ((value_json.SP / 255 * 40 * 2) | round / 2) - ((value_json._RAW_DATA_.split(":")[0]|int(base=16)*5/0x01F) | round(0)) }}
+          {{ (((value_json.SP / 255 * 40 ) - (value_json._RAW_DATA_.split(":")[0]|int(base=16)*5/0x01F)) * 2 ) | round / 2 }}
         command_template: >-
           {% set ns = namespace() %}
           {% for entity in device_entities(device_id(entity_id)) %}
@@ -5821,12 +5878,8 @@ eltako:
         icon: "mdi:thermometer"
         unit_of_measurement: "°C"
         value_template: >-
-          {% if value_json._RAW_DATA_.split(":")[3]=="0F" %}
-            {{ ((255 - (value_json._RAW_DATA_.split(":")[2]|int(default=0,base=16))) / 255 * 40)|round(1)  }}
-          {% elif value_json._RAW_DATA_.split(":")[3]=="08" %}
-            {{ ((value_json._RAW_DATA_.split(":")[2]|int(default=0,base=16)) / 250 * 40)|round(1)  }}
-          {% endif %}
-    - component: binary_sensor
+          {{ value_json.TMP }}
+    - component: "binary_sensor"
       name: "night_mode"
       config:
         state_topic: "a5"
@@ -5860,11 +5913,7 @@ eltako:
         icon: "mdi:thermometer"
         unit_of_measurement: "°C"
         value_template: >-
-          {% if value_json._RAW_DATA_.split(":")[3]=="0F" %}
-            {{ ((255 - (value_json._RAW_DATA_.split(":")[2]|int(default=0,base=16))) / 255 * 40)|round(1)  }}
-          {% elif value_json._RAW_DATA_.split(":")[3]=="08" %}
-            {{ ((value_json._RAW_DATA_.split(":")[2]|int(default=0,base=16)) / 250 * 40)|round(1)  }}
-          {% endif %}
+          {{ value_json.TMP }}
     - component: "button"
       name: "pairing"
       config:
@@ -5890,11 +5939,11 @@ eltako:
         icon: "mdi:water-percent"
         unit_of_measurement: "%"
         value_template: >-
-          {% if value_json._RAW_DATA_.split(":")[3]=="08" %}
-            {{ ((value_json._RAW_DATA_.split(":")[1]|int(default=0,base=16))/250*100)|round }}
-          {% endif %}
+          {{ value_json.HUM | round(0) }}
+  futh55d_control: *futh65d_control
   futh55d_heating: *futh65d_heating
   futh55d_hygro: *futh65d_hygro
+  futh55ed_control: *futh65d_control
   futh55ed_heating: *futh65d_heating
   futh55ed_hygro: *futh65d_hygro
 
