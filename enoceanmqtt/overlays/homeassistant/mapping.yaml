@@ -1278,46 +1278,42 @@
           value_template: >-
             {% set tiltness = {0: "Undefined", 1: "Not Tilted", 2: "Tilted"} %}
             {{ tiltness[value_json.WS] }}
-      - component: event
-        name: "button_right"
+      - component: "device_automation"
+        name: "right_button_press"
         config:
-          name: "Button right"
-          state_topic: "MT0"
-          device_class: "button"
-          availability_topic: "MT0"
-          availability_template: >-
-            {% if value_json.BR >= 3 %}
-              offline
-            {% else %}
-              online
-            {% endif %}
-          event_types:
-          - "No change"
-          - "Button pressed"
-          - "Button released"
-          value_template: >-
-            {% set button_activity = {0: "No change", 1: "Button pressed", 2: "Button released"} %}
-            {{ button_activity[value_json.BR] }}
-      - component: event
-        name: "button_left"
+          automation_type: "trigger"
+          type: "button_short_press"
+          subtype: "right_button"
+          topic: "MT0"
+          payload: "1"
+          value_template: "{{ value_json.BR }}"
+      - component: "device_automation"
+        name: "right_button_release"
         config:
-          name: "Button left"
-          state_topic: "MT0"
-          device_class: "button"
-          availability_topic: "MT0"
-          availability_template: >-
-            {% if value_json.BL >= 3 %}
-              offline
-            {% else %}
-              online
-            {% endif %}
-          event_types:
-          - "No change"
-          - "Button pressed"
-          - "Button released"
-          value_template: >-
-            {% set button_activity = {0: "No change", 1: "Button pressed", 2: "Button released"} %}
-            {{ button_activity[value_json.BL] }}
+          automation_type: "trigger"
+          type: "button_short_release"
+          subtype: "right_button"
+          topic: "MT0"
+          payload: "2"
+          value_template: "{{ value_json.BR }}"
+      - component: "device_automation"
+        name: "left_button_press"
+        config:
+          automation_type: "trigger"
+          type: "button_short_press"
+          subtype: "left_button"
+          topic: "MT0"
+          payload: "1"
+          value_template: "{{ value_json.BL }}"
+      - component: "device_automation"
+        name: "left_button_release"
+        config:
+          automation_type: "trigger"
+          type: "button_short_release"
+          subtype: "left_button"
+          topic: "MT0"
+          payload: "2"
+          value_template: "{{ value_json.BL }}"
       - component: binary_sensor
         name: "Motion"
         config:
