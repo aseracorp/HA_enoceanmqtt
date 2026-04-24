@@ -1178,6 +1178,8 @@
           position_template: >-
             {% if (value_json.POS <= 100) and (value_json.POS >= 0) %}
               {{ value_json.POS }}
+            {% elif value_json.POS == 127 %}
+              None
             {% endif %}
           set_position_topic: "req"
           set_position_template: >-
@@ -1186,6 +1188,8 @@
           tilt_status_template: >-
             {% if (value_json.ANG <= 100) and (value_json.ANG >= 0) %}
               {{ value_json.ANG }}
+            {% elif value_json.ANG == 127 %}
+              None
             {% endif %}
           tilt_command_topic: "req"
           tilt_command_template: >-
