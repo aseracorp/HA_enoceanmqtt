@@ -1178,8 +1178,6 @@
           position_template: >-
             {% if (value_json.POS <= 100) and (value_json.POS >= 0) %}
               {{ value_json.POS }}
-            {% else %}
-              {{ state_attr(entity_id,"current_position")|int(default=0) }}
             {% endif %}
           set_position_topic: "req"
           set_position_template: >-
@@ -1188,8 +1186,6 @@
           tilt_status_template: >-
             {% if (value_json.ANG <= 100) and (value_json.ANG >= 0) %}
               {{ value_json.ANG }}
-            {% else %}
-              {{ state_attr(entity_id,"current_tilt_position")|int(default=0) }}
             {% endif %}
           tilt_command_topic: "req"
           tilt_command_template: >-
