@@ -2604,6 +2604,24 @@
           value_template: >-
             {% if value_json.PIRS >= 128 %}ON{% else %}OFF{% endif %}
           device_class: "occupancy"
+      virtual:
+      - component: "switch"
+        name: "PIR"
+        config:
+          icon: "mdi:motion-sensor"
+          command_topic: "req"
+          payload_off: "0"
+          payload_on: "128"
+          command_template: >-
+            {"SVC":"0","PIRS":"{{value}}","SVA":"0","send":"clear"}
+      - component: "button"
+        name: "pair"
+        config:
+          icon: "mdi:connection"
+          entity_category: "config"
+          command_topic: "req"
+          payload_press: >-
+            {"raw_data":"1C:0F:FF:80","send":"clear+learn+raw_data"}
     0x02:
       device_config:
         command: ""
