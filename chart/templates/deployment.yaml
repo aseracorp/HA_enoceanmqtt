@@ -59,43 +59,6 @@ spec:
           envFrom:
             {{ toYaml . | nindent 12 }}
           {{- end }}
-{{- if false }}
-          ports:
-            {{- with .Values.ports.ui }}
-            - name: {{ .name }}
-              containerPort: {{ .containerPort}}
-              protocol: {{ .protocol }}
-            {{- end }}
-            {{- with .Values.ports.websocket }}
-            - name: {{ .name }}
-              containerPort: {{ .containerPort }}
-              protocol: {{ .protocol }}
-            {{- end }}
-          {{- with .Values.health.livenessProbe }}
-          livenessProbe:
-            httpGet:
-              path: {{ .path }}
-              port: {{ $.Values.ports.ui.name }}
-            initialDelaySeconds: {{ .initialDelaySeconds }}
-            periodSeconds: {{ .periodSeconds }}
-          {{- end }}
-          {{- with .Values.health.readinessProbe }}
-          readinessProbe:
-            httpGet:
-              path: {{ .path }}
-              port: {{ $.Values.ports.ui.name }}
-            initialDelaySeconds: {{ .initialDelaySeconds }}
-            periodSeconds: {{ .periodSeconds }}
-          {{- end }}
-          {{- with .Values.health.readinessProbe }}
-          startupProbe:
-            httpGet:
-              path: {{ .path }}
-              port: {{ $.Values.ports.ui.name }}
-            initialDelaySeconds: {{ .initialDelaySeconds }}
-            periodSeconds: {{ .periodSeconds }}
-          {{- end }}
-{{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
@@ -105,7 +68,7 @@ spec:
               {{- toYaml .Values.configMount | nindent 14 }}
             {{- if .Values.usbDevice }}
             - name: usb
-              mountPath: /dev/ttyUSB0
+              mountPath: {{ .Values.usbDevice }}
             {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
