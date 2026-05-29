@@ -34,6 +34,14 @@ See [Docker Installation](https://github.com/ChristopheHD/HA_enoceanmqtt/wiki/Do
 
 If you are using Kubernetes, there is also a [Kubernetes template](https://github.com/ChristopheHD/HA_enoceanmqtt/wiki/Kubernetes).
 
+# Kubernetes helm
+
+Usage (via OCI Registry)
+To install the chart using the OCI artifact, run:
+
+helm install enoceanmqtt oci://ghcr.io/christophehd/helm-charts/ha-enoceanmqtt --version 1.0.0
+
+
 # Home Assistant Addon Installation
 
 HA_enoceanmqtt can also be installed as a Home Assistant addon.  
