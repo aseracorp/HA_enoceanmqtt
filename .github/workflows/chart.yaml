@@ -6,14 +6,12 @@ on:
   pull_request:
     branches: [ "develop" ]
 
-permissions:
-  contents: write
-  packages: write
-  id-token: write
-
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # Necessary to push to GHCR
     steps:
       - name: Checkout
         uses: actions/checkout@v4
