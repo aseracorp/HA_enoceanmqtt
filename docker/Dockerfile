@@ -29,5 +29,7 @@ RUN apk add --no-cache git && \
     cp -rf ./HA_enoceanmqtt/enoceanmqtt enocean-mqtt && \
     rm -rf ./HA_enoceanmqtt
 
+STOPSIGNAL SIGINT
+
 # Set entrypoint
 ENTRYPOINT [ "python", "/usr/local/bin/enoceanmqtt", "/config/enoceanmqtt.conf" ]
