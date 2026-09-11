@@ -3,8 +3,8 @@
 
 Sensors added via the web UI (e.g. through the EnOcean UTE / Universal Teach-In
 telegram) are stored separately from the static configuration file so that the
-configuration file can stay read-only (as in the Kubernetes chart where it is
-mounted from a ConfigMap).
+configuration file can stay read-only (e.g. when it is mounted from a read-only
+volume).
 
 Each stored sensor uses the *bare* section name (without the ``mqtt_prefix``),
 matching how sections are named in the INI configuration file. The prefix is
