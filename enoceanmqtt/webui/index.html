@@ -4,6 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EnOceanMQTT · Sensor Manager</title>
+<script>
+  /* Resolve the theme before first paint to avoid a flash of the wrong
+     mode: explicit choice in localStorage wins, otherwise follow the OS. */
+  (function () {
+    try {
+      var saved = localStorage.getItem('enm-theme');
+      var theme = saved === 'light' || saved === 'dark'
+        ? saved
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.dataset.theme = theme;
+    } catch (e) {
+      document.documentElement.dataset.theme = 'dark';
+    }
+  })();
+</script>
 <link rel="stylesheet" href="/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23222222'/><circle cx='16' cy='16' r='7' fill='none' stroke='%23ff64c8' stroke-width='3'/><circle cx='16' cy='16' r='2.5' fill='%23c864ff'/></svg>">
 </head>
@@ -27,6 +42,10 @@
         <span class="pill" id="gw-status"><span class="dot"></span>Gateway</span>
         <span class="pill" id="mqtt-status"><span class="dot"></span>MQTT</span>
         <span class="pill pill-accent" id="base-id">Base&nbsp;ID: —</span>
+        <button type="button" class="theme-toggle" id="theme-toggle" title="Toggle light / dark mode" aria-label="Toggle light / dark mode">
+          <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
+          <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
+        </button>
       </div>
     </div>
   </header>
