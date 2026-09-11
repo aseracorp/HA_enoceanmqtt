@@ -227,4 +227,7 @@ class WebInterface:
             def do_DELETE(self):   # pylint: disable=invalid-name
                 self._route()
 
+            def do_PUT(self):   # pylint: disable=invalid-name
+                self._route()
+
         return Handler

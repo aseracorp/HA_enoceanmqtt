@@ -32,13 +32,19 @@
         </div>
         <div>
           <h1>HA_enoceanmqtt</h1>
-          <span class="subtitle">Web Configurator</span>
+          <span class="subtitle" data-i18n="subtitle">Web Configurator</span>
         </div>
       </div>
       <div class="gateway">
-        <span class="pill" id="gw-status"><span class="dot"></span>Gateway</span>
+        <span class="pill" id="gw-status"><span class="dot"></span><span data-i18n="gateway">Gateway</span></span>
         <span class="pill" id="mqtt-status"><span class="dot"></span>MQTT</span>
         <span class="pill pill-accent" id="base-id">Base&nbsp;ID: —</span>
+        <select class="lang-select" id="lang-select" title="Language / Sprache / Langue / Lingua" aria-label="Language">
+          <option value="en">EN</option>
+          <option value="de">DE</option>
+          <option value="fr">FR</option>
+          <option value="it">IT</option>
+        </select>
         <button type="button" class="theme-toggle" id="theme-toggle" title="Toggle light / dark mode" aria-label="Toggle light / dark mode">
           <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
           <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
@@ -51,7 +57,7 @@
     <!-- Teach-in banner -->
     <section class="card teachin-card" id="learn-card">
       <div class="teachin-info">
-        <h2>Teach-In</h2>
+        <h2 data-i18n="teachin_title">Teach-In</h2>
         <p>
           Start teach-in, then trigger the device you want to add: press its
           <strong>teach-in button</strong> (or simply use a regular switch, e.g. an
@@ -67,19 +73,19 @@
         </p>
       </div>
       <div class="teachin-actions">
-        <button class="btn btn-primary" id="btn-learn-on">Start teach-in</button>
+        <button class="btn btn-primary" id="btn-learn-on" data-i18n="start_teachin">Start teach-in</button>
       </div>
     </section>
 
     <!-- Add device -->
     <section class="card">
       <div class="card-header">
-        <h2>Add device</h2>
+        <h2 data-i18n="add_device">Add device</h2>
         <span class="card-sub">Manually add a sensor (sender) or an actor (receiver)</span>
       </div>
       <div class="device-tabs" style="margin-bottom:14px">
-        <button type="button" class="device-tab active" data-addcat="sensor" id="add-tab-sensor">Add Sensor (sender)</button>
-        <button type="button" class="device-tab" data-addcat="actor" id="add-tab-actor">Add Actor (receiver)</button>
+        <button type="button" class="device-tab active" data-addcat="sensor" id="add-tab-sensor" data-i18n="add_sensor">Add Sensor (sender)</button>
+        <button type="button" class="device-tab" data-addcat="actor" id="add-tab-actor" data-i18n="add_actor">Add Actor (receiver)</button>
       </div>
       <form id="add-form" class="add-form">
         <div class="field">
@@ -91,7 +97,7 @@
           <input type="text" id="f-address" placeholder="0x003DD63B" required>
         </div>
         <div class="field" id="f-sender-field" hidden>
-          <label for="f-sender">Virtual sender ID <span class="opt">(transceiver address)</span></label>
+          <label for="f-sender">Sender ID <span class="opt">(transceiver address)</span></label>
           <select id="f-sender"></select>
         </div>
         <div class="field field-grow">
@@ -100,14 +106,14 @@
           <div class="eep-list" id="f-eep-list"></div>
           <input type="hidden" id="f-eep">
         </div>
-        <button class="btn btn-primary" type="submit" id="btn-add">Add device</button>
+        <button class="btn btn-primary" type="submit" id="btn-add" data-i18n="add_device">Add device</button>
       </form>
     </section>
 
     <!-- Settings / Config -->
     <section class="card">
       <div class="card-header">
-        <h2>Configuration</h2>
+        <h2 data-i18n="configuration">Configuration</h2>
         <span class="card-sub">[CONFIG] section of enoceanmqtt.conf - changes apply after restart</span>
       </div>
       <form id="config-form" class="add-form">
@@ -122,25 +128,25 @@
     <!-- Sensors / Actors -->
     <section class="card">
       <div class="card-header">
-        <h2>Devices</h2>
+        <h2 data-i18n="devices">Devices</h2>
         <span class="card-sub" id="device-count">0 devices</span>
       </div>
       <div class="device-tabs" role="tablist">
-        <button class="device-tab active" data-cat="all" id="tab-all">All</button>
-        <button class="device-tab" data-cat="sensor" id="tab-sensors">Sensors</button>
-        <button class="device-tab" data-cat="actor" id="tab-actors">Actors</button>
+        <button class="device-tab active" data-cat="all" id="tab-all" data-i18n="all">All</button>
+        <button class="device-tab" data-cat="sensor" id="tab-sensors" data-i18n="sensors">Sensors</button>
+        <button class="device-tab" data-cat="actor" id="tab-actors" data-i18n="actors">Actors</button>
       </div>
       <div class="sensor-table-wrap">
         <table class="sensor-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Address / Sender</th>
+              <th data-i18n="col_name">Name</th>
+              <th data-i18n="col_addr">Address / Sender</th>
               <th>EEP</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Last seen</th>
-              <th>Latest</th>
+              <th data-i18n="col_type">Type</th>
+              <th data-i18n="col_status">Status</th>
+              <th data-i18n="col_lastseen">Last seen</th>
+              <th data-i18n="col_latest">Latest</th>
               <th></th>
             </tr>
           </thead>
@@ -182,6 +188,10 @@
     <div class="field">
       <label for="e-name">Name</label>
       <input type="text" id="e-name" placeholder="device name">
+    </div>
+    <div class="field">
+      <label for="e-address">Address</label>
+      <input type="text" id="e-address" placeholder="0x003DD63B">
     </div>
     <div class="field">
       <label for="e-eep">EEP (Equipment Profile)</label>
