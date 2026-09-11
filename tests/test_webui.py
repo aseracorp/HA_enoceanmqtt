@@ -307,9 +307,13 @@ def test_teachin_captures_non_ute_devices():
         assert stored[0]['rorg'] == 0xA5
         assert com.learn_mode is False, 'teach-in should be one-shot'
 
-        # --- 2. 4BS learn telegram (LRN bit) extracts EEP ---
+        # --- 2. 4BS learn telegram (LRN bit) extracts EEP (A5-08-01) ---
+        # correct encoding: DB3 = (func<<1)|(type>>5 &1), DB2 = (type & 0x1F)<<2
+        func, type_ = 0x08, 0x01
+        db3 = (func << 1) | ((type_ >> 5) & 1)
+        db2 = (type_ & 0x1F) << 2
         p2 = RadioPacket(PACKET.RADIO_ERP1,
-                         data=[0xa5, 0x08, 0x00, 0x28, 0x02, 0x11, 0x22, 0x33, 0x44, 0x00],
+                         data=[0xa5, 0x88, 0x01, db2, db3, 0x11, 0x22, 0x33, 0x44, 0x00],
                          optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
         p2.parse()
         p2.received = datetime.datetime.utcnow()
@@ -318,9 +322,10 @@ def test_teachin_captures_non_ute_devices():
         com._process_radio_packet(p2)
         stored2 = [s for s in com._store.all() if s['address'] == 0x11223344]
         assert len(stored2) == 1
-        assert stored2[0]['rorg'] == 0xA5 and stored2[0]['func'] == 0x02 and stored2[0]['type'] == 0x05
+        assert stored2[0]['rorg'] == 0xA5 and stored2[0]['func'] == 0x08 and stored2[0]['type'] == 0x01, \
+            '4BS learn telegram should extract A5-08-01 exactly (not a guessed default)'
 
-        # --- 3. RPS F6 switch (no teach-in button) ---
+        # --- 3. RPS F6 switch (no teach-in button): captured by RORG only ---
         p3 = RadioPacket(PACKET.RADIO_ERP1,
                          data=[0xf6, 0x10, 0x00, 0x55, 0x66, 0x77, 0x88, 0x00],
                          optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
@@ -331,7 +336,7 @@ def test_teachin_captures_non_ute_devices():
         stored3 = [s for s in com._store.all() if s['address'] == 0x55667788]
         assert len(stored3) == 1
         assert stored3[0]['rorg'] == 0xF6
-        assert stored3[0]['func'] == 0x01, 'F6 should get a default EEP (push button)'
+        assert 'func' not in stored3[0], 'F6 without a learn telegram should be stored by RORG only (user sets EEP)'
 
 
 def test_send_teachin_to_actor():
@@ -366,6 +371,101 @@ def test_send_teachin_to_actor():
         ok3, _ = com._send_teachin('nope')
         assert ok3 is False
 
+
+
+def test_update_sensor():
+    """editing a web-added sensor updates name and EEP (backend)"""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        # add a sensor (by RORG only, like a non-UTE capture)
+        com._store.add({'name': 'learn_05a2a138', 'address': 0x05A2A138, 'rorg': 0xA5})
+        com._load_dynamic_sensors()
+
+        # update: set name + EEP
+        res = com.update_sensor('learn_05a2a138', {'name': 'living_temp', 'eep': 'A5-08-01'})
+        assert res['ok'], res
+        assert res['sensor']['name'] == 'living_temp'
+        assert res['sensor']['eep'] == 'A5-08-01'
+
+        # stored correctly
+        stored = com._store.get('living_temp')
+        assert stored is not None
+        assert stored['rorg'] == 0xA5 and stored['func'] == 0x08 and stored['type'] == 0x01
+
+        # EEP only update
+        res2 = com.update_sensor('living_temp', {'eep': 'A5-02-05'})
+        assert res2['ok'], res2
+        assert res2['sensor']['eep'] == 'A5-02-05'
+
+        # invalid EEP rejected
+        res3 = com.update_sensor('living_temp', {'eep': 'bogus'})
+        assert not res3['ok']
+
+
+def test_4bs_teachin_bidirectional_reply():
+    """a 4BS learn telegram from a bidirectional device gets a teach-in reply"""
+    import datetime
+    from enocean.protocol.packet import RadioPacket
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        # A5-38-08 is bidirectional? We'll craft a learn telegram for a known
+        # bidirectional 4BS: use A5-20-01 (Bi-directional Battery Powered Actuator)
+        func, type_ = 0x20, 0x01
+        db3 = (func << 1) | ((type_ >> 5) & 1)
+        db2 = (type_ & 0x1F) << 2
+        p = RadioPacket(PACKET.RADIO_ERP1,
+                        data=[0xa5, 0x88, 0x01, db2, db3, 0x11, 0x22, 0x33, 0x44, 0x00],
+                        optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
+        p.parse()
+        p.received = datetime.datetime.utcnow()
+
+        com.set_learn_mode(True)
+        # the A5-20-01 profile is bidirectional, so _handle_4bs_learn_telegram
+        # must send a teach-in response
+        before = len(com.enocean.sent)
+        com._process_radio_packet(p)
+        assert len(com.enocean.sent) == before + 1, \
+            'bidirectional 4BS teach-in should send a reply'
+        reply = com.enocean.sent[-1]
+        assert reply.rorg == 0xA5
+        assert reply.destination == [0x11, 0x22, 0x33, 0x44]
+
+
+def test_device_db_corruption_recovery():
+    """a corrupted TinyDB device database does not prevent startup"""
+    from enoceanmqtt.overlays.homeassistant.device_manager import DeviceManager
+    with tempfile.TemporaryDirectory() as tmp:
+        db_file = os.path.join(tmp, 'device_db.json')
+        with open(db_file, 'w') as f:
+            f.write('{"_default": {"1": {"uid": "X"')  # truncated / corrupt
+        dm = DeviceManager({'db_file': db_file})
+        assert dm.db_get_devices() == []
+        # still writable
+        dm.db_add_device({'address': 1, 'name': 'x', 'rorg': 165, 'func': 2, 'type': 5}, 'UID')
+        assert len(dm.db_get_devices()) == 1
+        # a .corrupt backup was made
+        assert any('corrupt' in f for f in os.listdir(tmp))
+
 if __name__ == '__main__':
     test_sensor_store()
     test_eep_registry()
@@ -375,5 +475,8 @@ if __name__ == '__main__':
     test_bidirectional_and_smartack_reply()
     test_teachin_captures_non_ute_devices()
     test_send_teachin_to_actor()
+    test_update_sensor()
+    test_4bs_teachin_bidirectional_reply()
+    test_device_db_corruption_recovery()
     print('ALL TESTS PASSED')
 

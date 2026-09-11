@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HA_enoceanmqtt · Sensor Manager</title>
+<title>HA_enoceanmqtt · Web Configurator</title>
 <script>
   /* Resolve the theme before first paint to avoid a flash of the wrong
      mode: explicit choice in localStorage wins, otherwise follow the OS. */
@@ -20,7 +20,7 @@
   })();
 </script>
 <link rel="stylesheet" href="/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23222222'/><circle cx='16' cy='16' r='7' fill='none' stroke='%23B01419' stroke-width='3'/><circle cx='16' cy='16' r='2.5' fill='%23690C0F'/></svg>">
+<link rel="icon" type="image/png" href="/favicon.png">
 </head>
 <body>
 <div class="app">
@@ -28,14 +28,11 @@
     <div class="topbar-inner">
       <div class="brand">
         <div class="brand-mark">
-          <svg viewBox="0 0 32 32" width="30" height="30">
-            <circle cx="16" cy="16" r="8" fill="none" stroke="#B01419" stroke-width="3"/>
-            <circle cx="16" cy="16" r="3" fill="#690C0F"/>
-          </svg>
+          <img src="/favicon.png" alt="HA_enoceanmqtt" width="30" height="30">
         </div>
         <div>
           <h1>HA_enoceanmqtt</h1>
-          <span class="subtitle">Sensor Manager</span>
+          <span class="subtitle">Web Configurator</span>
         </div>
       </div>
       <div class="gateway">
@@ -54,30 +51,29 @@
     <!-- Teach-in banner -->
     <section class="card teachin-card" id="learn-card">
       <div class="teachin-info">
-        <h2>Universal Teach-In (UTE)</h2>
+        <h2>Teach-In</h2>
         <p>
-          Enable teach-in mode, then press the <strong>teach-in button</strong> on your EnOcean
-          sensor. The sensor sends a <strong>UTE telegram</strong> with its EEP; it is added to
-          the configuration automatically and acknowledged.
+          Start teach-in, then trigger the device you want to add: press its
+          <strong>teach-in button</strong> (or simply use a regular switch, e.g. an
+          F6 rocker — it does <strong>not</strong> need a teach-in button). The device is
+          added automatically. Devices using a <strong>4BS or UTE learn telegram</strong>
+          are recognised with their EEP; bi-directional devices are acknowledged.
         </p>
-        <p class="hint">Teach-in mode automatically turns off after a device is received.</p>
+        <p class="hint">
+          If the EEP is not part of the telegram (e.g. RPS switches), the device is
+          registered by address and can be assigned an EEP with the edit button.
+          Teach-in mode automatically turns off after a device is received.
+        </p>
       </div>
       <div class="teachin-actions">
-        <div class="switch-row">
-          <span id="learn-state" class="state-text">Teach-in OFF</span>
-          <label class="switch">
-            <input type="checkbox" id="learn-toggle">
-            <span class="slider"></span>
-          </label>
-        </div>
         <button class="btn btn-primary" id="btn-learn-on">Start teach-in</button>
       </div>
     </section>
 
-    <!-- Add sensor -->
+    <!-- Add device -->
     <section class="card">
       <div class="card-header">
-        <h2>Add sensor</h2>
+        <h2>Add device</h2>
         <span class="card-sub">Manually configure a device using its address &amp; EEP</span>
       </div>
       <form id="add-form" class="add-form">
@@ -99,7 +95,7 @@
           <label for="f-sender">Sender / Base ID <span class="opt">(optional)</span></label>
           <input type="text" id="f-sender" placeholder="auto (gateway base id)">
         </div>
-        <button class="btn btn-primary" type="submit" id="btn-add">Add sensor</button>
+        <button class="btn btn-primary" type="submit" id="btn-add">Add device</button>
       </form>
     </section>
 
@@ -119,7 +115,7 @@
           <thead>
             <tr>
               <th>Name</th>
-              <th>Address</th>
+              <th>Address / Sender</th>
               <th>EEP</th>
               <th>Type</th>
               <th>Status</th>
@@ -135,7 +131,12 @@
     </section>
 
     <footer class="footer">
-      <span id="footer-info">HA_enoceanmqtt web interface</span>
+      <span id="footer-info">HA_enoceanmqtt web configurator</span>
+      <span class="footer-links">
+        <a href="https://github.com/aseracorp/HA_enoceanmqtt" target="_blank" rel="noopener">GitHub</a>
+        <span class="footer-sep">·</span>
+        <a href="https://github.com/aseracorp/HA_enoceanmqtt/blob/develop/LICENSE" target="_blank" rel="noopener">Licence</a>
+      </span>
       <span id="footer-error" class="error-text"></span>
     </footer>
   </main>
@@ -149,6 +150,29 @@
     <div class="modal-actions">
       <button class="btn" id="modal-cancel">Cancel</button>
       <button class="btn btn-danger" id="modal-ok">Remove</button>
+    </div>
+  </div>
+</div>
+
+<!-- edit device modal -->
+<div class="modal-overlay" id="edit-overlay" hidden>
+  <div class="modal">
+    <h3>Edit device</h3>
+    <div class="field">
+      <label for="e-name">Name</label>
+      <input type="text" id="e-name" placeholder="device name">
+    </div>
+    <div class="field">
+      <label for="e-eep">EEP (Equipment Profile)</label>
+      <input type="text" id="e-eep" placeholder="e.g. A5-08-01">
+      <div class="eep-list" id="e-eep-list"></div>
+      <input type="hidden" id="e-eep-rorg">
+      <input type="hidden" id="e-eep-func">
+      <input type="hidden" id="e-eep-type">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="edit-cancel">Cancel</button>
+      <button class="btn btn-primary" id="edit-ok">Save</button>
     </div>
   </div>
 </div>

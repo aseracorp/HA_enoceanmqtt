@@ -1,9 +1,12 @@
 # Author: Marc Alexandre K. <marcalexandrek-developer@yahoo.fr>
 """this class is a device manager for the Home Assistant overlay of enoceanmqtt"""
 
+import json
 import logging
 import os
-from tinydb import TinyDB, Query
+import shutil
+import time
+from tinydb import TinyDB, Query, JSONStorage
 
 class DeviceManager():
     '''Device Manager class, providing database methods'''
@@ -14,9 +17,41 @@ class DeviceManager():
         db_file = config.get('db_file')
         if not db_file:
             db_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'device_db.json')
-        self._db = TinyDB(db_file, indent=4)
+        self._db = TinyDB(db_file, storage=self._corruption_tolerant_storage(db_file), indent=4)
         self.db_add_uid()
         logging.info("Device database %s correctly read/created", db_file)
+
+    @staticmethod
+    def _corruption_tolerant_storage(db_file):
+        '''Build a JSONStorage that recovers from a corrupted/truncated database
+        file (e.g. a crash or concurrent write left invalid JSON behind).
+
+        On failure the broken file is backed up and an empty database is used,
+        so the gateway still starts and the user can re-teach-in the devices.
+        '''
+        from tinydb.storages import JSONStorage as _JSONStorage
+
+        class _TolerantStorage(_JSONStorage):
+            _recovered = False
+
+            def read(self):
+                try:
+                    return super().read()
+                except (json.JSONDecodeError, ValueError, TypeError) as exc:
+                    if not self._recovered:
+                        self._recovered = True
+                        # backup the corrupt file and start from an empty database
+                        try:
+                            backup = db_file + '.corrupt.' + time.strftime('%Y%m%d%H%M%S')
+                            shutil.copyfile(db_file, backup)
+                            logging.error("Device database %s is corrupted (%s); "
+                                          "backed up to %s and starting fresh",
+                                          db_file, exc, backup)
+                        except Exception:   # pylint: disable=broad-except
+                            pass
+                    return None
+
+        return _TolerantStorage
 
     def db_add_uid(self):
         '''Update old databases without UID'''
