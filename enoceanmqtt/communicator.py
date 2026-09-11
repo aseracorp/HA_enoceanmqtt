@@ -539,6 +539,20 @@ class Communicator:
         except Exception as exc:   # pylint: disable=broad-except
             logging.error("Failed to send 4BS teach-in response: %s", exc)
 
+    @staticmethod
+    def _is_1bs_learn_telegram(packet):
+        """a 1BS (D5) telegram with the LRN bit set in DB0 (data[1]).
+        1BS teach-in works like 4BS: the LRN bit is DB0 bit 3."""
+        if packet.rorg != RORG.BS1 or len(packet.data) < 2:
+            return False
+        return bool((packet.data[1] >> 3) & 1)
+
+    def _handle_1bs_learn_telegram(self, packet):
+        """register a 1BS (D5) device from its learn telegram.
+        1BS telegrams carry no EEP in the teach-in, so the device is added
+        with the RORG's default profile (e.g. D5-00-01 Single Input Contact)."""
+        return self._learn_unknown_device(packet, rorg=packet.rorg)
+
     def _handle_ute_packet(self, packet):
         """handle an incoming Universal Teach-In (UTE) telegram"""
         address = enocean.utils.combine_hex(packet.sender)
@@ -1267,17 +1281,30 @@ class Communicator:
             logging.info("received: %s", packet)
 
         # teach-in: if learn mode is active and the device is unknown, capture it.
-        # This handles devices that do not send UTE telegrams at all - regular
-        # 4BS/VLD sensors and RPS (F6) rocker switches just send normal data.
-        # 4BS learn telegrams also get a teach-in response (for bidirectional
-        # devices); mark that so we don't reply again below.
+        # Only a genuine teach-in is added - the user must have pressed the
+        # teach-in button, which is visible as the learn bit in the telegram.
+        #  - UTE (0xD4) is always a teach-in telegram.
+        #  - 4BS (0xA5) / 1BS (0xD5) carry the learn bit (LRN) in DB0 bit 3;
+        #    we only add them when it is set.
+        #  - RPS (0xF6) / VLD (0xD2) have no learn bit - the teach-in is the
+        #    (repeated) button/data telegram itself, so a device is captured
+        #    when it sends any telegram while learn mode is on.
+        #  - Anything else (e.g. a 4BS data telegram without the learn bit) is
+        #    NOT added - the teach-in button was not pressed.
         replied_teachin = False
         if not found_sensor and self.learn_mode:
             if self._is_4bs_learn_telegram(packet):
+                # 4BS learn telegram (LRN bit set): add + reply if bidirectional
                 self._handle_4bs_learn_telegram(packet)
                 replied_teachin = True
-            else:
+            elif packet.rorg == RORG.BS1 and self._is_1bs_learn_telegram(packet):
+                self._handle_1bs_learn_telegram(packet)
+            elif packet.rorg in (RORG.RPS, RORG.VLD):
+                # RPS (F6 rockers) and VLD send data-only telegrams as their
+                # teach-in (no learn bit available) - capture on any telegram
                 self._learn_unknown_device(packet)
+            # 4BS/1BS data telegrams WITHOUT the learn bit are intentionally
+            # not captured here.
             # teach-in is one-shot for this press - a regular telegram does not
             # carry a response flag, so keep learn mode on until the cycle ends
             # and let the device be tracked once it matches below.

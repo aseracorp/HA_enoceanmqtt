@@ -293,7 +293,8 @@ def test_teachin_captures_non_ute_devices():
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
-        # --- 1. 4BS regular data telegram (like the user's log) ---
+        # --- 1. 4BS data telegram WITHOUT the learn bit (teach-in NOT pressed) ---
+        # must NOT be added to the database.
         p = RadioPacket(PACKET.RADIO_ERP1,
                         data=[0xa5, 0xa0, 0x2e, 0xea, 0x0d, 0x05, 0xa2, 0xa1, 0x38, 0x00],
                         optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
@@ -302,10 +303,8 @@ def test_teachin_captures_non_ute_devices():
         com.set_learn_mode(True)
         com._process_radio_packet(p)
         stored = com._store.all()
-        assert len(stored) == 1, 'unknown 4BS device should be captured in learn mode'
-        assert stored[0]['address'] == 0x05A2A138
-        assert stored[0]['rorg'] == 0xA5
-        assert com.learn_mode is False, 'teach-in should be one-shot'
+        assert len(stored) == 0, 'a 4BS data telegram without the learn bit must not be added'
+        assert com.learn_mode is True, 'learn mode should remain on (no device captured)'
 
         # --- 2. 4BS learn telegram (LRN bit) extracts EEP (A5-08-01) ---
         # correct encoding: DB3 = (func<<1)|(type>>5 &1), DB2 = (type & 0x1F)<<2
