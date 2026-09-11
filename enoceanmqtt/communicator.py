@@ -453,13 +453,20 @@ class Communicator:
             rorg = packet.rorg
         name = 'learn_' + format(address, '08x')
         stored = {'name': name, 'address': address, 'rorg': rorg}
-        # only store func/type if they were actually extracted from the
-        # telegram (e.g. a 4BS learn telegram). Do NOT guess a default EEP -
-        # a wrong EEP is worse than none, and the user can set the correct
-        # one with the edit button in the web interface.
         if func is not None and type_ is not None:
+            # EEP was extracted from the telegram (e.g. a 4BS learn telegram)
             stored['func'] = func
             stored['type'] = type_
+        else:
+            # Devices like RPS/F6 rocker switches and 1BS contacts do not
+            # carry an EEP in their telegram - they are identified by their
+            # ID alone. Assign a sensible default profile for the RORG so the
+            # device is immediately usable after teach-in (no manual edit
+            # required); it can still be refined with the edit button.
+            default = self._eep_registry.default_for_rorg(rorg)
+            if default:
+                stored['func'] = default['func']
+                stored['type'] = default['type']
         self._store.add(stored)
         new_sensor = self._load_dynamic_sensors(name)
         if new_sensor is not None:
