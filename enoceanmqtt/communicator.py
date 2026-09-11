@@ -363,6 +363,69 @@ class Communicator:
         self.enocean.teach_in = False
         logging.info("UTE teach-in mode %s", "enabled" if self.learn_mode else "disabled")
 
+    def _learn_unknown_device(self, packet, rorg=None, func=None, type_=None):
+        """teach-in an unknown device that sent a telegram while learn mode
+        is active.
+
+        Works for devices that do not use UTE: regular 4BS/VLD sensors and RPS
+        (F6) rocker switches have no teach-in button, they just send normal
+        telegrams. If the EEP could be determined from the telegram it is
+        stored, otherwise the device is registered with just its address and
+        RORG so it can be matched and refined in the web interface.
+        """
+        address = enocean.utils.combine_hex(packet.sender)
+        address_hex = enocean.utils.to_hex_string(packet.sender)
+
+        if self._sensors_by_address.get(address):
+            # already known - nothing to teach in
+            return None
+
+        if rorg is None:
+            rorg = packet.rorg
+        name = 'learn_' + format(address, '08x')
+        stored = {'name': name, 'address': address, 'rorg': rorg}
+        if func is not None and type_ is not None:
+            stored['func'] = func
+            stored['type'] = type_
+        # pick a sane default EEP for the RORG if none was provided
+        if 'func' not in stored:
+            default = self._eep_registry.default_for_rorg(rorg)
+            if default:
+                stored['func'] = default['func']
+                stored['type'] = default['type']
+        self._store.add(stored)
+        new_sensor = self._load_dynamic_sensors(name)
+        if new_sensor is not None:
+            self._on_sensors_changed(new_sensor)
+        logging.info("Teach-in: captured device %s (RORG %s, EEP %s)",
+                     address_hex, hex(rorg),
+                     stored.get('func') is not None and
+                     '%02X-%02X-%02X' % (rorg, stored['func'], stored['type']) or 'unknown')
+
+        # teach-in is one-shot: disable it after a device was captured
+        self.learn_mode = False
+        return new_sensor
+
+    @staticmethod
+    def _is_4bs_learn_telegram(packet):
+        """a 4BS telegram with the LRN bit set in DB0 (data[1]).
+
+        When set, DB3 (data[4]) and DB2 (data[3]) carry the EEP:
+        FUNC = DB3, TYPE = upper 5 bits of DB2.
+        """
+        if packet.rorg != RORG.BS4 or len(packet.data) < 5:
+            return False
+        return bool((packet.data[1] >> 3) & 1)
+
+    def _handle_4bs_learn_telegram(self, packet):
+        """extract the EEP from a 4BS learn telegram and register the device"""
+        # data layout: [0]=RORG, [1]=DB0, [2]=DB1, [3]=DB2, [4]=DB3, [5..8]=sender
+        db2 = packet.data[3]
+        db3 = packet.data[4]
+        func = db3
+        type_ = db2 >> 3
+        return self._learn_unknown_device(packet, rorg=packet.rorg, func=func, type_=type_)
+
     def _handle_ute_packet(self, packet):
         """handle an incoming Universal Teach-In (UTE) telegram"""
         address = enocean.utils.combine_hex(packet.sender)
@@ -999,15 +1062,80 @@ class Communicator:
         logging.info("sending: %s", packet)
         self.enocean.send(packet)
 
+    def _send_teachin(self, name):
+        """send a teach-in telegram to an actor so it learns this gateway as
+        its controller.
+
+        Works for 4BS actors (LRN bit set) and VLD actors (VLD teach-in
+        packet). Returns (ok, message).
+        """
+        sensor = None
+        for s in self.sensors:
+            if s.get('name') == name or s.get('name') == self.conf.get('mqtt_prefix', 'enocean/') + name:
+                sensor = s
+                break
+        if sensor is None:
+            return False, 'Device not found'
+
+        rorg = sensor.get('rorg')
+        func = sensor.get('func')
+        type_ = sensor.get('type')
+        if rorg not in (RORG.BS4, RORG.VLD):
+            return False, 'Teach-in telegram only supported for 4BS and VLD actors'
+
+        # teach-in makes sense for actors and bi-directional devices (they can
+        # receive and register the gateway). Plain one-way sensors cannot.
+        # Resolve the category from the EEP registry if not stored on the dict.
+        category = sensor.get('category')
+        bidirectional = sensor.get('bidirectional')
+        if category is None or bidirectional is None:
+            profile = self._eep_registry.get(rorg, func, type_) if type_ is not None else None
+            if profile:
+                category = profile.get('category', 'sensor') if category is None else category
+                bidirectional = profile.get('bidirectional', False) if bidirectional is None else bidirectional
+        is_actor = category == 'actor' or bidirectional
+        if not is_actor:
+            return False, 'Teach-in telegram is only supported for actors / bidirectional devices'
+
+        address = sensor.get('address')
+        destination = [(address >> i * 8) & 0xff for i in reversed(range(4))] if address is not None else None
+
+        try:
+            if rorg == RORG.VLD:
+                # VLD teach-in: build a UTE-style packet targeting the actor
+                packet = RadioPacket.create(RORG.VLD, func, type_,
+                                            sender=self.enocean_sender,
+                                            destination=destination,
+                                            learn=True)
+                self.enocean.send(packet)
+            else:
+                # 4BS teach-in: set the LRN bit in DB0 (data[1] bit 3)
+                packet = RadioPacket.create(RORG.BS4, func, type_,
+                                            sender=self.enocean_sender,
+                                            destination=destination,
+                                            learn=True)
+                # force the learn bit (LRN=1) in DB0
+                if len(packet.data) >= 2:
+                    packet.data[1] |= 0x08
+                    packet.parse_eep(func, type_)
+                self.enocean.send(packet)
+            logging.info("Teach-in telegram sent to %s (%s)", sensor['name'],
+                         enocean.utils.to_hex_string(destination) if destination else 'broadcast')
+            return True, 'Teach-in telegram sent'
+        except Exception as exc:   # pylint: disable=broad-except
+            logging.error("Failed to send teach-in to %s: %s", sensor['name'], exc)
+            return False, str(exc)
+
     def _process_radio_packet(self, packet):
         # Universal Teach-In telegrams are handled separately
         if packet.rorg == RORG.UTE:
             self._handle_ute_packet(packet)
             return
 
+        address = enocean.utils.combine_hex(packet.sender)
+
         # first, look whether we have this sensor configured
         found_sensor = False
-        address = enocean.utils.combine_hex(packet.sender)
         potential_sensors = self._sensors_by_address.get(address, [])
 
         for cur_sensor in potential_sensors:
@@ -1024,6 +1152,23 @@ class Communicator:
         # log packet, if not disabled
         if str(self.conf.get('log_packets')) in ("True", "true", "1"):
             logging.info("received: %s", packet)
+
+        # teach-in: if learn mode is active and the device is unknown, capture it.
+        # This handles devices that do not send UTE telegrams at all - regular
+        # 4BS/VLD sensors and RPS (F6) rocker switches just send normal data.
+        if not found_sensor and self.learn_mode:
+            if self._is_4bs_learn_telegram(packet):
+                self._handle_4bs_learn_telegram(packet)
+            else:
+                self._learn_unknown_device(packet)
+            # teach-in is one-shot for this press - a regular telegram does not
+            # carry a response flag, so keep learn mode on until the cycle ends
+            # and let the device be tracked once it matches below.
+            potential_sensors = self._sensors_by_address.get(address, [])
+            for cur_sensor in potential_sensors:
+                if packet.rorg == cur_sensor.get('rorg'):
+                    found_sensor = cur_sensor
+                    break
 
         # abort loop if sensor not found
         if not found_sensor:

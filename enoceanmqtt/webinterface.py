@@ -8,6 +8,7 @@ exposes:
 * ``GET  /api/status``  - current runtime status: sensors, EEP catalog, gateway
 * ``POST /api/learn``   - enable/disable UTE teach-in mode
 * ``POST /api/sensors`` - add a sensor (manual or via EEP selection)
+* ``POST /api/teachin``  - send a teach-in telegram to an actor
 * ``DELETE /api/sensors/<name>`` - remove a sensor
 
 The interface is intended to be put behind the Cosmos Proxy (an authentication
@@ -90,6 +91,11 @@ class WebInterface:
     def add_sensor(self, payload):
         return self.communicator.add_sensor(payload)
 
+    def send_teachin(self, name):
+        """send a teach-in telegram to an actor"""
+        ok, message = self.communicator._send_teachin(name)
+        return {'ok': ok, 'message': message}
+
     def remove_sensor(self, name):
         return self.communicator.remove_sensor(name)
 
@@ -151,6 +157,10 @@ class WebInterface:
                     return self._send(200, {'ok': True, 'learn_mode': web.communicator.learn_mode})
                 if self.command == 'POST' and path == '/api/sensors':
                     result = web.add_sensor(self._read_body())
+                    code = 200 if result.get('ok') else 400
+                    return self._send(code, result)
+                if self.command == 'POST' and path == '/api/teachin':
+                    result = web.send_teachin(str(self._read_body().get('name', '')))
                     code = 200 if result.get('ok') else 400
                     return self._send(code, result)
                 if self.command == 'DELETE' and path.startswith('/api/sensors/'):

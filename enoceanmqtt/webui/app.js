@@ -131,6 +131,7 @@ function renderSensors() {
       <td><span class="status-badge ${statusCls}">${statusTxt}</span></td>
       <td class="mono">${escapeHtml(fmtLastSeen(s.last_seen))}</td>
       <td><div class="row-actions">
+        ${isActor ? '<button class="icon-btn teachin-btn" title="Send teach-in telegram to this actor" data-teachin="${escapeHtml(s.name)}">⤓</button>' : ''}
         <button class="icon-btn" title="Remove device" data-del="${escapeHtml(s.name)}">✕</button>
       </div></td>
     </tr>`;
@@ -140,6 +141,19 @@ function renderSensors() {
   tbody.querySelectorAll('[data-del]').forEach((btn) => {
     btn.addEventListener('click', () => confirmRemove(btn.getAttribute('data-del')));
   });
+  // bind teach-in buttons
+  tbody.querySelectorAll('[data-teachin]').forEach((btn) => {
+    btn.addEventListener('click', () => sendTeachIn(btn.getAttribute('data-teachin')));
+  });
+}
+
+async function sendTeachIn(name) {
+  try {
+    const res = await api('/api/teachin', { method: 'POST', body: JSON.stringify({ name: name }) });
+    toast(res.message || 'Teach-in sent', res.ok ? 'success' : 'error');
+  } catch (err) {
+    toast('Failed to send teach-in: ' + err.message, 'error');
+  }
 }
 
 function setDeviceCat(cat) {

@@ -184,6 +184,15 @@ class EEPRegistry:
                 return p
         return None
 
+    def default_for_rorg(self, rorg):
+        """pick a sensible default profile for a RORG when the EEP is not
+        known (e.g. an RPS/F6 switch or 4BS sensor that did not send a learn
+        telegram). Prefers the first-listed profile for that RORG."""
+        for p in self.profiles:
+            if p['rorg'] == rorg:
+                return p
+        return None
+
 
 # module level singleton
 _registry = None
