@@ -123,15 +123,21 @@ class EEPRegistry:
             rorg_hex = f'0x{rorg:02X}'
             func_hex = f'0x{func:02X}'
             type_hex = f'0x{type_:02X}'
+            smartack = bool(override.get('smartack'))
+            # smartACK devices are inherently bidirectional
+            bidirectional = (override.get('category') == 'bidirectional') or smartack
+            category = override.get('category', 'sensor')
+            if bidirectional:
+                category = 'bidirectional'
             entry = {
                 'rorg': rorg, 'func': func, 'type': type_,
                 'rorg_hex': rorg_hex, 'func_hex': func_hex, 'type_hex': type_hex,
                 'eep': f'{rorg_hex}-{func_hex}-{type_hex}',
                 'name': override.get('name', f'Type {type_:02X}'),
                 'rorg_name': override.get('rorg_name', 'VLD (Variable Length)'),
-                'category': override.get('category', 'sensor'),
-                'bidirectional': override.get('category') == 'bidirectional',
-                'smartack': override.get('smartack', False),
+                'category': category,
+                'bidirectional': bidirectional,
+                'smartack': smartack,
             }
             self.profiles.append(entry)
 
@@ -157,10 +163,16 @@ class EEPRegistry:
         smartack = func in SMARTACK_FUNCS.get(rorg, set())
         is_actor = func in ACTOR_FUNCS.get(rorg, set())
 
-        # a bidirectional actor is shown in the "Actors" section with a
-        # bidirectional badge; a bidirectional sensor keeps the sensor badge.
+        # smartACK devices are inherently bidirectional (they receive commands
+        # and report status via the smartACK handshake), e.g. D2-11-01 - just
+        # a different mechanism than the A5-20 bidirectional family.
+        if smartack:
+            bidirectional = True
+
+        # A bidirectional device (smartACK or A5-20 ...) is its own third
+        # category. A plain one-way actor (receiver) stays an actor.
         if bidirectional:
-            category = 'actor' if is_actor else 'sensor'
+            category = 'bidirectional'
         elif is_actor:
             category = 'actor'
         else:

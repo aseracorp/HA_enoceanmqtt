@@ -197,16 +197,18 @@ def test_eep_classification():
     assert p('A5-02-05')['category'] == 'sensor'
     assert p('A5-02-05')['bidirectional'] is False
 
-    # A5-20-01: bi-directional actor
-    assert p('A5-20-01')['category'] == 'actor'
+    # A5-20-01: bidirectional (third category)
+    assert p('A5-20-01')['category'] == 'bidirectional'
     assert p('A5-20-01')['bidirectional'] is True
 
-    # D2-11-01: smartACK sensor (added via override, not in old EEP.xml)
-    assert p('D2-11-01')['category'] == 'sensor'
+    # D2-11-01: smartACK sensor - bidirectional (smartACK handshake),
+    # not a plain actor. Added via override (not in old EEP.xml).
+    assert p('D2-11-01')['category'] == 'bidirectional'
+    assert p('D2-11-01')['bidirectional'] is True
     assert p('D2-11-01')['smartack'] is True
 
-    # D2-01-01: actor (electronic switch) that is also bidirectional
-    assert p('D2-01-01')['category'] == 'actor'
+    # D2-01-01: bidirectional (electronic switch with local control)
+    assert p('D2-01-01')['category'] == 'bidirectional'
     assert p('D2-01-01')['bidirectional'] is True
 
 
@@ -549,7 +551,8 @@ def test_vld_data_telegram_not_taught_in():
 
 
 def test_actor_sensor_categorization():
-    """sensors have an address; actors use a sender (virtual=1) + 0xFFFFFFFF"""
+    """sensors have an address; actors use a sender (virtual=1) + 0xFFFFFFFF;
+    bidirectional EEPs (A5-20-01, D2-11 smartACK) are always bidirectional"""
     import datetime
     with tempfile.TemporaryDirectory() as tmp:
         conf = {
@@ -568,10 +571,31 @@ def test_actor_sensor_categorization():
                                  'rorg': 0xA5, 'func': 0x02, 'type': 0x05})
         assert d['category'] == 'sensor'
 
-        # actor: address 0xFFFFFFFF + sender -> actor
+        # actor: address 0xFFFFFFFF + sender + virtual, one-way EEP -> actor
         d2 = com.describe_sensor({'name': 'e/actor', 'address': 0xFFFFFFFF,
-                                  'sender': 0xFF800001, 'rorg': 0xA5, 'func': 0x20, 'type': 0x01})
+                                  'sender': 0xFF800001, 'virtual': 1,
+                                  'rorg': 0xA5, 'func': 0x02, 'type': 0x05})
         assert d2['category'] == 'actor'
+
+        # A5-20-01 is ALWAYS bidirectional, even with sender + virtual
+        d3 = com.describe_sensor({'name': 'e/a5_20', 'address': 0xFFFFFFFF,
+                                  'sender': 0xFF800001, 'virtual': 1,
+                                  'rorg': 0xA5, 'func': 0x20, 'type': 0x01})
+        assert d3['category'] == 'bidirectional'
+
+        # D2-11 smartACK is bidirectional
+        d4 = com.describe_sensor({'name': 'e/smart', 'address': 0x12345678,
+                                  'rorg': 0xD2, 'func': 0x11, 'type': 0x01})
+        assert d4['category'] == 'bidirectional'
+
+
+def test_smartack_is_bidirectional():
+    """smartACK devices (D2-11-01) are bidirectional, not plain actors"""
+    reg = get_registry()
+    p = reg.get(0xD2, 0x11, 0x01)
+    assert p['category'] == 'bidirectional'
+    assert p['bidirectional'] is True
+    assert p['smartack'] is True
 
 
 def test_virtual_senders_range():
@@ -692,5 +716,6 @@ if __name__ == '__main__':
     test_config_save_and_history()
     test_update_sensor_address()
     test_latest_value_with_meta()
+    test_smartack_is_bidirectional()
     print('ALL TESTS PASSED')
 
