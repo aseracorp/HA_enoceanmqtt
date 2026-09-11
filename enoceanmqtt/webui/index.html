@@ -75,16 +75,24 @@
     <section class="card">
       <div class="card-header">
         <h2>Add device</h2>
-        <span class="card-sub">Manually configure a device using its address &amp; EEP</span>
+        <span class="card-sub">Manually add a sensor (sender) or an actor (receiver)</span>
+      </div>
+      <div class="device-tabs" style="margin-bottom:14px">
+        <button type="button" class="device-tab active" data-addcat="sensor" id="add-tab-sensor">Add Sensor (sender)</button>
+        <button type="button" class="device-tab" data-addcat="actor" id="add-tab-actor">Add Actor (receiver)</button>
       </div>
       <form id="add-form" class="add-form">
         <div class="field">
           <label for="f-name">Name</label>
           <input type="text" id="f-name" placeholder="e.g. living_room_temperature" required>
         </div>
-        <div class="field">
+        <div class="field" id="f-addr-field">
           <label for="f-address">Address</label>
           <input type="text" id="f-address" placeholder="0x003DD63B" required>
+        </div>
+        <div class="field" id="f-sender-field" hidden>
+          <label for="f-sender">Virtual sender ID <span class="opt">(transceiver address)</span></label>
+          <select id="f-sender"></select>
         </div>
         <div class="field field-grow">
           <label for="f-eep-search">EEP (Equipment Profile)</label>
@@ -92,11 +100,22 @@
           <div class="eep-list" id="f-eep-list"></div>
           <input type="hidden" id="f-eep">
         </div>
-        <div class="field">
-          <label for="f-sender">Sender / Base ID <span class="opt">(optional)</span></label>
-          <input type="text" id="f-sender" placeholder="auto (gateway base id)">
-        </div>
         <button class="btn btn-primary" type="submit" id="btn-add">Add device</button>
+      </form>
+    </section>
+
+    <!-- Settings / Config -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Configuration</h2>
+        <span class="card-sub">[CONFIG] section of enoceanmqtt.conf - changes apply after restart</span>
+      </div>
+      <form id="config-form" class="add-form">
+        <div class="config-grid" id="config-grid"></div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit" id="btn-config-save">Save configuration</button>
+          <span class="card-sub">A restart is required for most settings to take effect.</span>
+        </div>
       </form>
     </section>
 
@@ -121,11 +140,12 @@
               <th>Type</th>
               <th>Status</th>
               <th>Last seen</th>
+              <th>Latest</th>
               <th></th>
             </tr>
           </thead>
           <tbody id="sensor-body">
-            <tr class="empty-row"><td colspan="7">No devices configured yet.</td></tr>
+            <tr class="empty-row"><td colspan="8">No devices configured yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -174,6 +194,17 @@
     <div class="modal-actions">
       <button class="btn" id="edit-cancel">Cancel</button>
       <button class="btn btn-primary" id="edit-ok">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- value graph modal -->
+<div class="modal-overlay" id="graph-overlay" hidden>
+  <div class="modal modal-wide">
+    <h3 id="graph-title">Value history</h3>
+    <div id="graph-body">No data.</div>
+    <div class="modal-actions">
+      <button class="btn" id="graph-close">Close</button>
     </div>
   </div>
 </div>

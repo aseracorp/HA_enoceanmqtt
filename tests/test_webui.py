@@ -546,6 +546,88 @@ def test_vld_data_telegram_not_taught_in():
             'a VLD data telegram without teach-in must not be captured'
         assert com.learn_mode is True, 'learn mode should stay on (nothing captured)'
 
+
+
+def test_actor_sensor_categorization():
+    """sensors have an address; actors use a sender (virtual=1) + 0xFFFFFFFF"""
+    import datetime
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        # sensor: has an address, no sender
+        d = com.describe_sensor({'name': 'e/temp', 'address': 0xDEADBEEF,
+                                 'rorg': 0xA5, 'func': 0x02, 'type': 0x05})
+        assert d['category'] == 'sensor'
+
+        # actor: address 0xFFFFFFFF + sender -> actor
+        d2 = com.describe_sensor({'name': 'e/actor', 'address': 0xFFFFFFFF,
+                                  'sender': 0xFF800001, 'rorg': 0xA5, 'func': 0x20, 'type': 0x01})
+        assert d2['category'] == 'actor'
+
+
+def test_virtual_senders_range():
+    """the transceiver exposes 128 usable virtual sender IDs (base+0..127)"""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+        senders = com.virtual_senders()
+        assert len(senders) == 128
+        assert senders[0] == 0xFF800000
+        assert senders[127] == 0xFF80007F
+
+
+def test_config_save_and_history():
+    """save_config writes [CONFIG] back; get_history returns the rolling buffer"""
+    import datetime
+    with tempfile.TemporaryDirectory() as tmp:
+        conf_file = os.path.join(tmp, 'enoceanmqtt.conf')
+        with open(conf_file, 'w') as f:
+            f.write('[CONFIG]\n'
+                    'mqtt_host = localhost\n')
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883', 'config': [conf_file],
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        # save_config
+        res = com.save_config({'mqtt_keepalive': '42', 'webui_port': '8123'})
+        assert res['ok'], res
+        content = open(conf_file).read()
+        assert 'mqtt_keepalive = 42' in content
+        assert 'webui_port = 8123' in content
+
+        # add a sensor + inject history
+        com.add_sensor({'name': 't', 'address': 0x12345678, 'eep': 'A5-02-05'})
+        com._history[0x12345678] = [{'values': {'TMP': 20.0}, 'ts': '2026-09-11T09:00:00Z'},
+                                    {'values': {'TMP': 21.0}, 'ts': '2026-09-11T10:00:00Z'}]
+        h = com.get_history('t')
+        assert h['ok']
+        assert len(h['history']) == 2
+        assert h['history'][-1]['values']['TMP'] == 21.0
+
 if __name__ == '__main__':
     test_sensor_store()
     test_eep_registry()
@@ -560,5 +642,8 @@ if __name__ == '__main__':
     test_device_db_corruption_recovery()
     test_f6_eep_recognition()
     test_vld_data_telegram_not_taught_in()
+    test_actor_sensor_categorization()
+    test_virtual_senders_range()
+    test_config_save_and_history()
     print('ALL TESTS PASSED')
 

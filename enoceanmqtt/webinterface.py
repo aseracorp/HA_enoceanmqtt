@@ -95,7 +95,19 @@ class WebInterface:
             'learn_mode': com.learn_mode,
             'sensors': sensors,
             'eep': com.eep_catalog(),
+            'virtual_senders': com.virtual_senders(),
         }
+
+    def get_config(self):
+        """return the current [CONFIG] settings for the web configurator"""
+        return self.communicator.conf
+
+    def get_history(self, name):
+        return self.communicator.get_history(name)
+
+    def save_config(self, payload):
+        """persist updated [CONFIG] settings back to the configuration file"""
+        return self.communicator.save_config(payload)
 
     def enable_learn(self, enabled):
         self.communicator.set_learn_mode(bool(enabled))
@@ -170,6 +182,17 @@ class WebInterface:
                 # --- JSON API ---
                 if self.command == 'GET' and path == '/api/status':
                     return self._send(200, web.get_status())
+                if self.command == 'GET' and path == '/api/config':
+                    return self._send(200, web.get_config())
+                if self.command == 'POST' and path == '/api/config':
+                    result = web.save_config(self._read_body())
+                    code = 200 if result.get('ok') else 400
+                    return self._send(code, result)
+                if self.command == 'GET' and path.startswith('/api/history/'):
+                    name = path[len('/api/history/'):]
+                    result = web.get_history(name)
+                    code = 200 if result.get('ok') else 404
+                    return self._send(code, result)
                 if self.command == 'POST' and path == '/api/learn':
                     body = self._read_body()
                     web.enable_learn(bool(body.get('enabled')))
