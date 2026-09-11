@@ -490,29 +490,27 @@ class Communicator:
 
     @staticmethod
     def _is_4bs_learn_telegram(packet):
-        """a 4BS telegram with the LRN bit set in DB0 (data[1]).
+        """a 4BS teach-in telegram.
 
-        When set, DB3 (data[4]) and DB2 (data[3]) carry the EEP:
-        FUNC = DB3, TYPE = upper 5 bits of DB2.
+        Uses the enocean library's own parsing: for 4BS, ``packet.learn`` is
+        set from the (active-low) LRN bit in DB0 and ``rorg_func``/``rorg_type``
+        are decoded from the documented EEP bit layout. A 4BS telegram is a
+        teach-in iff the library flags it as a learn telegram and the EEP was
+        detected.
         """
         if packet.rorg != RORG.BS4 or len(packet.data) < 5:
             return False
-        return bool((packet.data[1] >> 3) & 1)
+        return bool(packet.learn and packet.rorg_func is not None and
+                    packet.rorg_type is not None)
 
     def _handle_4bs_learn_telegram(self, packet):
-        """extract the EEP from a 4BS learn telegram and register the device.
+        """register a device from a 4BS learn telegram.
 
-        The 4BS teach-in telegram encodes the EEP as:
-          DB3 bits 7..1 = FUNC (7 bits)
-          DB3 bit 0 + DB2 bits 7..2 = TYPE (6 bits)
-        (matches the EnOcean EEP 2.x spec and the enocean library's own
-        ``rorg_func``/``rorg_type`` extraction in ``RadioPacket.parse``).
-        """
-        # data layout: [0]=RORG, [1]=DB0, [2]=DB1, [3]=DB2, [4]=DB3, [5..8]=sender
-        db2 = packet.data[3]
-        db3 = packet.data[4]
-        func = (db3 >> 1) & 0x7F
-        type_ = ((db3 & 0x01) << 5) | ((db2 >> 2) & 0x1F)
+        The EEP (FUNC/TYPE) is taken from the enocean library's parsed
+        ``rorg_func``/``rorg_type`` fields, which decode the documented EnOcean
+        4BS teach-in EEP layout."""
+        func = packet.rorg_func
+        type_ = packet.rorg_type
         device = self._learn_unknown_device(packet, rorg=packet.rorg, func=func, type_=type_)
         # bidirectional devices expect a teach-in response so the pairing is
         # completed on both sides (we learned them, they learn us)
@@ -587,11 +585,11 @@ class Communicator:
 
     @staticmethod
     def _is_1bs_learn_telegram(packet):
-        """a 1BS (D5) telegram with the LRN bit set in DB0 (data[1]).
-        1BS teach-in works like 4BS: the LRN bit is DB0 bit 3."""
+        """a 1BS (D5) teach-in telegram.
+        Uses the enocean library's ``packet.learn`` (active-low LRN bit in DB0)."""
         if packet.rorg != RORG.BS1 or len(packet.data) < 2:
             return False
-        return bool((packet.data[1] >> 3) & 1)
+        return bool(packet.learn)
 
     def _handle_1bs_learn_telegram(self, packet):
         """register a 1BS (D5) device from its learn telegram.
