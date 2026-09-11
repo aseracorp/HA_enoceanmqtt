@@ -47,6 +47,8 @@ class Communicator:
         self._last_seen = {}
         # latest decoded values per device address (for the web UI)
         self._latest_value = {}
+        # per-field unit/description metadata per device address
+        self._field_meta = {}
         # rolling history of decoded values (for the value graph)
         self._history = {}
         self._history_max = int(self.conf.get('webui_history', 200))
@@ -310,6 +312,18 @@ class Communicator:
                 return {'ok': False, 'error': 'A sensor with this name already exists'}
             changes['name'] = new_name
 
+        # optional address change
+        address = payload.get('address')
+        if address is not None:
+            if not isinstance(address, int):
+                try:
+                    address = int(str(address), 0)
+                except (TypeError, ValueError):
+                    return {'ok': False, 'error': 'Invalid sensor address'}
+            if not (0 <= address <= 0xFFFFFFFF):
+                return {'ok': False, 'error': 'Sensor address out of range'}
+            changes['address'] = address
+
         # optional EEP change
         eep = payload.get('eep')
         if eep is not None:
@@ -461,6 +475,10 @@ class Communicator:
             display_name = display_name[:-3]
 
         latest = self._latest_value.get(address)
+        field_meta = self._field_meta.get(address, {})
+        if latest is not None:
+            latest = dict(latest)
+            latest['meta'] = field_meta
 
         return {
             'name': display_name,
@@ -1089,6 +1107,12 @@ class Communicator:
                 value = cur_prop['value']
             else:
                 value = cur_prop['raw_value']
+            # remember the textual representation + unit for the web UI
+            self._field_meta.setdefault(enocean.utils.combine_hex(packet.sender), {})[prop_name] = {
+                'unit': cur_prop.get('unit', ''),
+                'description': cur_prop.get('description', ''),
+                'text': str(cur_prop.get('value', value)),
+            }
             # publish extracted information
             logging.debug("%s: %s (%s)=%s %s", sensor['name'], prop_name,
                             cur_prop['description'], cur_prop['value'], cur_prop['unit'])

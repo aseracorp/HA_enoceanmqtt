@@ -49,7 +49,8 @@ async function loadStatus() {
     renderSensors();
     initEepSearch();
     populateSenders(state.virtual_senders);
-    populateConfig(state.config);
+    applyTranslations();
+    loadConfig();
   } catch (e) {
     toast('Failed to load status: ' + e.message, 'error');
   }
@@ -92,12 +93,19 @@ function fmtLastSeen(ts) {
 function fmtLatest(s) {
   const l = s.latest;
   if (!l || !l.values) return '—';
-  // prefer the first non-underscore (non-meta) value
-  const keys = Object.keys(l.values).filter((k) => k !== '_RSSI_' && k !== '_DATE_' && k !== '_RAW_DATA_');
+  const meta = l.meta || {};
+  // show all real (non-underscore) values, e.g. "ILL 170 lx · TMP 21°C · OCC on"
+  const keys = Object.keys(l.values).filter((k) => !k.startsWith('_'));
   if (!keys.length) return '—';
-  const k = keys[0];
-  const v = l.values[k];
-  return k + '=' + (typeof v === 'number' ? Number(v.toFixed ? v.toFixed(2) : v) : v);
+  return keys.map((k) => {
+    let v = l.values[k];
+    const m = meta[k] || {};
+    let txt;
+    if (m.text && m.text !== String(v)) txt = m.text;
+    else if (typeof v === 'number') txt = (Math.round(v * 100) / 100).toString();
+    else txt = String(v);
+    return (m.description ? m.description.split(' ')[0] : k) + ' ' + txt + (m.unit ? ' ' + m.unit : '');
+  }).join(' · ');
 }
 
 /* ---------------- value graph ---------------- */
@@ -113,7 +121,7 @@ async function showGraph(name) {
     // pick the first real (non-meta) value key
     const keys = Object.keys(hist[hist.length - 1].values || {}).filter((k) => !k.startsWith('_'));
     if (!keys.length) { $('graph-body').innerHTML = 'No numeric values to plot.'; return; }
-    const key = keys[0];
+    const key = keys[0]; // (graph plots the first numeric value; all are in the table)
     const pts = hist.filter((h) => h.values && h.values[key] !== undefined)
       .map((h) => ({ t: new Date(h.ts).getTime(), v: Number(h.values[key]) }));
     $('graph-body').innerHTML = '<div class="graph-wrap"><svg id="mini-graph" viewBox="0 0 600 180" preserveAspectRatio="none"></svg></div>' +
@@ -153,6 +161,16 @@ const CONFIG_LABELS = {
   overlay: 'Overlay', webui_port: 'Web UI port', webui_disable: 'Disable web UI',
   db_file: 'Device DB file', webui_sensor_store: 'Sensor store file',
 };
+
+async function loadConfig() {
+  try {
+    const data = await api('/api/config');
+    state.config = data || {};
+    populateConfig(state.config);
+  } catch (e) {
+    toast('Failed to load configuration: ' + e.message, 'error');
+  }
+}
 
 function populateConfig(conf) {
   const grid = $('config-grid');
@@ -196,7 +214,7 @@ function renderSensors() {
   if (count) count.textContent = state.sensors.length + ' device' + (state.sensors.length === 1 ? '' : 's');
 
   if (!filtered.length) {
-    const msg = state.sensors.length ? (cats === 'actor' ? 'No actors configured.' : 'No sensors configured.') : 'No devices configured yet.';
+    const msg = state.sensors.length ? (cats === 'actor' ? t('no_actors') : t('no_sensors')) : t('no_devices');
     tbody.innerHTML = '<tr class="empty-row"><td colspan="8">' + msg + '</td></tr>';
     return;
   }
@@ -205,7 +223,7 @@ function renderSensors() {
     const eep = s.eep ? escapeHtml(s.eep) : '—';
     const eepName = s.eep_name ? escapeHtml(s.eep_name) : '';
     const statusCls = s.status === 'online' ? 'online' : (s.status === 'offline' ? 'offline' : 'never');
-    const statusTxt = s.status === 'online' ? 'Online' : (s.status === 'offline' ? 'Offline' : 'Never seen');
+    const statusTxt = s.status === 'online' ? t('st_online') : (s.status === 'offline' ? t('st_offline') : t('st_never'));
     const isActor = deviceCategory(s) === 'actor';
     // Address column: for sensors show the device address; for actors show the
     // (virtual) sender id; for bidirectional devices show both.
@@ -220,7 +238,7 @@ function renderSensors() {
     }
     const source = s.source === 'dynamic' ? ' <span class="pill" style="font-size:10px;padding:1px 6px">web</span>' : '';
     const name = escapeHtml(s.name);
-    const catTxt = isActor ? 'Actor' : 'Sensor';
+    const catTxt = isActor ? t('actor') : t('sensor');
     const catCls = isActor ? 'actor' : 'sensor';
     const badges = [];
     if (s.bidirectional) badges.push('<span class="badge bidir" title="Bi-directional device">⇅ bidir</span>');
@@ -235,8 +253,8 @@ function renderSensors() {
       <td class="mono latest-val"><a href="#" data-graph="${escapeHtml(s.name)}" title="Show history graph">${escapeHtml(fmtLatest(s))}</a></td>
       <td><div class="row-actions">
         ${isActor ? '<button class="icon-btn teachin-btn" title="Send teach-in telegram to this actor" data-teachin="${escapeHtml(s.name)}">⤓</button>' : ''}
-        <button class="icon-btn" title="Edit device" data-edit="${escapeHtml(s.name)}">✎</button>
-        <button class="icon-btn" title="Remove device" data-del="${escapeHtml(s.name)}">✕</button>
+        <button class="icon-btn" title="${t('edit_device')}" data-edit="${escapeHtml(s.name)}">✎</button>
+        <button class="icon-btn" title="${t('remove_device')}" data-del="${escapeHtml(s.name)}">✕</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -263,6 +281,8 @@ function openEdit(name) {
   if (!s) return;
   editingDevice = name;
   $('e-name').value = s.name;
+  $('e-address').value = (s.address !== undefined && s.address !== null && s.address !== 0xFFFFFFFF)
+    ? '0x' + s.address.toString(16).toUpperCase().padStart(8, '0') : '';
   $('e-eep').value = s.eep || '';
   $('e-eep-list').classList.remove('open');
   $('edit-overlay').hidden = false;
@@ -277,10 +297,15 @@ $('edit-ok')?.addEventListener('click', async () => {
   if (!editingDevice) return;
   const name = $('e-name').value.trim();
   const eep = $('e-eep').value.trim();
+  const addrVal = $('e-address').value.trim();
+  const address = addrVal ? parseAddress(addrVal) : null;
+  if (addrVal && address === null) return toast('Please enter a valid address (e.g. 0x003DD63B)', 'error');
   try {
+    const body = { name: name, eep: eep };
+    if (address !== null) body.address = address;
     const res = await api('/api/sensors/' + encodeURIComponent(editingDevice), {
       method: 'PUT',
-      body: JSON.stringify({ name: name, eep: eep })
+      body: JSON.stringify(body)
     });
     if (!res.ok) throw new Error(res.error || 'update failed');
     toast('Device updated', 'success');
@@ -303,12 +328,12 @@ async function sendTeachIn(name) {
 
 function setDeviceCat(cat) {
   activeDeviceCat = cat;
-  document.querySelectorAll('.device-tab').forEach((t) => {
+  document.querySelectorAll('.device-tab[data-cat]').forEach((t) => {
     t.classList.toggle('active', t.getAttribute('data-cat') === cat);
   });
   renderSensors();
 }
-document.querySelectorAll('.device-tab').forEach((t) => {
+document.querySelectorAll('.device-tab[data-cat]').forEach((t) => {
   t.addEventListener('click', () => setDeviceCat(t.getAttribute('data-cat')));
 });
 
@@ -386,7 +411,10 @@ function setAddMode(mode) {
   }
 }
 document.querySelectorAll('[data-addcat]').forEach((t) => {
-  t.addEventListener('click', () => setAddMode(t.getAttribute('data-addcat')));
+  t.addEventListener('click', (e) => {
+    e.preventDefault();
+    setAddMode(t.getAttribute('data-addcat'));
+  });
 });
 
 function populateSenders(senders) {
@@ -458,6 +486,117 @@ $('modal-ok')?.addEventListener('click', async () => {
   }
 });
 
+/* ---------------- i18n ---------------- */
+const I18N = {
+  en: {
+    subtitle: 'Web Configurator', gateway: 'Gateway', mqtt: 'MQTT',
+    teachin_title: 'Teach-In', add_device: 'Add device',
+    add_sensor: 'Add Sensor (sender)', add_actor: 'Add Actor (receiver)',
+    all: 'All', sensors: 'Sensors', actors: 'Actors', devices: 'Devices',
+    configuration: 'Configuration', add_device_btn: 'Add device',
+    col_name: 'Name', col_addr: 'Address / Sender', col_type: 'Type',
+    col_status: 'Status', col_lastseen: 'Last seen', col_latest: 'Latest',
+    start_teachin: 'Start teach-in', stop_teachin: 'Stop teach-in',
+    remove_device: 'Remove device', edit_device: 'Edit device',
+    save_config: 'Save configuration',
+ 
+    st_online: 'Online',
+    st_offline: 'Offline',
+    st_never: 'Never seen',
+    actor: 'Actor',
+    sensor: 'Sensor',
+    no_actors: 'No actors configured.',
+    no_sensors: 'No sensors configured.',
+    no_devices: 'No devices configured yet.' },
+  de: {
+    subtitle: 'Web-Konfigurator', gateway: 'Gateway', mqtt: 'MQTT',
+    teachin_title: 'Teach-In', add_device: 'Gerät hinzufügen',
+    add_sensor: 'Sensor hinzufügen (Sender)', add_actor: 'Aktor hinzufügen (Empfänger)',
+    all: 'Alle', sensors: 'Sensoren', actors: 'Aktoren', devices: 'Geräte',
+    configuration: 'Konfiguration', add_device_btn: 'Gerät hinzufügen',
+    col_name: 'Name', col_addr: 'Adresse / Sender', col_type: 'Typ',
+    col_status: 'Status', col_lastseen: 'Zuletzt gesehen', col_latest: 'Letzter Wert',
+    start_teachin: 'Teach-In starten', stop_teachin: 'Teach-In stoppen',
+    remove_device: 'Gerät entfernen', edit_device: 'Gerät bearbeiten',
+    save_config: 'Konfiguration speichern',
+ 
+    st_online: 'Online',
+    st_offline: 'Offline',
+    st_never: 'Nie gesehen',
+    actor: 'Aktor',
+    sensor: 'Sensor',
+    no_actors: 'Keine Aktoren konfiguriert.',
+    no_sensors: 'Keine Sensoren konfiguriert.',
+    no_devices: 'Noch keine Geräte konfiguriert.' },
+  fr: {
+    subtitle: 'Configurateur Web', gateway: 'Passerelle', mqtt: 'MQTT',
+    teachin_title: 'Enseignement', add_device: 'Ajouter un appareil',
+    add_sensor: 'Ajouter un capteur (émetteur)', add_actor: 'Ajouter un actionneur (récepteur)',
+    all: 'Tous', sensors: 'Capteurs', actors: 'Actionneurs', devices: 'Appareils',
+    configuration: 'Configuration', add_device_btn: 'Ajouter un appareil',
+    col_name: 'Nom', col_addr: 'Adresse / Émetteur', col_type: 'Type',
+    col_status: 'État', col_lastseen: 'Vu pour la dernière fois', col_latest: 'Dernière valeur',
+    start_teachin: 'Démarrer l\'enseignement', stop_teachin: 'Arrêter l\'enseignement',
+    remove_device: 'Supprimer l\'appareil', edit_device: 'Modifier l\'appareil',
+    save_config: 'Enregistrer la configuration',
+ 
+    st_online: 'En ligne',
+    st_offline: 'Hors ligne',
+    st_never: 'Jamais vu',
+    actor: 'Actionneur',
+    sensor: 'Capteur',
+    no_actors: 'Aucun actionneur configuré.',
+    no_sensors: 'Aucun capteur configuré.',
+    no_devices: 'Aucun appareil configuré.' },
+  it: {
+    subtitle: 'Configuratore Web', gateway: 'Gateway', mqtt: 'MQTT',
+    teachin_title: 'Teach-In', add_device: 'Aggiungi dispositivo',
+    add_sensor: 'Aggiungi sensore (mittente)', add_actor: 'Aggiungi attuatore (ricevitore)',
+    all: 'Tutti', sensors: 'Sensori', actors: 'Attuatori', devices: 'Dispositivi',
+    configuration: 'Configurazione', add_device_btn: 'Aggiungi dispositivo',
+    col_name: 'Nome', col_addr: 'Indirizzo / Mittente', col_type: 'Tipo',
+    col_status: 'Stato', col_lastseen: 'Ultimo visto', col_latest: 'Ultimo valore',
+    start_teachin: 'Avvia teach-in', stop_teachin: 'Ferma teach-in',
+    remove_device: 'Rimuovi dispositivo', edit_device: 'Modifica dispositivo',
+    save_config: 'Salva configurazione',
+ 
+    st_online: 'Online',
+    st_offline: 'Offline',
+    st_never: 'Mai visto',
+    actor: 'Attuatore',
+    sensor: 'Sensore',
+    no_actors: 'Nessun attuatore configurato.',
+    no_sensors: 'Nessun sensore configurato.',
+    no_devices: 'Nessun dispositivo configurato.' },
+};
+
+let currentLang = 'en';
+function setLang(lang) {
+  currentLang = I18N[lang] ? lang : 'en';
+  try { localStorage.setItem('enm-lang', currentLang); } catch (e) { /* ignore */ }
+  applyTranslations();
+}
+function t(key) {
+  return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key);
+}
+function applyTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.getAttribute('data-i18n');
+    if (key && t(key)) el.textContent = t(key);
+  });
+  const learnBtn = $('btn-learn-on');
+  if (learnBtn) learnBtn.textContent = state.learn ? t('stop_teachin') : t('start_teachin');
+}
+$('lang-select')?.addEventListener('change', (e) => setLang(e.target.value));
+(function () {
+  try {
+    const saved = localStorage.getItem('enm-lang');
+    currentLang = I18N[saved] ? saved : 'en';
+    const sel = $('lang-select');
+    if (sel) sel.value = currentLang;
+  } catch (e) { /* ignore */ }
+})();
+
 /* ---------------- theme ---------------- */
 function currentTheme() {
   return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
@@ -485,4 +624,4 @@ $('btn-learn-on')?.addEventListener('click', () => setLearn(!state.learn));
 initEepSearch();
 bindEepSearch('e-eep', 'e-eep-list', 'e-eep');
 loadStatus();
-setInterval(loadStatus, 5000);
+setInterval(loadStatus, 2000);

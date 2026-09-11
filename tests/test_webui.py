@@ -628,6 +628,51 @@ def test_config_save_and_history():
         assert len(h['history']) == 2
         assert h['history'][-1]['values']['TMP'] == 21.0
 
+
+
+def test_update_sensor_address():
+    """editing a sensor can change its address too"""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+        com.add_sensor({'name': 't', 'address': 0xDEADBEEF, 'eep': 'A5-02-05'})
+        res = com.update_sensor('t', {'address': '0x12345678'})
+        assert res['ok'], res
+        assert res['sensor']['address'] == 0x12345678
+        stored = com._store.get('t')
+        assert stored['address'] == 0x12345678
+
+
+def test_latest_value_with_meta():
+    """the latest value carries per-field unit/description metadata"""
+    import datetime
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+        com.add_sensor({'name': 't', 'address': 0x12345678, 'eep': 'A5-08-01'})
+        com._latest_value[0x12345678] = {'values': {'ILL': 170, 'TMP': 21.3}, 'ts': '2026-09-11T10:00:00Z'}
+        com._field_meta[0x12345678] = {'ILL': {'unit': 'lx', 'description': 'Illumination'}, 'TMP': {'unit': '°C', 'description': 'Temperature'}}
+        d = com.describe_sensor({'name': 'enoceanmqtt/t', 'address': 0x12345678, 'rorg': 0xA5, 'func': 0x08, 'type': 0x01})
+        assert d['latest']['values']['ILL'] == 170
+        assert d['latest']['meta']['ILL']['unit'] == 'lx'
+        assert d['latest']['meta']['TMP']['unit'] == '°C'
+
 if __name__ == '__main__':
     test_sensor_store()
     test_eep_registry()
@@ -645,5 +690,7 @@ if __name__ == '__main__':
     test_actor_sensor_categorization()
     test_virtual_senders_range()
     test_config_save_and_history()
+    test_update_sensor_address()
+    test_latest_value_with_meta()
     print('ALL TESTS PASSED')
 
