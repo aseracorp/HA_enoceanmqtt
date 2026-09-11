@@ -53,7 +53,7 @@ async function loadStatus() {
     applyTranslations();
     loadConfig();
   } catch (e) {
-    toast('Failed to load status: ' + e.message, 'error');
+    toast(t('err_load_status') + e.message, 'error');
   }
 }
 
@@ -203,7 +203,7 @@ async function loadConfig() {
     state.config = data || {};
     populateConfig(state.config);
   } catch (e) {
-    toast('Failed to load configuration: ' + e.message, 'error');
+    toast(t('err_load_config') + e.message, 'error');
   }
 }
 
@@ -229,12 +229,18 @@ $('config-form')?.addEventListener('submit', async (e) => {
   try {
     const res = await api('/api/config', { method: 'POST', body: JSON.stringify(payload) });
     if (!res.ok) throw new Error(res.error || 'save failed');
-    toast('Configuration saved - restart required', 'success');
+    toast(t('config_saved'), 'success');
   } catch (err) {
-    toast('Failed to save configuration: ' + err.message, 'error');
+    toast(t('err_save_config') + err.message, 'error');
   }
 });
 
+function fmtLastSeenFull(ts) {
+  if (!ts) return '—';
+  const then = new Date(ts);
+  if (isNaN(then)) return ts;
+  return then.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'medium' });
+}
 let activeDeviceCat = 'all';
 
 function deviceCategory(s) {
@@ -291,8 +297,8 @@ function renderSensors() {
       <td><span class="mono">${eep}</span>${eepName ? '<div style="color:var(--text-muted);font-size:11px">' + eepName + '</div>' : ''}</td>
       <td><span class="cat-badge ${catCls}">${catTxt}</span>${badges.join('')}</td>
       <td class="mono">${rssiHtml}</td>
-      <td class="mono">${escapeHtml(fmtLastSeen(s.last_seen))}</td>
-      <td class="mono latest-val"><a href="#" data-graph="${escapeHtml(s.name)}" title="Show history graph">${escapeHtml(fmtLatest(s))}</a></td>
+      <td class="mono" data-tip="${escapeHtml(fmtLastSeenFull(s.last_seen))}">${escapeHtml(fmtLastSeen(s.last_seen))}</td>
+      <td class="mono latest-val">${fmtLatest(s)}</td>
       <td><div class="row-actions">
         ${isActor ? '<button class="icon-btn teachin-btn" title="Send teach-in telegram to this actor" data-teachin="${escapeHtml(s.name)}">⤓</button>' : ''}
         <button class="icon-btn" title="${t('edit_device')}" data-edit="${escapeHtml(s.name)}">✎</button>
@@ -363,7 +369,7 @@ $('edit-ok')?.addEventListener('click', async () => {
   const eep = $('e-eep').value.trim();
   const addrVal = $('e-address').value.trim();
   const address = addrVal ? parseAddress(addrVal) : null;
-  if (addrVal && address === null) return toast('Please enter a valid address (e.g. 0x003DD63B)', 'error');
+  if (addrVal && address === null) return toast(t('err_bad_address'), 'error');
   try {
     const body = { name: name, eep: eep };
     if (address !== null) body.address = address;
@@ -372,21 +378,21 @@ $('edit-ok')?.addEventListener('click', async () => {
       body: JSON.stringify(body)
     });
     if (!res.ok) throw new Error(res.error || 'update failed');
-    toast('Device updated', 'success');
+    toast(t('device_updated'), 'success');
     $('edit-overlay').hidden = true;
     editingDevice = null;
     await loadStatus();
   } catch (err) {
-    toast('Failed to update device: ' + err.message, 'error');
+    toast(t('err_update_device') + err.message, 'error');
   }
 });
 
 async function sendTeachIn(name) {
   try {
     const res = await api('/api/teachin', { method: 'POST', body: JSON.stringify({ name: name }) });
-    toast(res.message || 'Teach-in sent', res.ok ? 'success' : 'error');
+    toast(res.message || t('teachin_sent'), res.ok ? 'success' : 'error');
   } catch (err) {
-    toast('Failed to send teach-in: ' + err.message, 'error');
+    toast(t('err_send_teachin') + err.message, 'error');
   }
 }
 
@@ -407,13 +413,15 @@ async function setLearn(on) {
     await api('/api/learn', { method: 'POST', body: JSON.stringify({ enabled: on }) });
     state.learn = on;
     renderLearn();
-    toast(on ? 'Teach-in enabled — press the button on your sensor' : 'Teach-in disabled', 'success');
+    toast(on ? t('teachin_enabled') : t('teachin_disabled'), 'success');
   } catch (e) {
-    toast('Failed to ' + (on ? 'enable' : 'disable') + ' teach-in: ' + e.message, 'error');
+    toast(t('err_teachin') + e.message, 'error');
   }
 }
 
 /* ---------------- add sensor ---------------- */
+let eepFilter = '';
+
 function populateEepSelect(selectId, mode, selected) {
   const sel = $(selectId);
   if (!sel) return;
@@ -427,12 +435,20 @@ function populateEepSelect(selectId, mode, selected) {
     if (mode === 'bidirectional') return p.category === 'bidirectional';
     return true;
   };
-  const opts = (state.eep || []).filter(catFilter);
+  const q = eepFilter.toLowerCase();
+  const opts = (state.eep || []).filter((p) =>
+    catFilter(p) && (!q ||
+      p.eep.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)));
   sel.innerHTML = '<option value="">' + t('select_eep') + '</option>' +
     opts.map((p) => '<option value="' + escapeHtml(p.eep) + '"' +
       ((p.eep === selected) ? ' selected' : '') + '>' +
       escapeHtml(p.eep) + ' — ' + escapeHtml(p.name) + '</option>').join('');
 }
+// EEP search-as-you-type filter
+$('f-eep-search')?.addEventListener('input', (e) => {
+  eepFilter = e.target.value;
+  populateEepSelect('f-eep', addMode);
+});
 
 function parseAddress(val) {
   let s = String(val || '').trim();
@@ -483,8 +499,8 @@ $('add-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = $('f-name').value.trim();
   const eep = $('f-eep').value;
-  if (!name) return toast('Please enter a name', 'error');
-  if (!eep) return toast('Please select an EEP from the list', 'error');
+  if (!name) return toast(t('err_no_name'), 'error');
+  if (!eep) return toast(t('err_no_eep'), 'error');
 
   const mode = addMode;
   const isActor = mode === 'actor';
@@ -492,18 +508,18 @@ $('add-form')?.addEventListener('submit', async (e) => {
   let address, sender, cat;
   if (mode === 'sensor') {
     address = parseAddress($('f-address').value);
-    if (address === null) return toast('Please enter a valid address (e.g. 0x003DD63B)', 'error');
+    if (address === null) return toast(t('err_bad_address'), 'error');
     cat = 'sensor';
   } else if (mode === 'actor') {
     address = 0xFFFFFFFF;
     sender = parseInt($('f-sender').value, 0);
-    if (isNaN(sender)) return toast('Please select a sender ID', 'error');
+    if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
     cat = 'actor';
   } else { // bidirectional
     address = parseAddress($('f-address').value);
-    if (address === null) return toast('Please enter a valid address (e.g. 0x003DD63B)', 'error');
+    if (address === null) return toast(t('err_bad_address'), 'error');
     sender = parseInt($('f-sender').value, 0);
-    if (isNaN(sender)) return toast('Please select a sender ID', 'error');
+    if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
     cat = 'bidirectional';
   }
 
@@ -517,9 +533,41 @@ $('add-form')?.addEventListener('submit', async (e) => {
     setAddMode(addMode);
     await loadStatus();
   } catch (err) {
-    toast('Failed to add device: ' + err.message, 'error');
+    toast(t('err_add_device') + err.message, 'error');
   }
 });
+
+/* ---------------- themed tooltip ---------------- */
+(function () {
+  let tipEl = null;
+  function showTip(text, x, y) {
+    if (!tipEl) {
+      tipEl = document.createElement('div');
+      tipEl.className = 'ui-tooltip';
+      document.body.appendChild(tipEl);
+    }
+    tipEl.textContent = text;
+    tipEl.style.display = 'block';
+    const rect = tipEl.getBoundingClientRect();
+    let left = x + 12;
+    if (left + rect.width > window.innerWidth - 8) left = x - rect.width - 12;
+    let top = y + 14;
+    if (top + rect.height > window.innerHeight - 8) top = y - rect.height - 10;
+    tipEl.style.left = left + 'px';
+    tipEl.style.top = top + 'px';
+  }
+  function hideTip() { if (tipEl) tipEl.style.display = 'none'; }
+  document.addEventListener('mouseover', (e) => {
+    const t = (e.target && e.target.closest) ? e.target.closest('[data-tip]') : null;
+    if (t && t.getAttribute('data-tip') && t.getAttribute('data-tip') !== '—') {
+      const r = t.getBoundingClientRect();
+      showTip(t.getAttribute('data-tip'), r.left, r.bottom);
+    }
+  });
+  document.addEventListener('mouseout', (e) => {
+    if (e.target && e.target.closest && e.target.closest('[data-tip]')) hideTip();
+  });
+})();
 
 /* ---------------- remove sensor ---------------- */
 let pendingRemove = null;
@@ -540,10 +588,10 @@ $('modal-ok')?.addEventListener('click', async () => {
   if (!name) return;
   try {
     await api('/api/sensors/' + encodeURIComponent(name), { method: 'DELETE' });
-    toast('Sensor "' + name + '" removed', 'success');
+    toast(t('device_removed') + ' "' + name + '"', 'success');
     await loadStatus();
   } catch (err) {
-    toast('Failed to remove sensor: ' + err.message, 'error');
+    toast(t('err_remove_device') + err.message, 'error');
   }
 });
 
@@ -572,12 +620,24 @@ const I18N = {
     st_online: 'Online', st_offline: 'Offline', st_never: 'Never seen',
     actor: 'Actor', sensor: 'Sensor', bidirectional: 'Bidirectional',
     no_actors: 'No actors configured.', no_sensors: 'No sensors configured.', no_devices: 'No devices configured yet.',
+    err_load_status: 'Failed to load status: ', err_load_config: 'Failed to load configuration: ',
+    config_saved: 'Configuration saved - restart required', err_save_config: 'Failed to save configuration: ',
+    err_bad_address: 'Please enter a valid address (e.g. 0x003DD63B)',
+    device_updated: 'Device updated', err_update_device: 'Failed to update device: ',
+    teachin_sent: 'Teach-in sent', err_send_teachin: 'Failed to send teach-in: ',
+    teachin_enabled: 'Teach-in enabled - press the button on your device', teachin_disabled: 'Teach-in disabled',
+    err_teachin: 'Failed to change teach-in: ',
+    err_no_name: 'Please enter a name', err_no_eep: 'Please select an EEP from the list',
+    err_no_sender: 'Please select a sender ID',
+    sensor_added: 'Sensor added', actor_added: 'Actor added', bidir_added: 'Bidirectional added',
+    err_add_device: 'Failed to add device: ', device_removed: 'Device removed',
+    err_remove_device: 'Failed to remove device: ',
   },
   de: {
     subtitle: 'Web-Konfigurator', gateway: 'Gateway', mqtt: 'MQTT',
-    teachin_title: 'Teach-In', teachin_desc: 'Teach-In starten, dann das gewünschte Gerät auslösen: dessen Teach-In-Taste drücken (oder einfach einen normalen Schalter verwenden, z.B. einen F6-Rocker - der benötigt keine Teach-In-Taste). Das Gerät wird automatisch hinzugefügt. Geräte mit 4BS- oder UTE-Lerntelegramm werden mit ihrer EEP erkannt; bidirektionale Geräte werden bestätigt.',
-    teachin_hint: 'Wenn die EEP nicht Teil des Telegramms ist (z.B. RPS/F6-Schalter), wird eine Standard-EEP für den Gerätetyp zugewiesen - Sie können sie mit der Bearbeiten-Schaltfläche verfeinern. Der Teach-In-Modus schaltet sich nach einem empfangenen Gerät automatisch aus.',
-    start_teachin: 'Teach-In starten', stop_teachin: 'Teach-In stoppen',
+    teachin_title: 'Anlernen', teachin_desc: 'Anlernen starten, dann das gewünschte Gerät auslösen: dessen Anlern-Taste drücken (oder einfach einen normalen Schalter verwenden, z.B. einen F6-Rocker - der benötigt keine Anlern-Taste). Das Gerät wird automatisch hinzugefügt. Geräte mit 4BS- oder UTE-Lerntelegramm werden mit ihrer EEP erkannt; bidirektionale Geräte werden bestätigt.',
+    teachin_hint: 'Wenn die EEP nicht Teil des Telegramms ist (z.B. RPS/F6-Schalter), wird eine Standard-EEP für den Gerätetyp zugewiesen - Sie können sie mit der Bearbeiten-Schaltfläche verfeinern. Der Anlern-Modus schaltet sich nach einem empfangenen Gerät automatisch aus.',
+    start_teachin: 'Anlernen starten', stop_teachin: 'Anlernen stoppen',
     add_device: 'Gerät hinzufügen', add_sub: 'Manuell einen Sensor (Sender), einen Aktor (Empfänger) oder ein bidirektionales Gerät hinzufügen',
     add_sensor: 'Sensor hinzufügen (Sender)', add_actor: 'Aktor hinzufügen (Empfänger)', add_bidir: 'Bidirektional hinzufügen',
     name: 'Name', address: 'Adresse', sender_id: 'Sender-ID', eep_label: 'EEP (Geräteprofil)',
@@ -596,6 +656,18 @@ const I18N = {
     st_online: 'Online', st_offline: 'Offline', st_never: 'Nie gesehen',
     actor: 'Aktor', sensor: 'Sensor', bidirectional: 'Bidirektional',
     no_actors: 'Keine Aktoren konfiguriert.', no_sensors: 'Keine Sensoren konfiguriert.', no_devices: 'Noch keine Geräte konfiguriert.',
+    err_load_status: 'Status konnte nicht geladen werden: ', err_load_config: 'Konfiguration konnte nicht geladen werden: ',
+    config_saved: 'Konfiguration gespeichert - Neustart erforderlich', err_save_config: 'Konfiguration konnte nicht gespeichert werden: ',
+    err_bad_address: 'Bitte eine gültige Adresse eingeben (z.B. 0x003DD63B)',
+    device_updated: 'Gerät aktualisiert', err_update_device: 'Gerät konnte nicht aktualisiert werden: ',
+    teachin_sent: 'Anlernen gesendet', err_send_teachin: 'Anlernen konnte nicht gesendet werden: ',
+    teachin_enabled: 'Anlernen aktiviert - Taste am Gerät drücken', teachin_disabled: 'Anlernen deaktiviert',
+    err_teachin: 'Anlernen konnte nicht geändert werden: ',
+    err_no_name: 'Bitte einen Namen eingeben', err_no_eep: 'Bitte eine EEP aus der Liste wählen',
+    err_no_sender: 'Bitte eine Sender-ID wählen',
+    sensor_added: 'Sensor hinzugefügt', actor_added: 'Aktor hinzugefügt', bidir_added: 'Bidirektionales Gerät hinzugefügt',
+    err_add_device: 'Gerät konnte nicht hinzugefügt werden: ', device_removed: 'Gerät entfernt',
+    err_remove_device: 'Gerät konnte nicht entfernt werden: ',
   },
   fr: {
     subtitle: 'Configurateur Web', gateway: 'Passerelle', mqtt: 'MQTT',
@@ -620,6 +692,18 @@ const I18N = {
     st_online: 'En ligne', st_offline: 'Hors ligne', st_never: 'Jamais vu',
     actor: 'Actionneur', sensor: 'Capteur', bidirectional: 'Bidirectionnel',
     no_actors: 'Aucun actionneur configuré.', no_sensors: 'Aucun capteur configuré.', no_devices: 'Aucun appareil configuré.',
+    err_load_status: 'Échec du chargement de l\'état : ', err_load_config: 'Échec du chargement de la configuration : ',
+    config_saved: 'Configuration enregistrée - redémarrage requis', err_save_config: 'Échec de l\'enregistrement : ',
+    err_bad_address: 'Veuillez saisir une adresse valide (ex. 0x003DD63B)',
+    device_updated: 'Appareil mis à jour', err_update_device: 'Échec de la mise à jour : ',
+    teachin_sent: 'Enseignement envoyé', err_send_teachin: 'Échec de l\'envoi : ',
+    teachin_enabled: 'Enseignement activé - appuyez sur le bouton', teachin_disabled: 'Enseignement désactivé',
+    err_teachin: 'Échec du changement d\'enseignement : ',
+    err_no_name: 'Veuillez saisir un nom', err_no_eep: 'Veuillez choisir un EEP dans la liste',
+    err_no_sender: 'Veuillez choisir un ID émetteur',
+    sensor_added: 'Capteur ajouté', actor_added: 'Actionneur ajouté', bidir_added: 'Appareil bidirectionnel ajouté',
+    err_add_device: 'Échec de l\'ajout : ', device_removed: 'Appareil supprimé',
+    err_remove_device: 'Échec de la suppression : ',
   },
   it: {
     subtitle: 'Configuratore Web', gateway: 'Gateway', mqtt: 'MQTT',
@@ -644,6 +728,18 @@ const I18N = {
     st_online: 'Online', st_offline: 'Offline', st_never: 'Mai visto',
     actor: 'Attuatore', sensor: 'Sensore', bidirectional: 'Bidirezionale',
     no_actors: 'Nessun attuatore configurato.', no_sensors: 'Nessun sensore configurato.', no_devices: 'Nessun dispositivo configurato.',
+    err_load_status: 'Impossibile caricare lo stato: ', err_load_config: 'Impossibile caricare la configurazione: ',
+    config_saved: 'Configurazione salvata - riavvio richiesto', err_save_config: 'Impossibile salvare la configurazione: ',
+    err_bad_address: 'Inserisci un indirizzo valido (es. 0x003DD63B)',
+    device_updated: 'Dispositivo aggiornato', err_update_device: 'Impossibile aggiornare il dispositivo: ',
+    teachin_sent: 'Teach-in inviato', err_send_teachin: 'Impossibile inviare teach-in: ',
+    teachin_enabled: 'Teach-in attivato - premi il pulsante', teachin_disabled: 'Teach-in disattivato',
+    err_teachin: 'Impossibile modificare teach-in: ',
+    err_no_name: 'Inserisci un nome', err_no_eep: 'Seleziona una EEP dalla lista',
+    err_no_sender: 'Seleziona un ID mittente',
+    sensor_added: 'Sensore aggiunto', actor_added: 'Attuatore aggiunto', bidir_added: 'Dispositivo bidirezionale aggiunto',
+    err_add_device: 'Impossibile aggiungere il dispositivo: ', device_removed: 'Dispositivo rimosso',
+    err_remove_device: 'Impossibile rimuovere il dispositivo: ',
   },
 };
 
