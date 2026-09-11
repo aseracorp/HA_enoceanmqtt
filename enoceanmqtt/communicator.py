@@ -185,6 +185,9 @@ class Communicator:
             sensor['sender'] = stored['sender']
         if stored.get('ignore'):
             sensor['ignore'] = stored['ignore']
+        for key in ('category', 'bidirectional', 'smartack'):
+            if stored.get(key) is not None:
+                sensor[key] = stored[key]
         return sensor
 
     def _load_dynamic_sensors(self, target_name=None):
@@ -243,6 +246,10 @@ class Communicator:
                     stored['sender'] = int(str(sender), 0)
                 except (TypeError, ValueError):
                     return {'ok': False, 'error': 'Invalid sender address'}
+            # optional per-sensor overrides (e.g. mark an EEP as bidirectional)
+            for key in ('category', 'bidirectional', 'smartack'):
+                if payload.get(key) is not None:
+                    stored[key] = payload[key]
             self._store.add(stored)
             new_sensor = self._load_dynamic_sensors(name)
             self._on_sensors_changed(new_sensor)
@@ -289,6 +296,9 @@ class Communicator:
         eep = None
         eep_name = None
         rorg_name = None
+        category = 'sensor'
+        bidirectional = False
+        smartack = False
         profile = None
         if rorg is not None:
             eep = f'{rorg:02X}-{func:02X}-{type_:02X}' if func is not None and type_ is not None \
@@ -297,6 +307,14 @@ class Communicator:
             if profile:
                 eep_name = profile['name']
                 rorg_name = profile['rorg_name']
+                category = profile.get('category', 'sensor')
+                bidirectional = bool(profile.get('bidirectional'))
+                smartack = bool(profile.get('smartack'))
+
+        # explicit per-sensor override from the configuration file
+        category = sensor.get('category', category)
+        bidirectional = sensor.get('bidirectional', bidirectional)
+        smartack = sensor.get('smartack', smartack)
 
         prefix = self.conf.get('mqtt_prefix', 'enocean/')
         display_name = sensor['name']
@@ -316,11 +334,17 @@ class Communicator:
             'last_seen': last_seen.isoformat() if last_seen else None,
             'source': 'dynamic' if sensor.get('source') == 'dynamic' else 'config',
             'model': sensor.get('model'),
+            'category': category,
+            'bidirectional': bidirectional,
+            'smartack': smartack,
         }
 
     def eep_catalog(self):
         """return the list of known EnOcean equipment profiles"""
-        return [{'eep': p['eep'], 'name': p['name'], 'rorg_name': p['rorg_name']}
+        return [{'eep': p['eep'], 'name': p['name'], 'rorg_name': p['rorg_name'],
+                 'category': p.get('category', 'sensor'),
+                 'bidirectional': bool(p.get('bidirectional')),
+                 'smartack': bool(p.get('smartack'))}
                 for p in self._eep_registry.profiles]
 
     @property
@@ -753,6 +777,122 @@ class Communicator:
         self._send_packet(sensor, destination, None, True,
                           in_packet.data if in_packet.learn else None)
 
+    # ------------------------------------------------------------------------
+    # Bi-directional / smartACK support
+    # ------------------------------------------------------------------------
+    def _needs_bidirectional_reply(self, packet, sensor):
+        '''decide whether an incoming telegram expects a reply from us'''
+        # explicit per-sensor configuration wins
+        if str(sensor.get('answer')) in ("True", "true", "1"):
+            return True
+        # bidirectional devices reply to every telegram (A5-20 family, D2-01, ...)
+        if sensor.get('bidirectional') or sensor.get('smartack'):
+            return True
+        # UTE teach-in telegrams always get an acknowledge response
+        return packet.rorg == RORG.UTE
+
+    def _build_smartack_reply(self, in_packet, sensor):
+        '''construct a fast smartACK (VLD) acknowledge packet.
+
+        D2-11-01 smartACK devices expect an answer within a few hundred
+        milliseconds, otherwise they retransmit. We build a VLD packet with
+        the same EEP back to the device, copying the CMD/value so the device
+        sees an acknowledge. Falls back to None if the EEP is not usable.
+        '''
+        rorg = sensor.get('rorg')
+        func = sensor.get('func')
+        type_ = sensor.get('type')
+        if rorg != RORG.VLD:
+            return None
+
+        # sender of the reply is our own base id
+        if 'sender' in sensor:
+            sender = [(sensor['sender'] >> i * 8) & 0xff for i in reversed(range(4))]
+        else:
+            sender = self.enocean_sender
+
+        try:
+            packet = RadioPacket.create(
+                sensor['rorg'], sensor['func'], sensor['type'],
+                direction=2,  # outbound command
+                sender=sender,
+                destination=in_packet.sender,
+                learn=False)
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            # AttributeError covers profiles unknown to the enocean library
+            logging.warning("Cannot build smartACK reply for %s: %s",
+                            sensor['name'], exc)
+            return None
+
+        # copy the received payload bytes so the device sees a valid echo /
+        # acknowledged state (the EEP values are echoed back unchanged)
+        # data length is RORG + payload + sender(4) + status(1)
+        n_payload = len(packet.data) - 1 - 4 - 1
+        packet.data[1:1 + n_payload] = in_packet.data[1:1 + n_payload]
+        packet.data[-1] = packet.status
+        return packet
+
+    def _build_raw_vld_reply(self, in_packet, sensor):
+        '''fallback: build the smartACK reply as a raw VLD packet when the
+        EEP is not known to the enocean library (e.g. D2-11-01).
+
+        The payload is copied from the received telegram (device state echo),
+        the destination is the device's sender address, and our base id is
+        used as the new sender - exactly what smartACK devices expect.
+        '''
+        if in_packet.rorg != RORG.VLD:
+            return None
+        if 'sender' in sensor:
+            sender = [(sensor['sender'] >> i * 8) & 0xff for i in reversed(range(4))]
+        else:
+            sender = self.enocean_sender
+
+        # data layout: RORG + payload (copied) + sender(4) + status(1)
+        src = in_packet.data
+        if len(src) < 6:
+            return None
+        payload = src[1:-5]          # payload bytes (before sender+status)
+        data = [RORG.VLD] + list(payload) + list(sender) + [0]
+        optional = [0x03] + list(in_packet.sender) + [0xFF, 0x00]
+        try:
+            packet = RadioPacket(PACKET.RADIO_ERP1, data=data, optional=optional)
+        except (TypeError, ValueError) as exc:
+            logging.warning("Cannot build raw VLD reply for %s: %s",
+                            sensor['name'], exc)
+            return None
+        packet.rorg = RORG.VLD
+        packet.sender = sender
+        packet.destination = list(in_packet.sender)
+        packet.learn = False
+        return packet
+
+    def _send_bidirectional_reply(self, in_packet, sensor):
+        '''send a reply to a bidirectional / smartACK telegram.
+
+        Returns True if a reply was sent, False if the device does not expect
+        one or the reply could not be constructed.'''
+        if not (sensor.get('smartack') or sensor.get('bidirectional') or
+                str(sensor.get('answer')) in ("True", "true", "1")):
+            return False
+        if sensor.get('smartack'):
+            # fast path: construct and send immediately
+            reply = self._build_smartack_reply(in_packet, sensor)
+            if reply is None:
+                reply = self._build_raw_vld_reply(in_packet, sensor)
+            if reply is not None:
+                try:
+                    self.enocean.send(reply)
+                    logging.info("sent smartACK reply to %s",
+                                 enocean.utils.to_hex_string(in_packet.sender))
+                    return True
+                except Exception as exc:   # pylint: disable=broad-except
+                    logging.error("Failed to send smartACK reply: %s", exc)
+                    return False
+            # fall through to the generic reply if construction failed
+        # generic bi-directional / answer reply (4BS etc.)
+        self._reply_packet(in_packet, sensor)
+        return True
+
     def _send_packet(self, sensor, destination, command=None,
                      negate_direction=False, learn_data=None):
         '''triggers sending of an enocean packet'''
@@ -903,12 +1043,20 @@ class Communicator:
         elif found_sensor['rorg'] == RORG.RPS:
             packet.learn = False
 
+        # smartACK devices (e.g. D2-11-01) expect the reply within a tight
+        # window (~a few hundred ms), so answer BEFORE the (slower) MQTT
+        # publish cycle. Other bidirectional devices get the reply after the
+        # packet has been published.
+        needs_reply = self._needs_bidirectional_reply(packet, found_sensor)
+        if needs_reply and found_sensor.get('smartack'):
+            self._send_bidirectional_reply(packet, found_sensor)
+
         # interpret packet, read properties and publish to MQTT
         self._read_packet(packet, found_sensor)
 
-        # check for neccessary reply
-        if str(found_sensor.get('answer')) in ("True", "true", "1"):
-            self._reply_packet(packet, found_sensor)
+        # check for necessary reply (non-smartACK path)
+        if needs_reply and not found_sensor.get('smartack'):
+            self._send_bidirectional_reply(packet, found_sensor)
 
 
     #=============================================================================================

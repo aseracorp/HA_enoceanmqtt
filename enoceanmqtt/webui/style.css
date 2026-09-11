@@ -3,7 +3,7 @@
    Design tokens mirror Cosmos Cloud (azukaar/Cosmos-Server):
    - dark background #141414 / cards rgba(30,30,30,0.65) glass
    - light background #f4f5f7 / white cards
-   - accents: primary #ff64c8, secondary #c864ff
+   - accents (Asera brand): primary #B01419, secondary #690C0F
    - radius 8-12px, Public Sans typography
    The active theme is selected with data-theme on <html>; a tiny
    inline script picks it from localStorage or prefers-color-scheme.
@@ -27,9 +27,9 @@
   --text: #ffffff;
   --text-secondary: #bfbfbf;
   --text-muted: #8c8c8c;
-  --primary: #ff64c8;
-  --secondary: #c864ff;
-  --gradient: linear-gradient(135deg, #ff64c8, #c864ff);
+  --primary: #B01419;
+  --secondary: #690C0F;
+  --gradient: linear-gradient(135deg, #B01419, #690C0F);
   --success: #54d62c;
   --danger: #ff4d4f;
   --warning: #faad14;
@@ -55,9 +55,9 @@
   --text: #1c1c1e;
   --text-secondary: #55555a;
   --text-muted: #8e8e93;
-  --primary: #e0489e;
-  --secondary: #9b4dca;
-  --gradient: linear-gradient(135deg, #e0489e, #9b4dca);
+  --primary: #B01419;
+  --secondary: #690C0F;
+  --gradient: linear-gradient(135deg, #B01419, #690C0F);
   --success: #2e9e2e;
   --danger: #e03131;
   --warning: #b8870b;
@@ -118,7 +118,7 @@ html, body {
 .pill.ok .dot { background: var(--success); box-shadow: 0 0 8px rgba(84,214,44,0.6); }
 .pill.bad { color: var(--text); border-color: rgba(255,77,79,0.4); }
 .pill.bad .dot { background: var(--danger); box-shadow: 0 0 8px rgba(255,77,79,0.6); }
-.pill-accent { background: rgba(255,100,200,0.08); border-color: rgba(255,100,200,0.3); color: var(--text); }
+.pill-accent { background: rgba(176,20,25,0.10); border-color: rgba(176,20,25,0.35); color: var(--text); }
 /* theme toggle */
 .theme-toggle {
   appearance: none; border: 1px solid var(--border-strong); cursor: pointer;
@@ -157,7 +157,7 @@ html, body {
 /* ---------------- teach-in card ---------------- */
 .teachin-card {
   display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
-  background: linear-gradient(135deg, rgba(255,100,200,0.07), rgba(200,100,255,0.07)), var(--bg-paper);
+  background: linear-gradient(135deg, rgba(176,20,25,0.07), rgba(105,12,15,0.07)), var(--bg-paper);
 }
 .teachin-info { flex: 1; min-width: 260px; }
 .teachin-info h2 { margin: 0 0 6px; font-size: 16px; }
@@ -238,7 +238,7 @@ html, body {
   padding: 8px 12px; cursor: pointer;
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
 }
-.eep-option:hover { background: rgba(255,100,200,0.12); }
+.eep-option:hover { background: rgba(176,20,25,0.12); }
 .eep-option .eep-code { font-family: 'JetBrains Mono', monospace; color: var(--secondary); font-size: 12px; white-space: nowrap; }
 .eep-option .eep-name { color: var(--text-secondary); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eep-empty { padding: 10px 12px; color: var(--text-muted); font-size: 12.5px; }
@@ -267,6 +267,34 @@ html, body {
 .status-badge.online { background: rgba(84,214,44,0.12); color: var(--success); }
 .status-badge.offline { background: var(--bg-surface); color: var(--text-muted); }
 .status-badge.never { background: var(--bg-surface); color: var(--text-muted); }
+
+/* ---------------- device tabs ---------------- */
+.device-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.device-tab {
+  appearance: none; border: 1px solid var(--border); cursor: pointer;
+  background: var(--bg-surface); color: var(--text-secondary);
+  padding: 6px 14px; border-radius: 20px; font-size: 13px; transition: all 0.15s ease;
+}
+.device-tab:hover { color: var(--text); border-color: var(--border-strong); }
+.device-tab.active {
+  background: var(--gradient); border-color: transparent; color: #fff;
+}
+
+/* ---------------- category badges ---------------- */
+.cat-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px;
+  border: 1px solid var(--border-strong); background: var(--bg-surface); color: var(--text-secondary);
+}
+.cat-badge.actor { color: var(--primary); border-color: rgba(176,20,25,0.4); background: rgba(176,20,25,0.08); }
+.cat-badge.sensor { color: var(--success); border-color: rgba(84,214,44,0.4); background: rgba(84,214,44,0.08); }
+.badge {
+  display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px;
+  margin-left: 4px; border: 1px solid var(--border-strong); background: var(--bg-surface); color: var(--text-secondary);
+  vertical-align: middle;
+}
+.badge.bidir { color: var(--secondary); border-color: rgba(105,12,15,0.4); background: rgba(105,12,15,0.10); }
+.badge.smartack { color: var(--warning); border-color: rgba(250,173,20,0.4); background: rgba(250,173,20,0.10); }
+
 
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .icon-btn {
