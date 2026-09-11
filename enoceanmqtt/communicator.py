@@ -460,13 +460,21 @@ class Communicator:
         else:
             # Devices like RPS/F6 rocker switches and 1BS contacts do not
             # carry an EEP in their telegram - they are identified by their
-            # ID alone. Assign a sensible default profile for the RORG so the
-            # device is immediately usable after teach-in (no manual edit
-            # required); it can still be refined with the edit button.
-            default = self._eep_registry.default_for_rorg(rorg)
-            if default:
-                stored['func'] = default['func']
-                stored['type'] = default['type']
+            # ID alone. For RPS/F6 we try to recognize the exact EEP from the
+            # telegram's data byte (smoke, leakage, key card, rocker, window
+            # handle, push button); otherwise a sensible default profile for
+            # the RORG is used. Either way the device is immediately usable
+            # after teach-in (no manual edit required) and can be refined
+            # with the edit button.
+            recognized = self._recognize_rps_eep(packet) if rorg == RORG.RPS else None
+            if recognized:
+                stored['func'] = recognized[0]
+                stored['type'] = recognized[1]
+            else:
+                default = self._eep_registry.default_for_rorg(rorg)
+                if default:
+                    stored['func'] = default['func']
+                    stored['type'] = default['type']
         self._store.add(stored)
         new_sensor = self._load_dynamic_sensors(name)
         if new_sensor is not None:
@@ -538,6 +546,44 @@ class Communicator:
                          enocean.utils.to_hex_string(destination), RORG.BS4, func, type_)
         except Exception as exc:   # pylint: disable=broad-except
             logging.error("Failed to send 4BS teach-in response: %s", exc)
+
+    @staticmethod
+    def _recognize_rps_eep(packet):
+        """recognize the F6/RPS EEP from the telegram's data byte (D0).
+
+        RPS telegrams do not carry an EEP, but the single data byte (data[1])
+        encodes button/switch fields whose bit layout differs per EEP (from
+        the EnOcean EEP.xml field offsets). Values that are unique to a
+        specific EEP (smoke, leakage, key card) are matched exactly; the
+        rocker switch / window handle / push button are told apart by which
+        bit groups are used. Returns (func, type) or None.
+        """
+        if packet.rorg != RORG.RPS or len(packet.data) < 2:
+            return None
+        d0 = packet.data[1]
+
+        # exact value matches (unique to one EEP)
+        if d0 == 0x70:
+            return (0x04, 0x01)   # Key Card Activated Switch
+        if d0 == 0x11:
+            return (0x05, 0x01)   # Liquid Leakage Sensor
+        if d0 in (0x10, 0x30):
+            return (0x05, 0x02)   # Smoke Detector
+
+        # window handle uses only bits 2-3 (values 1..3)
+        if d0 in (0x04, 0x0C):
+            return (0x10, 0x00)   # Window Handle
+
+        # 2-rocker switch: R2 (bits 4-6) or SA (bit 7) set, or R1 (bits 0-2)
+        # set without bit 2 (bit 2 belongs to the window handle)
+        r2 = (d0 >> 4) & 0x07
+        sa = (d0 >> 7) & 0x01
+        r1 = (d0 >> 0) & 0x07
+        if r2 != 0 or sa != 0 or (r1 != 0 and (d0 & 0x04) == 0):
+            return (0x02, 0x01)   # Rocker Switch, 2 Rocker
+
+        # remaining: push button (0x00 released, 0x08 pressed)
+        return (0x01, 0x01)       # Push Button
 
     @staticmethod
     def _is_1bs_learn_telegram(packet):

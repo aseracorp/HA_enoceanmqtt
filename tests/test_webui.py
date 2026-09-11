@@ -324,12 +324,11 @@ def test_teachin_captures_non_ute_devices():
         assert stored2[0]['rorg'] == 0xA5 and stored2[0]['func'] == 0x08 and stored2[0]['type'] == 0x01, \
             '4BS learn telegram should extract A5-08-01 exactly (not a guessed default)'
 
-        # --- 3. RPS F6 switch (no teach-in button): teachable via telegram ---
-        # RPS/F6 telegrams carry no EEP, so a sensible default profile for the
-        # RORG is assigned (F6-01-01 Push Button) - immediately usable, no
-        # manual edit required (refinable via the edit button).
+        # --- 3. RPS F6 switch: teachable via telegram, EEP recognized from data ---
+        # RPS/F6 telegrams carry no EEP, but the EEP is recognized from the
+        # data byte. A push button press (D0=0x08) is recognized as F6-01-01.
         p3 = RadioPacket(PACKET.RADIO_ERP1,
-                         data=[0xf6, 0x10, 0x00, 0x55, 0x66, 0x77, 0x88, 0x00],
+                         data=[0xf6, 0x08, 0x00, 0x55, 0x66, 0x77, 0x88, 0x00],
                          optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
         p3.parse()
         p3.received = datetime.datetime.utcnow()
@@ -338,7 +337,7 @@ def test_teachin_captures_non_ute_devices():
         stored3 = [s for s in com._store.all() if s['address'] == 0x55667788]
         assert len(stored3) == 1
         assert stored3[0]['rorg'] == 0xF6
-        assert stored3[0]['func'] == 0x01, 'F6 should be teachable with a default EEP (Push Button, no manual edit)'
+        assert stored3[0]['func'] == 0x01, 'F6 push button should be recognized as F6-01-01'
         assert stored3[0]['type'] == 0x01
 
 
@@ -469,6 +468,55 @@ def test_device_db_corruption_recovery():
         # a .corrupt backup was made
         assert any('corrupt' in f for f in os.listdir(tmp))
 
+
+
+def test_f6_eep_recognition():
+    """RPS/F6 teach-in recognizes the EEP from the telegram data byte"""
+    import datetime
+    from enocean.protocol.packet import RadioPacket
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        def teachin(d0, addr):
+            p = RadioPacket(PACKET.RADIO_ERP1,
+                            data=[0xf6, d0, (addr >> 24) & 0xff, (addr >> 16) & 0xff,
+                                  (addr >> 8) & 0xff, addr & 0xff, 0x00],
+                            optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
+            p.parse()
+            p.received = datetime.datetime.utcnow()
+            com.set_learn_mode(True)
+            com._process_radio_packet(p)
+            for s in com._store.all():
+                if s['address'] == addr:
+                    return (s['rorg'], s.get('func'), s.get('type'))
+            return None
+
+        cases = [
+            (0x00, 0xAA000001, (0xF6, 0x01, 0x01), 'push released'),
+            (0x08, 0xAA000002, (0xF6, 0x01, 0x01), 'push pressed'),
+            (0x01, 0xAA000003, (0xF6, 0x02, 0x01), 'rocker R1'),
+            (0x02, 0xAA000004, (0xF6, 0x02, 0x01), 'rocker R1 b'),
+            (0x10, 0xAA000005, (0xF6, 0x05, 0x02), 'smoke'),
+            (0x30, 0xAA000006, (0xF6, 0x05, 0x02), 'smoke b'),
+            (0x70, 0xAA000007, (0xF6, 0x04, 0x01), 'key card'),
+            (0x11, 0xAA000008, (0xF6, 0x05, 0x01), 'leakage'),
+            (0x04, 0xAA000009, (0xF6, 0x10, 0x00), 'window handle'),
+            (0x0C, 0xAA00000A, (0xF6, 0x10, 0x00), 'window handle b'),
+            (0x90, 0xAA00000B, (0xF6, 0x02, 0x01), 'rocker SA'),
+        ]
+        for d0, addr, expect, label in cases:
+            got = teachin(d0, addr)
+            assert got == expect, f'{label}: D0=0x{d0:02X} expected {expect} got {got}'
+
 if __name__ == '__main__':
     test_sensor_store()
     test_eep_registry()
@@ -481,5 +529,6 @@ if __name__ == '__main__':
     test_update_sensor()
     test_4bs_teachin_bidirectional_reply()
     test_device_db_corruption_recovery()
+    test_f6_eep_recognition()
     print('ALL TESTS PASSED')
 
