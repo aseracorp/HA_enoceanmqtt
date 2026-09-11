@@ -517,6 +517,40 @@ def test_f6_eep_recognition():
             got = teachin(d0, addr)
             assert got == expect, f'{label}: D0=0x{d0:02X} expected {expect} got {got}'
 
+
+
+def test_vld_data_telegram_not_taught_in():
+    """a VLD (0xD2) data telegram without teach-in must NOT be auto-captured.
+
+    VLD devices use UTE (0xD4) as their teach-in mechanism; a regular VLD
+    data telegram is not a teach-in and must not add a device."""
+    import datetime
+    from enocean.protocol.packet import RadioPacket
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        # the exact VLD telegram from the reported log (teach-in NOT pressed)
+        data = [0xd2, 0x5, 0xa, 0xaa, 0x0, 0x0, 0x23, 0x86, 0xd7, 0x0, 0x0,
+                0x3e, 0x90, 0x0, 0x5, 0x6, 0x60, 0x2, 0x2]
+        p = RadioPacket(PACKET.RADIO_ERP1, data=data,
+                        optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x40, 0x00])
+        p.parse()
+        p.received = datetime.datetime.utcnow()
+        com.set_learn_mode(True)
+        com._process_radio_packet(p)
+        assert len(com._store.all()) == 0, \
+            'a VLD data telegram without teach-in must not be captured'
+        assert com.learn_mode is True, 'learn mode should stay on (nothing captured)'
+
 if __name__ == '__main__':
     test_sensor_store()
     test_eep_registry()
@@ -530,5 +564,6 @@ if __name__ == '__main__':
     test_4bs_teachin_bidirectional_reply()
     test_device_db_corruption_recovery()
     test_f6_eep_recognition()
+    test_vld_data_telegram_not_taught_in()
     print('ALL TESTS PASSED')
 

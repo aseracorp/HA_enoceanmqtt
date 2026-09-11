@@ -1332,11 +1332,15 @@ class Communicator:
         #  - UTE (0xD4) is always a teach-in telegram.
         #  - 4BS (0xA5) / 1BS (0xD5) carry the learn bit (LRN) in DB0 bit 3;
         #    we only add them when it is set.
-        #  - RPS (0xF6) / VLD (0xD2) have no learn bit - the teach-in is the
-        #    (repeated) button/data telegram itself, so a device is captured
-        #    when it sends any telegram while learn mode is on.
-        #  - Anything else (e.g. a 4BS data telegram without the learn bit) is
-        #    NOT added - the teach-in button was not pressed.
+        #  - RPS (0xF6) has no learn bit - the teach-in is the (repeated)
+        #    button/data telegram itself, so a device is captured when it
+        #    sends any telegram while learn mode is on.
+        #  - VLD (0xD2) devices use UTE (0xD4) as their teach-in mechanism -
+        #    a regular VLD data telegram is NOT a teach-in and must NOT be
+        #    auto-captured (only UTE or a manual add registers them).
+        #  - Anything else (e.g. a 4BS/1BS data telegram without the learn
+        #    bit, a VLD data telegram) is NOT added - the teach-in button was
+        #    not pressed.
         replied_teachin = False
         if not found_sensor and self.learn_mode:
             if self._is_4bs_learn_telegram(packet):
@@ -1345,12 +1349,12 @@ class Communicator:
                 replied_teachin = True
             elif packet.rorg == RORG.BS1 and self._is_1bs_learn_telegram(packet):
                 self._handle_1bs_learn_telegram(packet)
-            elif packet.rorg in (RORG.RPS, RORG.VLD):
-                # RPS (F6 rockers) and VLD send data-only telegrams as their
-                # teach-in (no learn bit available) - capture on any telegram
+            elif packet.rorg == RORG.RPS:
+                # RPS (F6 rockers) send data-only telegrams as their teach-in
+                # (no learn bit available) - capture on any telegram
                 self._learn_unknown_device(packet)
-            # 4BS/1BS data telegrams WITHOUT the learn bit are intentionally
-            # not captured here.
+            # 4BS/1BS data telegrams without the learn bit, and VLD data
+            # telegrams, are intentionally NOT captured here.
             # teach-in is one-shot for this press - a regular telegram does not
             # carry a response flag, so keep learn mode on until the cycle ends
             # and let the device be tracked once it matches below.
