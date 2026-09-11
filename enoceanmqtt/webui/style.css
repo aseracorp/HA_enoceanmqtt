@@ -305,6 +305,14 @@ html, body {
 }
 .icon-btn:hover { background: rgba(255,77,79,0.12); color: var(--danger); border-color: rgba(255,77,79,0.3); }
 
+/* ---------------- config editor ---------------- */
+.config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.form-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.modal-wide { width: 640px; max-width: calc(100vw - 40px); }
+.graph-wrap { width: 100%; overflow: hidden; }
+.latest-val a { color: var(--primary); text-decoration: none; }
+.latest-val a:hover { text-decoration: underline; }
+
 /* ---------------- footer ---------------- */
 .footer {
   display: flex; justify-content: space-between; gap: 12px;

@@ -45,6 +45,11 @@ class Communicator:
         # UTE teach-in state (managed through the web interface / MQTT learn)
         self.learn_mode = False
         self._last_seen = {}
+        # latest decoded values per device address (for the web UI)
+        self._latest_value = {}
+        # rolling history of decoded values (for the value graph)
+        self._history = {}
+        self._history_max = int(self.conf.get('webui_history', 200))
 
         # EEP catalog + persistent store for web-added sensors
         self._eep_registry = get_registry()
@@ -259,7 +264,7 @@ class Communicator:
                 except (TypeError, ValueError):
                     return {'ok': False, 'error': 'Invalid sender address'}
             # optional per-sensor overrides (e.g. mark an EEP as bidirectional)
-            for key in ('category', 'bidirectional', 'smartack'):
+            for key in ('category', 'bidirectional', 'smartack', 'virtual'):
                 if payload.get(key) is not None:
                     stored[key] = payload[key]
             self._store.add(stored)
@@ -349,6 +354,56 @@ class Communicator:
         """hook called after a sensor is removed (overridden by overlays)"""
         logging.debug("Sensor removed: %s", sensor.get('name'))
 
+    def get_history(self, name):
+        """rolling value history for a device, for the web UI graph"""
+        # resolve the device name (with or without prefix) to an address
+        full = name
+        prefix = self.conf.get('mqtt_prefix', 'enocean/')
+        if not full.startswith(prefix):
+            full = prefix + name
+        sensor = next((s for s in self.sensors if s.get('name') == full), None)
+        if sensor is None:
+            return {'ok': False, 'error': 'Device not found'}
+        address = sensor.get('address')
+        hist = self._history.get(address, [])
+        return {'ok': True, 'name': name, 'history': hist[-self._history_max:]}
+
+    def save_config(self, payload):
+        """persist updated [CONFIG] settings back to the configuration file.
+
+        ``payload`` is a dict of key/value pairs (plain strings). The first
+        configuration file from ``self.conf['config']`` is rewritten; changes
+        take effect after a restart.
+        Returns {'ok': True} or {'ok': False, 'error': ...}.
+        """
+        try:
+            config_files = self.conf.get('config') or []
+            if not config_files:
+                return {'ok': False, 'error': 'No configuration file configured'}
+            conf_file = config_files[0]
+            if not os.path.isfile(conf_file):
+                return {'ok': False, 'error': 'Configuration file not found: %s' % conf_file}
+
+            from configparser import ConfigParser
+            parser = ConfigParser(inline_comment_prefixes=('#', ';'), interpolation=None)
+            parser.read(conf_file)
+            if not parser.has_section('CONFIG'):
+                parser.add_section('CONFIG')
+            for key in payload:
+                if key in ('config',):
+                    continue
+                parser.set('CONFIG', key, str(payload[key]))
+            with open(conf_file, 'w', encoding='utf-8') as f:
+                parser.write(f)
+            # update the in-memory conf so the running gateway sees the values
+            for key, value in payload.items():
+                self.conf[key] = str(value)
+            logging.info("Updated [CONFIG] in %s", conf_file)
+            return {'ok': True}
+        except Exception as exc:   # pylint: disable=broad-except
+            logging.error("save_config failed: %s", exc)
+            return {'ok': False, 'error': str(exc)}
+
     def describe_sensor(self, sensor):
         """build a JSON-friendly status description of a sensor"""
         address = sensor.get('address')
@@ -384,6 +439,19 @@ class Communicator:
         bidirectional = sensor.get('bidirectional', bidirectional)
         smartack = sensor.get('smartack', smartack)
 
+        # Categorise by data model: sensors have a device address; actors use a
+        # virtual sender ID (sender) and usually target 0xFFFFFFFF (broadcast).
+        # A device with a configured sender is an actor.
+        if sensor.get('sender') is not None or address == 0xFFFFFFFF:
+            category = 'actor'
+
+        # mark UTC timestamps so the browser renders them in the local timezone
+        last_seen_iso = None
+        if last_seen is not None:
+            last_seen_iso = last_seen.isoformat()
+            if not last_seen_iso.endswith('Z') and '+' not in last_seen_iso:
+                last_seen_iso += 'Z'
+
         prefix = self.conf.get('mqtt_prefix', 'enocean/')
         display_name = sensor['name']
         if display_name.startswith(prefix):
@@ -392,15 +460,19 @@ class Communicator:
         if sensor.get('model') and len(display_name) > 3 and display_name[-3] == '/':
             display_name = display_name[:-3]
 
+        latest = self._latest_value.get(address)
+
         return {
             'name': display_name,
             'address': address,
             'sender': sensor.get('sender'),
+            'virtual': sensor.get('virtual'),
+            'latest': latest,
             'eep': eep,
             'eep_name': eep_name,
             'rorg_name': rorg_name,
             'status': status,
-            'last_seen': last_seen.isoformat() if last_seen else None,
+            'last_seen': last_seen_iso,
             'source': 'dynamic' if sensor.get('source') == 'dynamic' else 'config',
             'model': sensor.get('model'),
             'category': category,
@@ -421,6 +493,20 @@ class Communicator:
         if self.enocean_sender is None:
             return None
         return enocean.utils.to_hex_string(self.enocean_sender)
+
+    def virtual_senders(self):
+        """the usable virtual sender IDs of the transceiver.
+
+        EnOcean transceivers (USB300/TCM515 and similar) expose a 32-bit base
+        ID plus a range of 128 assignable addresses (base .. base+127). These
+        are used as the sender ID when transmitting to actors.
+        Returns a list of ints (empty until the base ID is known).
+        """
+        base = self.enocean_sender or getattr(self.enocean, 'base_id', None)
+        if base is None:
+            return []
+        base_int = enocean.utils.combine_hex(base)
+        return [base_int + i for i in range(128)]
 
     #=============================================================================================
     # UNIVERSAL TEACH-IN (UTE)
@@ -955,6 +1041,18 @@ class Communicator:
                 logging.warning("message not interpretable: %s", sensor['name'])
             else:
                 self._publish_mqtt(sensor, mqtt_json)
+                # remember the latest decoded values for the web UI
+                address = enocean.utils.combine_hex(packet.sender)
+                self._latest_value[address] = {
+                    'values': dict(mqtt_json),
+                    'ts': packet.received.isoformat() if packet.received else None,
+                }
+                # append to the rolling history for the value graph
+                hist = self._history.setdefault(address, [])
+                hist.append({'values': dict(mqtt_json),
+                             'ts': packet.received.isoformat() if packet.received else None})
+                if len(hist) > self._history_max:
+                    del hist[:len(hist) - self._history_max]
         else:
             # learn request received
             logging.info("learn request not emitted to mqtt")

@@ -43,10 +43,13 @@ async function loadStatus() {
     state.eep = data.eep || [];
     state.learn = !!data.learn_mode;
     state.gateway = data.gateway || {};
+    state.virtual_senders = data.virtual_senders || [];
     renderGateway();
     renderLearn();
     renderSensors();
     initEepSearch();
+    populateSenders(state.virtual_senders);
+    populateConfig(state.config);
   } catch (e) {
     toast('Failed to load status: ' + e.message, 'error');
   }
@@ -86,6 +89,99 @@ function fmtLastSeen(ts) {
   return then.toLocaleString();
 }
 
+function fmtLatest(s) {
+  const l = s.latest;
+  if (!l || !l.values) return '—';
+  // prefer the first non-underscore (non-meta) value
+  const keys = Object.keys(l.values).filter((k) => k !== '_RSSI_' && k !== '_DATE_' && k !== '_RAW_DATA_');
+  if (!keys.length) return '—';
+  const k = keys[0];
+  const v = l.values[k];
+  return k + '=' + (typeof v === 'number' ? Number(v.toFixed ? v.toFixed(2) : v) : v);
+}
+
+/* ---------------- value graph ---------------- */
+async function showGraph(name) {
+  $('graph-title').textContent = 'Value history · ' + name;
+  $('graph-body').innerHTML = 'Loading…';
+  $('graph-overlay').hidden = false;
+  try {
+    const res = await api('/api/history/' + encodeURIComponent(name));
+    if (!res.ok) throw new Error(res.error || 'no history');
+    const hist = res.history || [];
+    if (!hist.length) { $('graph-body').innerHTML = 'No values recorded yet for this device.'; return; }
+    // pick the first real (non-meta) value key
+    const keys = Object.keys(hist[hist.length - 1].values || {}).filter((k) => !k.startsWith('_'));
+    if (!keys.length) { $('graph-body').innerHTML = 'No numeric values to plot.'; return; }
+    const key = keys[0];
+    const pts = hist.filter((h) => h.values && h.values[key] !== undefined)
+      .map((h) => ({ t: new Date(h.ts).getTime(), v: Number(h.values[key]) }));
+    $('graph-body').innerHTML = '<div class="graph-wrap"><svg id="mini-graph" viewBox="0 0 600 180" preserveAspectRatio="none"></svg></div>' +
+      '<div style="margin-top:8px;color:var(--text-secondary);font-size:12px">' + escapeHtml(key) + ' · ' + pts.length + ' samples</div>';
+    renderMiniGraph('mini-graph', pts, key);
+  } catch (err) {
+    $('graph-body').innerHTML = 'Failed to load history: ' + escapeHtml(err.message);
+  }
+}
+function renderMiniGraph(svgId, pts, key) {
+  const svg = document.getElementById(svgId);
+  if (!svg || pts.length < 2) return;
+  const W = 600, H = 180, PAD = 8;
+  const vals = pts.map((p) => p.v);
+  const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+  const span = (max - min) || 1;
+  const t0 = pts[0].t, t1 = pts[pts.length - 1].t || (t0 + 1);
+  const X = (t) => PAD + (t - t0) / (t1 - t0) * (W - 2 * PAD);
+  const Y = (v) => H - PAD - (v - min) / span * (H - 2 * PAD);
+  let d = pts.map((p, i) => (i ? 'L' : 'M') + X(p.t).toFixed(1) + ',' + Y(p.v).toFixed(1)).join(' ');
+  svg.innerHTML = '<polyline fill="none" stroke="var(--primary)" stroke-width="2" points="' +
+    pts.map((p) => X(p.t).toFixed(1) + ',' + Y(p.v).toFixed(1)).join(' ') + '"/>' +
+    '<text x="' + PAD + '" y="' + (H - 2) + '" fill="var(--text-muted)" font-size="10">' + escapeHtml(String(min)) + '</text>' +
+    '<text x="' + (W - PAD - 30) + '" y="' + (H - 2) + '" fill="var(--text-muted)" font-size="10">' + escapeHtml(String(max)) + '</text>';
+}
+$('graph-close')?.addEventListener('click', () => { $('graph-overlay').hidden = true; });
+$('graph-overlay')?.addEventListener('click', (e) => { if (e.target === $('graph-overlay')) $('graph-overlay').hidden = true; });
+
+/* ---------------- configuration editor ---------------- */
+// fields we never want to edit via the web UI
+const CONFIG_HIDDEN = new Set(['config', 'mqtt_pwd', 'mqtt_client_id']);
+// human labels for known settings
+const CONFIG_LABELS = {
+  enocean_port: 'EnOcean port', mqtt_host: 'MQTT host', mqtt_port: 'MQTT port',
+  mqtt_prefix: 'MQTT prefix', mqtt_keepalive: 'MQTT keepalive', mqtt_user: 'MQTT user',
+  mqtt_ssl: 'MQTT SSL', mqtt_debug: 'MQTT debug', log_packets: 'Log packets',
+  overlay: 'Overlay', webui_port: 'Web UI port', webui_disable: 'Disable web UI',
+  db_file: 'Device DB file', webui_sensor_store: 'Sensor store file',
+};
+
+function populateConfig(conf) {
+  const grid = $('config-grid');
+  if (!grid) return;
+  if (!conf || typeof conf !== 'object') { grid.innerHTML = '<span class="card-sub">Configuration not available.</span>'; return; }
+  const keys = Object.keys(conf).filter((k) => !CONFIG_HIDDEN.has(k));
+  grid.innerHTML = keys.map((k) => {
+    const label = CONFIG_LABELS[k] || k;
+    const val = conf[k];
+    return '<div class="field"><label for="cfg-' + escapeHtml(k) + '">' + escapeHtml(label) + '</label>' +
+      '<input type="text" id="cfg-' + escapeHtml(k) + '" data-cfgkey="' + escapeHtml(k) + '" value="' + escapeHtml(String(val)) + '"></div>';
+  }).join('');
+}
+
+$('config-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = {};
+  document.querySelectorAll('#config-grid [data-cfgkey]').forEach((inp) => {
+    payload[inp.getAttribute('data-cfgkey')] = inp.value;
+  });
+  try {
+    const res = await api('/api/config', { method: 'POST', body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error(res.error || 'save failed');
+    toast('Configuration saved - restart required', 'success');
+  } catch (err) {
+    toast('Failed to save configuration: ' + err.message, 'error');
+  }
+});
+
 let activeDeviceCat = 'all';
 
 function deviceCategory(s) {
@@ -101,7 +197,7 @@ function renderSensors() {
 
   if (!filtered.length) {
     const msg = state.sensors.length ? (cats === 'actor' ? 'No actors configured.' : 'No sensors configured.') : 'No devices configured yet.';
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">' + msg + '</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">' + msg + '</td></tr>';
     return;
   }
 
@@ -136,6 +232,7 @@ function renderSensors() {
       <td><span class="cat-badge ${catCls}">${catTxt}</span>${badges.join('')}</td>
       <td><span class="status-badge ${statusCls}">${statusTxt}</span></td>
       <td class="mono">${escapeHtml(fmtLastSeen(s.last_seen))}</td>
+      <td class="mono latest-val"><a href="#" data-graph="${escapeHtml(s.name)}" title="Show history graph">${escapeHtml(fmtLatest(s))}</a></td>
       <td><div class="row-actions">
         ${isActor ? '<button class="icon-btn teachin-btn" title="Send teach-in telegram to this actor" data-teachin="${escapeHtml(s.name)}">⤓</button>' : ''}
         <button class="icon-btn" title="Edit device" data-edit="${escapeHtml(s.name)}">✎</button>
@@ -273,27 +370,65 @@ function parseAddress(val) {
   return parseInt(s, 16);
 }
 
+let addMode = 'sensor';
+
+function setAddMode(mode) {
+  addMode = mode;
+  document.querySelectorAll('[data-addcat]').forEach((t) => {
+    t.classList.toggle('active', t.getAttribute('data-addcat') === mode);
+  });
+  const isActor = mode === 'actor';
+  $('f-addr-field').hidden = isActor;
+  $('f-sender-field').hidden = !isActor;
+  if (isActor && $('f-sender')) {
+    // prefill a fresh (unused) virtual sender if available
+    if (!$('f-sender').value) $('f-sender').selectedIndex = 0;
+  }
+}
+document.querySelectorAll('[data-addcat]').forEach((t) => {
+  t.addEventListener('click', () => setAddMode(t.getAttribute('data-addcat')));
+});
+
+function populateSenders(senders) {
+  const sel = $('f-sender');
+  if (!sel) return;
+  const used = new Set(state.sensors.filter((s) => s.sender).map((s) => s.sender));
+  const opts = (senders || []).map((v) => {
+    const hex = '0x' + Number(v).toString(16).toUpperCase().padStart(8, '0');
+    return '<option value="' + hex + '"' + (used.has(v) ? ' disabled' : '') + '>' + hex + (used.has(v) ? ' (used)' : '') + '</option>';
+  });
+  sel.innerHTML = opts.length ? opts.join('') : '<option value="">(no base ID yet)</option>';
+}
+
 $('add-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = $('f-name').value.trim();
-  const address = parseAddress($('f-address').value);
   const eep = $('f-eep').value;
-  const sender = $('f-sender').value.trim();
-
-  if (!name) return toast('Please enter a sensor name', 'error');
-  if (address === null) return toast('Please enter a valid address (e.g. 0x003DD63B)', 'error');
+  if (!name) return toast('Please enter a name', 'error');
   if (!eep) return toast('Please select an EEP from the list', 'error');
+
+  const isActor = addMode === 'actor';
+  let address, sender;
+  if (isActor) {
+    address = 0xFFFFFFFF;
+    sender = parseInt($('f-sender').value, 0);
+    if (isNaN(sender)) return toast('Please select a virtual sender ID', 'error');
+  } else {
+    address = parseAddress($('f-address').value);
+    if (address === null) return toast('Please enter a valid address (e.g. 0x003DD63B)', 'error');
+  }
 
   try {
     const res = await api('/api/sensors', {
       method: 'POST',
-      body: JSON.stringify({ name, address, eep, sender: sender || undefined })
+      body: JSON.stringify({ name, address, eep, sender, category: isActor ? 'actor' : 'sensor', virtual: isActor ? 1 : 0 })
     });
-    toast('Sensor "' + name + '" added', 'success');
+    toast((isActor ? 'Actor' : 'Sensor') + ' "' + name + '" added', 'success');
     $('add-form').reset();
+    setAddMode(addMode);
     await loadStatus();
   } catch (err) {
-    toast('Failed to add sensor: ' + err.message, 'error');
+    toast('Failed to add device: ' + err.message, 'error');
   }
 });
 
