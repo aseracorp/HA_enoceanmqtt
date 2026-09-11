@@ -306,23 +306,21 @@ def test_teachin_captures_non_ute_devices():
         assert len(stored) == 0, 'a 4BS data telegram without the learn bit must not be added'
         assert com.learn_mode is True, 'learn mode should remain on (no device captured)'
 
-        # --- 2. 4BS learn telegram (LRN bit) extracts EEP (A5-08-01) ---
-        # correct encoding: DB3 = (func<<1)|(type>>5 &1), DB2 = (type & 0x1F)<<2
-        func, type_ = 0x08, 0x01
-        db3 = (func << 1) | ((type_ >> 5) & 1)
-        db2 = (type_ & 0x1F) << 2
+        # --- 2. 4BS learn telegram (teach-in pressed) extracts EEP (A5-08-01) ---
+        # Real teach-in telegram from the log for 0x05A2A138:
+        # DB0=0x20 DB1=0x08 DB2=0x02 DB3=0x80  ->  A5-08-01
         p2 = RadioPacket(PACKET.RADIO_ERP1,
-                         data=[0xa5, 0x88, 0x01, db2, db3, 0x11, 0x22, 0x33, 0x44, 0x00],
+                         data=[0xa5, 0x20, 0x08, 0x02, 0x80, 0x11, 0x22, 0x33, 0x44, 0x00],
                          optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
         p2.parse()
         p2.received = datetime.datetime.utcnow()
-        assert com._is_4bs_learn_telegram(p2) is True
+        assert com._is_4bs_learn_telegram(p2) is True, 'real teach-in telegram must be recognized'
         com.set_learn_mode(True)
         com._process_radio_packet(p2)
         stored2 = [s for s in com._store.all() if s['address'] == 0x11223344]
         assert len(stored2) == 1
         assert stored2[0]['rorg'] == 0xA5 and stored2[0]['func'] == 0x08 and stored2[0]['type'] == 0x01, \
-            '4BS learn telegram should extract A5-08-01 exactly (not a guessed default)'
+            '4BS teach-in telegram should extract A5-08-01 exactly (not a guessed default)'
 
         # --- 3. RPS F6 switch: teachable via telegram, EEP recognized from data ---
         # RPS/F6 telegrams carry no EEP, but the EEP is recognized from the
@@ -430,14 +428,11 @@ def test_4bs_teachin_bidirectional_reply():
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
-        # A5-38-08 is bidirectional? We'll craft a learn telegram for a known
-        # bidirectional 4BS: use A5-20-01 (Bi-directional Battery Powered Actuator)
-        func, type_ = 0x20, 0x01
-        db3 = (func << 1) | ((type_ >> 5) & 1)
-        db2 = (type_ & 0x1F) << 2
-        p = RadioPacket(PACKET.RADIO_ERP1,
-                        data=[0xa5, 0x88, 0x01, db2, db3, 0x11, 0x22, 0x33, 0x44, 0x00],
-                        optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
+        # Bidirectional 4BS actor A5-20-01: build a proper teach-in telegram
+        # with the enocean library (learn=True sets the documented LRN/EEP).
+        p = RadioPacket.create(0xA5, 0x20, 0x01, learn=True,
+                               sender=[0x11, 0x22, 0x33, 0x44],
+                               destination=[0xFF, 0x80, 0x00, 0x00])
         p.parse()
         p.received = datetime.datetime.utcnow()
 
