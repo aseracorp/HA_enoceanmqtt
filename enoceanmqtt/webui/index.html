@@ -101,17 +101,17 @@
           <select id="f-sender"></select>
         </div>
         <div class="field field-grow">
-          <label for="f-eep-search">EEP (Equipment Profile)</label>
-          <input type="text" id="f-eep-search" placeholder="Search: temperature, switch, A5-02-05…" autocomplete="off">
-          <div class="eep-list" id="f-eep-list"></div>
-          <input type="hidden" id="f-eep">
+          <label for="f-eep">EEP (Equipment Profile)</label>
+          <select id="f-eep" required>
+            <option value="">Select an EEP…</option>
+          </select>
         </div>
         <button class="btn btn-primary" type="submit" id="btn-add" data-i18n="add_device">Add device</button>
       </form>
     </section>
 
-    <!-- Settings / Config -->
-    <section class="card">
+    <!-- Settings / Config (collapsed by default) -->
+    <section class="card collapsible collapsed" id="config-card">
       <div class="card-header">
         <h2 data-i18n="configuration">Configuration</h2>
         <span class="card-sub">[CONFIG] section of enoceanmqtt.conf - changes apply after restart</span>
@@ -144,7 +144,7 @@
               <th data-i18n="col_addr">Address / Sender</th>
               <th>EEP</th>
               <th data-i18n="col_type">Type</th>
-              <th data-i18n="col_status">Status</th>
+              <th data-i18n="col_rssi">RSSI</th>
               <th data-i18n="col_lastseen">Last seen</th>
               <th data-i18n="col_latest">Latest</th>
               <th></th>
@@ -195,11 +195,9 @@
     </div>
     <div class="field">
       <label for="e-eep">EEP (Equipment Profile)</label>
-      <input type="text" id="e-eep" placeholder="e.g. A5-08-01">
-      <div class="eep-list" id="e-eep-list"></div>
-      <input type="hidden" id="e-eep-rorg">
-      <input type="hidden" id="e-eep-func">
-      <input type="hidden" id="e-eep-type">
+      <select id="e-eep">
+        <option value="">Select an EEP…</option>
+      </select>
     </div>
     <div class="modal-actions">
       <button class="btn" id="edit-cancel">Cancel</button>

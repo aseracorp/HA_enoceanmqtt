@@ -119,6 +119,37 @@ html, body {
 .pill.bad { color: var(--text); border-color: rgba(255,77,79,0.4); }
 .pill.bad .dot { background: var(--danger); box-shadow: 0 0 8px rgba(255,77,79,0.6); }
 .pill-accent { background: rgba(176,20,25,0.10); border-color: rgba(176,20,25,0.35); color: var(--text); }
+/* RSSI value colors */
+.rssi-val { text-decoration: none; font-weight: 600; }
+.rssi-good { color: var(--success); }
+.rssi-warn { color: var(--warning); }
+.rssi-bad { color: var(--danger); }
+.rssi-val:hover { text-decoration: underline; }
+
+/* themed dropdowns (selects) */
+select {
+  appearance: none; -webkit-appearance: none;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 9px 30px 9px 10px;
+  font-size: 14px; font-family: inherit;
+  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  cursor: pointer;
+}
+select:focus { outline: none; border-color: var(--primary); }
+select option { background-color: var(--bg-elevated); color: var(--text); }
+
+/* collapsible card */
+.card.collapsible > .card-header { cursor: pointer; user-select: none; }
+.card.collapsible > .card-header::after {
+  content: '▾'; float: right; transition: transform 0.2s; color: var(--text-muted);
+}
+.card.collapsible.collapsed > .card-header::after { transform: rotate(-90deg); }
+.card.collapsible.collapsed > .card-header + * { display: none; }
+
 /* language selector */
 .lang-select {
   appearance: none; border: 1px solid var(--border-strong); cursor: pointer;
