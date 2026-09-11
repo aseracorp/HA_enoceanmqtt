@@ -59,6 +59,10 @@ spec:
           envFrom:
             {{ toYaml . | nindent 12 }}
           {{- end }}
+          ports:
+            - containerPort: {{ .Values.enoceanmqtt.webui_port }}
+              name: webui
+              protocol: TCP
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

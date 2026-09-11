@@ -6,19 +6,27 @@ import queue
 import numbers
 import json
 import platform
+import os
+import datetime
 
 from enocean.communicators.serialcommunicator import SerialCommunicator
 from enoceanmqtt.tcpclientcommunicator import TCPClientCommunicator
-from enocean.protocol.packet import RadioPacket
+from enocean.protocol.packet import RadioPacket, UTETeachInPacket
 from enocean.protocol.constants import PACKET, RETURN_CODE, RORG
 import enocean.utils
 import paho.mqtt.client as mqtt
+
+from enoceanmqtt.sensor_store import SensorStore
+from enoceanmqtt.eep_registry import get_registry
 
 
 class Communicator:
     """the main working class providing the MQTT interface to the enocean packet classes"""
     mqtt = None
     enocean = None
+
+    #: a sensor is considered "online" if it has been seen within this window
+    ONLINE_TIMEOUT_SECONDS = 10 * 60
 
     CONNECTION_RETURN_CODE = [
         "connection successful",
@@ -33,6 +41,16 @@ class Communicator:
         self.conf = config
         self.sensors = sensors
         self._index_sensors()
+
+        # UTE teach-in state (managed through the web interface / MQTT learn)
+        self.learn_mode = False
+        self._last_seen = {}
+
+        # EEP catalog + persistent store for web-added sensors
+        self._eep_registry = get_registry()
+        self._store = SensorStore(self._resolve_sensor_store_path())
+        self._dynamic_names = set()
+        self._load_dynamic_sensors()
 
         # check for mandatory configuration
         if 'mqtt_host' not in self.conf or 'enocean_port' not in self.conf:
@@ -79,6 +97,20 @@ class Communicator:
         self.enocean.start()
         # sender will be automatically determined
         self.enocean_sender = None
+        # UTE teach-in telegrams are handled by this class, not by the library
+        self.enocean.teach_in = False
+
+        # start the embedded web interface
+        self._webui = None
+        if str(self.conf.get('webui_disable')) not in ("True", "true", "1"):
+            try:
+                from enoceanmqtt.webinterface import WebInterface
+                self._webui = WebInterface(self)
+                port = int(self.conf.get('webui_port', 8091))
+                host = self.conf.get('webui_host', '0.0.0.0')
+                self._webui.start(host, port)
+            except Exception as exc:   # pylint: disable=broad-except
+                logging.error("Cannot start web interface: %s", exc)
 
     def __del__(self):
         if self.enocean is not None and self.enocean.is_alive():
@@ -119,6 +151,243 @@ class Communicator:
         if len(matched) > 1:
             matched.sort(key=lambda s: self._sensor_to_index.get(id(s), 0))
         return matched
+
+    #=============================================================================================
+    # SENSOR STORE / WEB-ADDED SENSORS
+    #=============================================================================================
+    def _resolve_sensor_store_path(self):
+        """determine where sensors added through the web UI are persisted"""
+        path = self.conf.get('webui_sensor_store')
+        if path:
+            return path
+        # by default store next to the HA device database, if configured
+        db_file = self.conf.get('db_file')
+        if db_file:
+            return os.path.join(os.path.dirname(os.path.abspath(db_file)), 'sensors.json')
+        # otherwise next to the first configuration file
+        config_files = self.conf.get('config') or []
+        if config_files:
+            return os.path.join(os.path.dirname(os.path.abspath(config_files[0])), 'sensors.json')
+        return None
+
+    def _prepare_dynamic_sensor(self, stored, full_name):
+        """turn a stored sensor entry into a runnable sensor dict"""
+        sensor = {
+            'name': full_name,
+            'address': stored['address'],
+            'rorg': stored['rorg'],
+            'func': stored['func'],
+            'type': stored['type'],
+            'source': 'dynamic',
+            'persistent': '1',
+        }
+        if stored.get('sender'):
+            sensor['sender'] = stored['sender']
+        if stored.get('ignore'):
+            sensor['ignore'] = stored['ignore']
+        return sensor
+
+    def _load_dynamic_sensors(self, target_name=None):
+        """(re)merge sensors from the persistent store into the running config"""
+        prefix = self.conf.get('mqtt_prefix', 'enocean/')
+        self.sensors = [s for s in self.sensors if s.get('source') != 'dynamic']
+        self._dynamic_names = set()
+        added = []
+        for stored in self._store.all():
+            full_name = prefix + stored['name']
+            sensor = self._prepare_dynamic_sensor(stored, full_name)
+            self.sensors.append(sensor)
+            self._dynamic_names.add(full_name)
+            if stored['name'] == target_name:
+                added.append(sensor)
+        self._index_sensors()
+        return added[0] if added else None
+
+    def add_sensor(self, payload):
+        """add a sensor (manual or web interface) and persist it"""
+        try:
+            name = str(payload.get('name', '')).strip()
+            address = payload.get('address')
+            eep = str(payload.get('eep', '')).strip()
+            sender = payload.get('sender')
+
+            if not name:
+                return {'ok': False, 'error': 'A sensor name is required'}
+            if not isinstance(address, int):
+                try:
+                    address = int(str(address), 0)
+                except (TypeError, ValueError):
+                    return {'ok': False, 'error': 'Invalid sensor address'}
+            if not (0 <= address <= 0xFFFFFFFF):
+                return {'ok': False, 'error': 'Sensor address out of range'}
+
+            parts = [p for p in eep.replace('0x', '').split('-') if p] if eep else []
+            if len(parts) != 3:
+                return {'ok': False, 'error': 'Invalid EEP, expected e.g. A5-02-05'}
+            try:
+                rorg = int(parts[0], 16)
+                func = int(parts[1], 16)
+                type_ = int(parts[2], 16)
+            except ValueError:
+                return {'ok': False, 'error': 'Invalid EEP'}
+
+            prefix = self.conf.get('mqtt_prefix', 'enocean/')
+            full_name = prefix + name
+            if any(s.get('name') == full_name for s in self.sensors):
+                return {'ok': False, 'error': 'A sensor with this name already exists'}
+
+            stored = {'name': name, 'address': address,
+                      'rorg': rorg, 'func': func, 'type': type_}
+            if sender:
+                try:
+                    stored['sender'] = int(str(sender), 0)
+                except (TypeError, ValueError):
+                    return {'ok': False, 'error': 'Invalid sender address'}
+            self._store.add(stored)
+            new_sensor = self._load_dynamic_sensors(name)
+            self._on_sensors_changed(new_sensor)
+            return {'ok': True, 'sensor': self.describe_sensor(new_sensor)}
+        except Exception as exc:   # pylint: disable=broad-except
+            logging.error("add_sensor failed: %s", exc)
+            return {'ok': False, 'error': str(exc)}
+
+    def remove_sensor(self, name):
+        """remove a web-added sensor and clean up (HA discovery, etc.)"""
+        name = str(name).strip()
+        stored = self._store.get(name)
+        if not stored:
+            return {'ok': False, 'error': 'Sensor not found'}
+        prefix = self.conf.get('mqtt_prefix', 'enocean/')
+        full = next((s for s in self.sensors if s.get('name') == prefix + name), None)
+        if self._store.remove(name):
+            self._load_dynamic_sensors()
+            if full is not None:
+                self._on_sensor_removed(full)
+            return {'ok': True}
+        return {'ok': False, 'error': 'Could not remove sensor'}
+
+    def _on_sensors_changed(self, sensor=None):
+        """hook called after sensors are added/changed (overridden by overlays)"""
+        logging.debug("Sensors changed: %s", sensor.get('name') if sensor else 'all')
+
+    def _on_sensor_removed(self, sensor):
+        """hook called after a sensor is removed (overridden by overlays)"""
+        logging.debug("Sensor removed: %s", sensor.get('name'))
+
+    def describe_sensor(self, sensor):
+        """build a JSON-friendly status description of a sensor"""
+        address = sensor.get('address')
+        last_seen = self._last_seen.get(address)
+        status = 'never'
+        if last_seen is not None:
+            age = (datetime.datetime.utcnow() - last_seen).total_seconds()
+            status = 'online' if age <= self.ONLINE_TIMEOUT_SECONDS else 'offline'
+
+        rorg = sensor.get('rorg')
+        func = sensor.get('func')
+        type_ = sensor.get('type')
+        eep = None
+        eep_name = None
+        rorg_name = None
+        profile = None
+        if rorg is not None:
+            eep = f'{rorg:02X}-{func:02X}-{type_:02X}' if func is not None and type_ is not None \
+                  else f'{rorg:02X}'
+            profile = self._eep_registry.get(rorg, func, type_)
+            if profile:
+                eep_name = profile['name']
+                rorg_name = profile['rorg_name']
+
+        prefix = self.conf.get('mqtt_prefix', 'enocean/')
+        display_name = sensor['name']
+        if display_name.startswith(prefix):
+            display_name = display_name[len(prefix):]
+        # model-based sensors get an internal "/XX" rorg suffix - hide it
+        if sensor.get('model') and len(display_name) > 3 and display_name[-3] == '/':
+            display_name = display_name[:-3]
+
+        return {
+            'name': display_name,
+            'address': address,
+            'eep': eep,
+            'eep_name': eep_name,
+            'rorg_name': rorg_name,
+            'status': status,
+            'last_seen': last_seen.isoformat() if last_seen else None,
+            'source': 'dynamic' if sensor.get('source') == 'dynamic' else 'config',
+            'model': sensor.get('model'),
+        }
+
+    def eep_catalog(self):
+        """return the list of known EnOcean equipment profiles"""
+        return [{'eep': p['eep'], 'name': p['name'], 'rorg_name': p['rorg_name']}
+                for p in self._eep_registry.profiles]
+
+    @property
+    def enocean_sender_hex(self):
+        if self.enocean_sender is None:
+            return None
+        return enocean.utils.to_hex_string(self.enocean_sender)
+
+    #=============================================================================================
+    # UNIVERSAL TEACH-IN (UTE)
+    #=============================================================================================
+    def set_learn_mode(self, enabled):
+        """enable or disable UTE teach-in mode (one-shot)"""
+        self.learn_mode = bool(enabled)
+        # UTE responses are handled by this class, keep the library from auto-answering
+        self.enocean.teach_in = False
+        logging.info("UTE teach-in mode %s", "enabled" if self.learn_mode else "disabled")
+
+    def _handle_ute_packet(self, packet):
+        """handle an incoming Universal Teach-In (UTE) telegram"""
+        address = enocean.utils.combine_hex(packet.sender)
+        address_hex = enocean.utils.to_hex_string(packet.sender)
+
+        if not self.learn_mode:
+            logging.debug("UTE telegram from %s ignored (teach-in disabled)", address_hex)
+            return
+
+        existing = self._sensors_by_address.get(address)
+        rorg = packet.rorg_of_eep
+        func = packet.rorg_func
+        type_ = packet.rorg_type
+
+        if not existing:
+            # UTE telegram without EEP information cannot be added automatically
+            if rorg == RORG.UNDEFINED:
+                logging.warning("UTE telegram from %s does not carry an EEP, "
+                                "please add the sensor manually", address_hex)
+                self.learn_mode = False
+                return
+            profile = self._eep_registry.get(rorg, func, type_)
+            if profile is None:
+                logging.warning("UTE telegram from %s carries unsupported EEP "
+                                "%02X-%02X-%02X", address_hex, rorg, func, type_)
+            # generate a stable, unique name from the device address
+            name = 'ute_' + format(address, '08x')
+            self._store.add({'name': name, 'address': address,
+                             'rorg': rorg, 'func': func, 'type': type_})
+            new_sensor = self._load_dynamic_sensors(name)
+            self._on_sensors_changed(new_sensor)
+            logging.info("Teach-in: added sensor %s (EEP %s) address %s",
+                         name, profile['eep'] if profile else 'unknown', address_hex)
+        else:
+            logging.info("Teach-in: device %s already known (%s)",
+                         address_hex, ', '.join(s['name'] for s in existing))
+
+        # Bidirectional devices expect a UTE teach-in response - acknowledge the learn
+        if not packet.unidirectional:
+            try:
+                sender = self.enocean_sender or self.enocean.base_id
+                response = packet.create_response_packet(sender)
+                self.enocean.send(response)
+                logging.info("Sent UTE teach-in response to %s", address_hex)
+            except Exception as exc:   # pylint: disable=broad-except
+                logging.error("Failed to send UTE teach-in response: %s", exc)
+
+        # teach-in is one-shot: disable it after a device was received
+        self.learn_mode = False
 
     #=============================================================================================
     # MQTT CLIENT
@@ -413,12 +682,12 @@ class Communicator:
         # Shall the packet be published to MQTT ?
         if not packet.learn or str(sensor.get('log_learn')) in ("True", "true", "1"):
             # Store RSSI
-            # Use underscore so that it is unique and doesn't
+            # Use underscore so that it is unique and doesn't
             # match a potential future EnOcean EEP field.
             mqtt_json['_RSSI_'] = packet.dBm
 
             # Store receive date
-            # Use underscore so that it is unique and doesn't
+            # Use underscore so that it is unique and doesn't
             # match a potential future EnOcean EEP field.
             mqtt_json['_DATE_'] = packet.received.isoformat()
 
@@ -591,6 +860,11 @@ class Communicator:
         self.enocean.send(packet)
 
     def _process_radio_packet(self, packet):
+        # Universal Teach-In telegrams are handled separately
+        if packet.rorg == RORG.UTE:
+            self._handle_ute_packet(packet)
+            return
+
         # first, look whether we have this sensor configured
         found_sensor = False
         address = enocean.utils.combine_hex(packet.sender)
@@ -615,6 +889,9 @@ class Communicator:
         if not found_sensor:
             logging.info("unknown sensor: %s (RORG = %s)", enocean.utils.to_hex_string(packet.sender), hex(packet.rorg))
             return
+
+        # track last-seen for the web interface
+        self._last_seen[address] = datetime.datetime.utcnow()
 
         # Handling EnOcean library decision to set learn to True by default.
         # Only 1BS and 4BS are correctly handled by the EnOcean library.

@@ -25,11 +25,14 @@ RUN apk add --no-cache git && \
     git clone -b master --single-branch --depth 1 https://github.com/embyt/enocean-mqtt.git && \
     cd enocean-mqtt && python3 setup.py develop && cd .. && \
     echo "Installing from repository head" && \
-    git clone -b develop --single-branch --depth 1 https://github.com/ChristopheHD/HA_enoceanmqtt.git ; \
+    git clone -b develop --single-branch --depth 1 https://github.com/aseracorp/HA_enoceanmqtt.git ; \
     cp -rf ./HA_enoceanmqtt/enoceanmqtt enocean-mqtt && \
     rm -rf ./HA_enoceanmqtt
 
 STOPSIGNAL SIGINT
+
+# Web interface (sensor management UI)
+EXPOSE 8091
 
 # Set entrypoint
 ENTRYPOINT [ "python", "/usr/local/bin/enoceanmqtt", "/config/enoceanmqtt.conf" ]

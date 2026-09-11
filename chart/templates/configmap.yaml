@@ -28,6 +28,12 @@ data:
     mqtt_ssl_keyfile  = {{ .Values.enoceanmqtt.mqtt_ssl_keyfile }}
     mqtt_ssl_insecure = {{ .Values.enoceanmqtt.mqtt_ssl_insecure }}
 
+    ## Web interface (sensor management UI)
+    webui_disable = {{ .Values.enoceanmqtt.webui_disable }}
+    webui_host    = 0.0.0.0
+    webui_port    = {{ .Values.enoceanmqtt.webui_port }}
+    webui_sensor_store = /data/sensors.json
+
     {{- range $device_name, $spec := .Values.enoceanmqtt.devices }}
     [{{ $device_name }}]
     {{-   range $key, $value := $spec }}

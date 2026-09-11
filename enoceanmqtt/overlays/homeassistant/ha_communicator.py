@@ -39,36 +39,7 @@ class HACommunicator(Communicator):
         # to comply with the overlay requirements
         for cur_sensor in sensors:
             if str(cur_sensor.get('ignore')) not in ("True", "true", "1"):
-                # Retrieve EEP-related device configuration
-                rorg  = cur_sensor['rorg']
-                func  = cur_sensor['func']
-                type_ = cur_sensor['type']
-                devcfg = {}
-                try:
-                    devcfg = copy.deepcopy(self._ha_mapping[rorg][func][type_]['device_config'])
-                except KeyError:
-                    pass
-
-                # Set EEP-related device configuration
-                # Only set fields if they have non-empty values to avoid passing empty strings
-                # to the EnOcean library which expects None for unset parameters
-                if devcfg.get('command'):
-                    cur_sensor['command'] = devcfg.get('command')
-                if devcfg.get('channel'):
-                    cur_sensor['channel'] = devcfg.get('channel')
-                if devcfg.get('log_learn'):
-                    cur_sensor['log_learn'] = devcfg.get('log_learn')
-                if devcfg.get('direction'):
-                    cur_sensor['direction'] = devcfg.get('direction')
-                if devcfg.get('answer'):
-                    cur_sensor['answer'] = devcfg.get('answer')
-                cur_sensor['persistent']   = devcfg.get('persistent', "1")
-
-                # Better to work with JSON in HA so force JSON usage
-                # Also force publish_rssi and publish_date
-                cur_sensor['publish_json'] = "1"
-                cur_sensor['publish_rssi'] = "1"
-                cur_sensor['publish_date'] = "1"
+                self._apply_device_config(cur_sensor)
 
         # Create sensors from models
         for cur_model in models:
@@ -117,6 +88,102 @@ class HACommunicator(Communicator):
         # Disable Teach-in on startup
         self.enocean.teach_in = False
         logging.info("Auto Teach-in is %s", "enabled" if self.enocean.teach_in else "disabled")
+
+    def _apply_device_config(self, cur_sensor):
+        '''apply the EEP-related device configuration (command, channel, direction,
+        answer, logging and publishing flags) required by the HA overlay'''
+        rorg  = cur_sensor['rorg']
+        func  = cur_sensor['func']
+        type_ = cur_sensor['type']
+        devcfg = {}
+        try:
+            devcfg = copy.deepcopy(self._ha_mapping[rorg][func][type_]['device_config'])
+        except KeyError:
+            pass
+
+        # Only set fields if they have non-empty values to avoid passing empty strings
+        # to the EnOcean library which expects None for unset parameters
+        if devcfg.get('command'):
+            cur_sensor['command'] = devcfg.get('command')
+        if devcfg.get('channel'):
+            cur_sensor['channel'] = devcfg.get('channel')
+        if devcfg.get('log_learn'):
+            cur_sensor['log_learn'] = devcfg.get('log_learn')
+        if devcfg.get('direction'):
+            cur_sensor['direction'] = devcfg.get('direction')
+        if devcfg.get('answer'):
+            cur_sensor['answer'] = devcfg.get('answer')
+        cur_sensor['persistent']   = devcfg.get('persistent', "1")
+
+        # Better to work with JSON in HA so force JSON usage
+        # Also force publish_rssi and publish_date
+        cur_sensor['publish_json'] = "1"
+        cur_sensor['publish_rssi'] = "1"
+        cur_sensor['publish_date'] = "1"
+
+    def _prepare_dynamic_sensor(self, stored, full_name):
+        '''build a dynamic (web-added) sensor and apply the overlay device
+        configuration so it is immediately usable in Home Assistant'''
+        sensor = super()._prepare_dynamic_sensor(stored, full_name)
+        if str(sensor.get('ignore')) not in ("True", "true", "1"):
+            self._apply_device_config(sensor)
+        return sensor
+
+
+    #=============================================================================================
+    # WEB INTERFACE / UTE TEACH-IN HOOKS
+    #=============================================================================================
+    def set_learn_mode(self, enabled):
+        '''enable/disable UTE teach-in and publish the state to Home Assistant'''
+        super().set_learn_mode(enabled)
+        try:
+            if self._system_status_topic.get('learn'):
+                self.mqtt.publish(self._system_status_topic['learn'],
+                                  'ON' if self.learn_mode else 'OFF',
+                                  retain=True)
+        except Exception as exc:   # pylint: disable=broad-except
+            logging.warning("Cannot publish learn status: %s", exc)
+
+    def _on_sensors_changed(self, sensor=None):
+        '''publish HA discovery for a sensor added through the web interface'''
+        if sensor is None:
+            return
+        if str(sensor.get('ignore')) in ("True", "true", "1"):
+            return
+        logging.info("HA discovery for web-added sensor %s", sensor['name'])
+        try:
+            self._mqtt_discovery_eep(sensor)
+            # subscribe to the new sensor request topics
+            self.mqtt.subscribe(sensor['name'] + '/req/#')
+            self.mqtt.subscribe(sensor['name'] + '/__system/#')
+        except Exception as exc:   # pylint: disable=broad-except
+            logging.error("HA discovery failed for %s: %s", sensor['name'], exc)
+
+    def _on_sensor_removed(self, sensor):
+        '''remove HA discovery entities when a web-added sensor is deleted'''
+        try:
+            if sensor.get('model'):
+                reference = sensor.get('manufacturer', '') + "_" + sensor.get('model', '')
+                try:
+                    sender = format(sensor.get('sender'), '08X')
+                except Exception:   # pylint: disable=broad-except
+                    sender = 'NONE'
+                dev_uid = reference + "_" + format(sensor['address'], '08X') + "_" + sender
+            else:
+                eep = format((sensor['rorg'] << 16) + (sensor['func'] << 8) + sensor['type'], '06X')
+                try:
+                    sender = format(sensor.get('sender'), '08X')
+                except Exception:   # pylint: disable=broad-except
+                    sender = 'NONE'
+                dev_uid = eep + "_" + format(sensor['address'], '08X') + "_" + sender
+            sensor_db = self._devmgr.db_get_device_by_field('uid', dev_uid)
+            if sensor_db:
+                for cfgtopic in sensor_db.get('cfgtopics', []):
+                    self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}", "", retain=True)
+                self._devmgr.db_remove_device_by_field('uid', dev_uid)
+                logging.info("Removed HA discovery entities for %s", sensor['name'])
+        except Exception as exc:   # pylint: disable=broad-except
+            logging.error("Failed to remove HA entities for %s: %s", sensor['name'], exc)
 
 
     #=============================================================================================
@@ -527,10 +594,7 @@ class HACommunicator(Communicator):
             if target_name == self.conf['mqtt_prefix'][:-1]:
                 # Handle learn request
                 if prop == "/learn/req":
-                    self.enocean.teach_in = msg.payload.decode('UTF-8') == 'ON'
-                    self.mqtt.publish(self._system_status_topic['learn'],
-                                      'ON' if self.enocean.teach_in else 'OFF',
-                                      retain=True)
+                    self.set_learn_mode(msg.payload.decode('UTF-8') == 'ON')
 
     #=============================================================================================
     # ENOCEAN TO MQTT
