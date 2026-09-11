@@ -507,9 +507,15 @@ class Communicator:
             'smartack': smartack,
         }
 
+    @staticmethod
+    def _fmt_eep(eep):
+        """format an EEP id as 'A5-20-01' (uppercase, no 0x prefix)"""
+        return '-'.join(x.replace('0x', '').upper() if x.lower().startswith('0x') else x.upper()
+                        for x in eep.split('-'))
+
     def eep_catalog(self):
         """return the list of known EnOcean equipment profiles"""
-        return [{'eep': p['eep'], 'name': p['name'], 'rorg_name': p['rorg_name'],
+        return [{'eep': self._fmt_eep(p['eep']), 'name': p['name'], 'rorg_name': p['rorg_name'],
                  'category': p.get('category', 'sensor'),
                  'bidirectional': bool(p.get('bidirectional')),
                  'smartack': bool(p.get('smartack'))}

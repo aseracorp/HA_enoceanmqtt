@@ -355,6 +355,15 @@ select option { background-color: var(--bg-elevated); color: var(--text); }
 .val-link:hover { text-decoration: underline; }
 .latest-val a:hover { text-decoration: underline; }
 
+/* themed tooltip */
+.ui-tooltip {
+  position: fixed; z-index: 1000; pointer-events: none;
+  background: var(--bg-elevated); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 6px 10px; font-size: 12.5px;
+  max-width: 320px; white-space: pre-line;
+}
+
 /* ---------------- footer ---------------- */
 .footer {
   display: flex; justify-content: space-between; gap: 12px;
