@@ -1,15 +1,27 @@
 /* ============================================================
-   EnOceanMQTT Sensor Manager — Cosmos-style dark UI
+   EnOceanMQTT Sensor Manager — Cosmos-style UI (dark + light)
    Design tokens mirror Cosmos Cloud (azukaar/Cosmos-Server):
    - dark background #141414 / cards rgba(30,30,30,0.65) glass
+   - light background #f4f5f7 / white cards
    - accents: primary #ff64c8, secondary #c864ff
    - radius 8-12px, Public Sans typography
+   The active theme is selected with data-theme on <html>; a tiny
+   inline script picks it from localStorage or prefers-color-scheme.
    ============================================================ */
 
-:root {
+/* Default = dark (matches previous behaviour if JS is unavailable) */
+:root,
+:root[data-theme="dark"] {
   --bg: #141414;
   --bg-paper: rgba(30,30,30,0.65);
   --bg-hover: rgba(40,40,40,0.85);
+  --bg-surface: rgba(255,255,255,0.04);   /* pills, badges, buttons */
+  --bg-elevated: #1e1e1e;                  /* dropdowns, modal */
+  --bg-input: rgba(0,0,0,0.35);
+  --bg-topbar: rgba(20,20,20,0.85);
+  --overlay: rgba(0,0,0,0.6);
+  --slider-bg: rgba(255,255,255,0.12);
+  --slider-knob: #fff;
   --border: rgba(255,255,255,0.08);
   --border-strong: rgba(255,255,255,0.16);
   --text: #ffffff;
@@ -24,6 +36,34 @@
   --radius: 8px;
   --radius-lg: 12px;
   --shadow: 0 4px 24px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.2);
+}
+
+/* Light theme */
+:root[data-theme="light"] {
+  --bg: #f4f5f7;
+  --bg-paper: rgba(255,255,255,0.85);
+  --bg-hover: rgba(0,0,0,0.05);
+  --bg-surface: rgba(0,0,0,0.04);
+  --bg-elevated: #ffffff;
+  --bg-input: rgba(255,255,255,0.8);
+  --bg-topbar: rgba(255,255,255,0.85);
+  --overlay: rgba(0,0,0,0.4);
+  --slider-bg: rgba(0,0,0,0.18);
+  --slider-knob: #fff;
+  --border: rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.16);
+  --text: #1c1c1e;
+  --text-secondary: #55555a;
+  --text-muted: #8e8e93;
+  --primary: #e0489e;
+  --secondary: #9b4dca;
+  --gradient: linear-gradient(135deg, #e0489e, #9b4dca);
+  --success: #2e9e2e;
+  --danger: #e03131;
+  --warning: #b8870b;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
 }
 
 * { box-sizing: border-box; }
@@ -43,7 +83,7 @@ html, body {
 /* ---------------- top bar ---------------- */
 .topbar {
   position: sticky; top: 0; z-index: 10;
-  background: rgba(20,20,20,0.85);
+  background: var(--bg-topbar);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
@@ -56,7 +96,7 @@ html, body {
 .brand-mark {
   width: 42px; height: 42px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(255,255,255,0.04);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
 }
 .brand h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.2px; }
@@ -66,7 +106,7 @@ html, body {
 .pill {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 5px 12px; border-radius: 100px;
-  background: rgba(255,255,255,0.04);
+  background: var(--bg-surface);
   border: 1px solid var(--border);
   color: var(--text-secondary); font-size: 12.5px; font-weight: 500;
 }
@@ -79,6 +119,21 @@ html, body {
 .pill.bad { color: var(--text); border-color: rgba(255,77,79,0.4); }
 .pill.bad .dot { background: var(--danger); box-shadow: 0 0 8px rgba(255,77,79,0.6); }
 .pill-accent { background: rgba(255,100,200,0.08); border-color: rgba(255,100,200,0.3); color: var(--text); }
+/* theme toggle */
+.theme-toggle {
+  appearance: none; border: 1px solid var(--border-strong); cursor: pointer;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1;
+  transition: all 0.15s ease;
+}
+.theme-toggle:hover { background: var(--bg-hover); color: var(--text); }
+.theme-toggle .theme-icon { display: none; }
+:root[data-theme="light"] .theme-toggle .theme-icon-moon { display: inline; }
+:root[data-theme="dark"] .theme-toggle .theme-icon-sun { display: inline; }
+
 
 /* ---------------- layout ---------------- */
 .content { max-width: 1080px; margin: 0 auto; padding: 24px; width: 100%; flex: 1; }
@@ -119,13 +174,13 @@ html, body {
 .switch input { opacity: 0; width: 0; height: 0; }
 .slider {
   position: absolute; cursor: pointer; inset: 0;
-  background: rgba(255,255,255,0.12);
+  background: var(--slider-bg);
   border-radius: 100px;
   transition: 0.2s;
 }
 .slider:before {
   content: ''; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px;
-  background: #fff; border-radius: 50%; transition: 0.2s;
+  background: var(--slider-knob); border-radius: 50%; transition: 0.2s;
 }
 .switch input:checked + .slider { background: var(--gradient); }
 .switch input:checked + .slider:before { transform: translateX(20px); }
@@ -136,11 +191,11 @@ html, body {
   padding: 9px 18px; border-radius: var(--radius);
   font-size: 13.5px; font-weight: 500; font-family: inherit;
   color: var(--text);
-  background: rgba(255,255,255,0.08);
+  background: var(--bg-surface);
   border: 1px solid var(--border-strong);
   transition: all 0.15s ease;
 }
-.btn:hover { background: rgba(255,255,255,0.14); }
+.btn:hover { background: var(--bg-hover); }
 .btn-primary { background-image: var(--gradient); border: none; color: #fff; box-shadow: none; }
 .btn-primary:hover { filter: brightness(1.15); background-image: var(--gradient); }
 .btn-danger { background-image: linear-gradient(135deg, #ff4d4f, #d9363e); border: none; color: #fff; }
@@ -155,7 +210,7 @@ html, body {
 .field .opt { color: var(--text-muted); font-weight: 400; }
 
 .field input[type="text"] {
-  background: rgba(0,0,0,0.35);
+  background: var(--bg-input);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   padding: 9px 12px;
@@ -172,7 +227,7 @@ html, body {
 .eep-list {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 20;
   max-height: 260px; overflow-y: auto;
-  background: #1e1e1e;
+  background: var(--bg-elevated);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -206,12 +261,12 @@ html, body {
 .status-badge {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 3px 10px; border-radius: 100px; font-size: 12px; font-weight: 500;
-  background: rgba(255,255,255,0.05); color: var(--text-secondary);
+  background: var(--bg-surface); color: var(--text-secondary);
 }
 .status-badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .status-badge.online { background: rgba(84,214,44,0.12); color: var(--success); }
-.status-badge.offline { background: rgba(255,255,255,0.05); color: var(--text-muted); }
-.status-badge.never { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+.status-badge.offline { background: var(--bg-surface); color: var(--text-muted); }
+.status-badge.never { background: var(--bg-surface); color: var(--text-muted); }
 
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .icon-btn {
@@ -237,12 +292,12 @@ html, body {
 .modal-overlay[hidden] { display: none !important; }
 .modal-overlay {
   position: fixed; inset: 0; z-index: 100;
-  background: rgba(0,0,0,0.6);
+  background: var(--overlay);
   backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
 }
 .modal {
-  background: #1e1e1e; border: 1px solid var(--border-strong);
+  background: var(--bg-elevated); border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg); box-shadow: var(--shadow);
   padding: 24px; width: 380px; max-width: calc(100vw - 40px);
 }
@@ -253,7 +308,7 @@ html, body {
 /* ---------------- toast ---------------- */
 #toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  background: #1e1e1e; border: 1px solid var(--border-strong);
+  background: var(--bg-elevated); border: 1px solid var(--border-strong);
   color: var(--text); padding: 10px 18px; border-radius: var(--radius);
   box-shadow: var(--shadow); font-size: 13.5px; z-index: 200;
   display: none; max-width: calc(100vw - 40px);

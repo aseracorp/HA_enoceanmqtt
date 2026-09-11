@@ -230,6 +230,26 @@ $('modal-ok')?.addEventListener('click', async () => {
   }
 });
 
+/* ---------------- theme ---------------- */
+function currentTheme() {
+  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+}
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem('enm-theme', theme); } catch (e) { /* ignore */ }
+}
+/* keep the toggle in sync when the OS preference changes and the user
+   has not made an explicit choice */
+let themeExplicit = false;
+try { themeExplicit = localStorage.getItem('enm-theme') !== null; } catch (e) { /* ignore */ }
+window.matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', (e) => {
+  if (!themeExplicit) setTheme(e.matches ? 'light' : 'dark');
+});
+$('theme-toggle')?.addEventListener('click', () => {
+  themeExplicit = true;
+  setTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+});
+
 /* ---------------- events ---------------- */
 $('learn-toggle')?.addEventListener('change', (e) => setLearn(e.target.checked));
 $('btn-learn-on')?.addEventListener('click', () => setLearn(!state.learn));
