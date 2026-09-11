@@ -47,7 +47,8 @@ async function loadStatus() {
     renderGateway();
     renderLearn();
     renderSensors();
-    initEepSearch();
+    populateEepSelect('f-eep', addMode);
+    populateEepSelect('e-eep', addMode);
     populateSenders(state.virtual_senders);
     applyTranslations();
     loadConfig();
@@ -94,7 +95,7 @@ function fmtLatest(s) {
   const l = s.latest;
   if (!l || !l.values) return '—';
   const meta = l.meta || {};
-  // show all real (non-underscore) values, e.g. "ILL 170 lx · TMP 21°C · OCC on"
+  // show value + unit only, e.g. "170 lx · 21.44 °C · Button pressed"
   const keys = Object.keys(l.values).filter((k) => !k.startsWith('_'));
   if (!keys.length) return '—';
   return keys.map((k) => {
@@ -104,12 +105,12 @@ function fmtLatest(s) {
     if (m.text && m.text !== String(v)) txt = m.text;
     else if (typeof v === 'number') txt = (Math.round(v * 100) / 100).toString();
     else txt = String(v);
-    return (m.description ? m.description.split(' ')[0] : k) + ' ' + txt + (m.unit ? ' ' + m.unit : '');
+    return txt + (m.unit ? ' ' + m.unit : '');
   }).join(' · ');
 }
 
 /* ---------------- value graph ---------------- */
-async function showGraph(name) {
+async function showGraph(name, field) {
   $('graph-title').textContent = 'Value history · ' + name;
   $('graph-body').innerHTML = 'Loading…';
   $('graph-overlay').hidden = false;
@@ -118,8 +119,12 @@ async function showGraph(name) {
     if (!res.ok) throw new Error(res.error || 'no history');
     const hist = res.history || [];
     if (!hist.length) { $('graph-body').innerHTML = 'No values recorded yet for this device.'; return; }
-    // pick the first real (non-meta) value key
-    const keys = Object.keys(hist[hist.length - 1].values || {}).filter((k) => !k.startsWith('_'));
+    // pick the requested field (e.g. _RSSI_) or the first real (non-meta) value key
+    let keys = Object.keys(hist[hist.length - 1].values || {}).filter((k) => !k.startsWith('_'));
+    if (field) {
+      const hasField = hist.some((h) => h.values && h.values[field] !== undefined);
+      if (hasField) keys = [field];
+    }
     if (!keys.length) { $('graph-body').innerHTML = 'No numeric values to plot.'; return; }
     const key = keys[0]; // (graph plots the first numeric value; all are in the table)
     const pts = hist.filter((h) => h.values && h.values[key] !== undefined)
@@ -222,8 +227,13 @@ function renderSensors() {
   tbody.innerHTML = filtered.map((s) => {
     const eep = s.eep ? escapeHtml(s.eep) : '—';
     const eepName = s.eep_name ? escapeHtml(s.eep_name) : '';
-    const statusCls = s.status === 'online' ? 'online' : (s.status === 'offline' ? 'offline' : 'never');
-    const statusTxt = s.status === 'online' ? t('st_online') : (s.status === 'offline' ? t('st_offline') : t('st_never'));
+    // status: show the latest RSSI with color coding (clickable for a graph)
+    const rssi = (s.latest && s.latest.values && s.latest.values._RSSI_) || null;
+    let rssiHtml = '—';
+    if (rssi !== null) {
+      const rssiCls = rssi <= -80 ? 'rssi-bad' : (rssi <= -60 ? 'rssi-warn' : 'rssi-good');
+      rssiHtml = '<a href="#" class="rssi-val ' + rssiCls + '" data-rssi="' + escapeHtml(s.name) + '" title="RSSI history">' + rssi + ' dBm</a>';
+    }
     const isActor = deviceCategory(s) === 'actor';
     // Address column: for sensors show the device address; for actors show the
     // (virtual) sender id; for bidirectional devices show both.
@@ -248,7 +258,7 @@ function renderSensors() {
       <td class="mono">${addrHtml}</td>
       <td><span class="mono">${eep}</span>${eepName ? '<div style="color:var(--text-muted);font-size:11px">' + eepName + '</div>' : ''}</td>
       <td><span class="cat-badge ${catCls}">${catTxt}</span>${badges.join('')}</td>
-      <td><span class="status-badge ${statusCls}">${statusTxt}</span></td>
+      <td class="mono">${rssiHtml}</td>
       <td class="mono">${escapeHtml(fmtLastSeen(s.last_seen))}</td>
       <td class="mono latest-val"><a href="#" data-graph="${escapeHtml(s.name)}" title="Show history graph">${escapeHtml(fmtLatest(s))}</a></td>
       <td><div class="row-actions">
@@ -271,6 +281,20 @@ function renderSensors() {
   tbody.querySelectorAll('[data-edit]').forEach((btn) => {
     btn.addEventListener('click', () => openEdit(btn.getAttribute('data-edit')));
   });
+  // bind value graph links (latest values)
+  tbody.querySelectorAll('[data-graph]').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      showGraph(a.getAttribute('data-graph'), null);
+    });
+  });
+  // bind RSSI links
+  tbody.querySelectorAll('[data-rssi]').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      showGraph(a.getAttribute('data-rssi'), '_RSSI_');
+    });
+  });
 }
 
 /* ---------------- edit device ---------------- */
@@ -284,7 +308,7 @@ function openEdit(name) {
   $('e-address').value = (s.address !== undefined && s.address !== null && s.address !== 0xFFFFFFFF)
     ? '0x' + s.address.toString(16).toUpperCase().padStart(8, '0') : '';
   $('e-eep').value = s.eep || '';
-  $('e-eep-list').classList.remove('open');
+  populateEepSelect('e-eep', addMode, s.eep);
   $('edit-overlay').hidden = false;
 }
 
@@ -350,42 +374,20 @@ async function setLearn(on) {
 }
 
 /* ---------------- add sensor ---------------- */
-function initEepSearch() {
-  bindEepSearch('f-eep-search', 'f-eep-list', 'f-eep');
-}
-
-function bindEepSearch(inputId, listId, hiddenId) {
-  const input = $(inputId);
-  const list = $(listId);
-  const hidden = $(hiddenId);
-  if (!input || !list || !hidden) return;
-
-  input.addEventListener('input', () => {
-    const q = input.value.trim();
-    hidden.value = '';
-    if (q.length < 2) { list.classList.remove('open'); return; }
-    const matches = state.eep.filter((p) =>
-      (p.eep || '').toLowerCase().includes(q.toLowerCase()) ||
-      (p.name || '').toLowerCase().includes(q.toLowerCase())
-    ).slice(0, 50);
-    list.innerHTML = matches.length
-      ? matches.map((p) => `<div class="eep-option" data-eep="${escapeHtml(p.eep)}">
-          <span class="eep-name">${escapeHtml(p.name)}</span>
-          <span class="eep-code">${escapeHtml(p.eep)}</span>
-        </div>`).join('')
-      : '<div class="eep-empty">No matching EEP found</div>';
-    list.classList.add('open');
-
-    list.querySelectorAll('.eep-option').forEach((opt) => {
-      opt.addEventListener('click', () => {
-        input.value = opt.getAttribute('data-eep');
-        hidden.value = opt.getAttribute('data-eep');
-        list.classList.remove('open');
-      });
-    });
-  });
-
-  input.addEventListener('blur', () => setTimeout(() => list.classList.remove('open'), 150));
+function populateEepSelect(selectId, mode, selected) {
+  const sel = $(selectId);
+  if (!sel) return;
+  const catFilter = (p) => {
+    if (!mode) return true;
+    // sensors/senders: EEPs that measure (category sensor); actors/receivers:
+    // EEPs that receive commands (category actor, incl. bidirectional actors)
+    return (mode === 'actor') ? (p.category !== 'sensor') : (p.category !== 'actor');
+  };
+  const opts = (state.eep || []).filter(catFilter);
+  sel.innerHTML = '<option value="">' + t('select_eep') + '</option>' +
+    opts.map((p) => '<option value="' + escapeHtml(p.eep) + '"' +
+      ((p.eep === selected) ? ' selected' : '') + '>' +
+      escapeHtml(p.eep) + ' — ' + escapeHtml(p.name) + '</option>').join('');
 }
 
 function parseAddress(val) {
@@ -405,6 +407,9 @@ function setAddMode(mode) {
   const isActor = mode === 'actor';
   $('f-addr-field').hidden = isActor;
   $('f-sender-field').hidden = !isActor;
+  // EEP dropdown: repopulate filtered by the chosen category
+  populateEepSelect('f-eep', mode);
+  populateEepSelect('e-eep', mode);
   if (isActor && $('f-sender')) {
     // prefill a fresh (unused) virtual sender if available
     if (!$('f-sender').value) $('f-sender').selectedIndex = 0;
@@ -507,7 +512,10 @@ const I18N = {
     sensor: 'Sensor',
     no_actors: 'No actors configured.',
     no_sensors: 'No sensors configured.',
-    no_devices: 'No devices configured yet.' },
+    no_devices: 'No devices configured yet.',
+    col_rssi: 'RSSI',
+    select_eep: 'Select an EEP…',
+  },
   de: {
     subtitle: 'Web-Konfigurator', gateway: 'Gateway', mqtt: 'MQTT',
     teachin_title: 'Teach-In', add_device: 'Gerät hinzufügen',
@@ -527,7 +535,10 @@ const I18N = {
     sensor: 'Sensor',
     no_actors: 'Keine Aktoren konfiguriert.',
     no_sensors: 'Keine Sensoren konfiguriert.',
-    no_devices: 'Noch keine Geräte konfiguriert.' },
+    no_devices: 'Noch keine Geräte konfiguriert.',
+    col_rssi: 'RSSI',
+    select_eep: 'EEP auswählen…',
+  },
   fr: {
     subtitle: 'Configurateur Web', gateway: 'Passerelle', mqtt: 'MQTT',
     teachin_title: 'Enseignement', add_device: 'Ajouter un appareil',
@@ -547,7 +558,10 @@ const I18N = {
     sensor: 'Capteur',
     no_actors: 'Aucun actionneur configuré.',
     no_sensors: 'Aucun capteur configuré.',
-    no_devices: 'Aucun appareil configuré.' },
+    no_devices: 'Aucun appareil configuré.',
+    col_rssi: 'RSSI',
+    select_eep: 'Choisir un EEP…',
+  },
   it: {
     subtitle: 'Configuratore Web', gateway: 'Gateway', mqtt: 'MQTT',
     teachin_title: 'Teach-In', add_device: 'Aggiungi dispositivo',
@@ -567,7 +581,10 @@ const I18N = {
     sensor: 'Sensore',
     no_actors: 'Nessun attuatore configurato.',
     no_sensors: 'Nessun sensore configurato.',
-    no_devices: 'Nessun dispositivo configurato.' },
+    no_devices: 'Nessun dispositivo configurato.',
+    col_rssi: 'RSSI',
+    select_eep: 'Seleziona un EEP…',
+  },
 };
 
 let currentLang = 'en';
@@ -588,6 +605,12 @@ function applyTranslations() {
   if (learnBtn) learnBtn.textContent = state.learn ? t('stop_teachin') : t('start_teachin');
 }
 $('lang-select')?.addEventListener('change', (e) => setLang(e.target.value));
+// collapsible cards (e.g. Configuration)
+document.querySelectorAll('.card.collapsible > .card-header').forEach((h) => {
+  h.addEventListener('click', () => {
+    h.parentElement.classList.toggle('collapsed');
+  });
+});
 (function () {
   try {
     const saved = localStorage.getItem('enm-lang');
@@ -621,7 +644,5 @@ $('theme-toggle')?.addEventListener('click', () => {
 $('btn-learn-on')?.addEventListener('click', () => setLearn(!state.learn));
 
 /* ---------------- init ---------------- */
-initEepSearch();
-bindEepSearch('e-eep', 'e-eep-list', 'e-eep');
 loadStatus();
 setInterval(loadStatus, 2000);
