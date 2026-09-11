@@ -325,7 +325,10 @@ def test_teachin_captures_non_ute_devices():
         assert stored2[0]['rorg'] == 0xA5 and stored2[0]['func'] == 0x08 and stored2[0]['type'] == 0x01, \
             '4BS learn telegram should extract A5-08-01 exactly (not a guessed default)'
 
-        # --- 3. RPS F6 switch (no teach-in button): captured by RORG only ---
+        # --- 3. RPS F6 switch (no teach-in button): teachable via telegram ---
+        # RPS/F6 telegrams carry no EEP, so a sensible default profile for the
+        # RORG is assigned (F6-01-01 Push Button) - immediately usable, no
+        # manual edit required (refinable via the edit button).
         p3 = RadioPacket(PACKET.RADIO_ERP1,
                          data=[0xf6, 0x10, 0x00, 0x55, 0x66, 0x77, 0x88, 0x00],
                          optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
@@ -336,7 +339,8 @@ def test_teachin_captures_non_ute_devices():
         stored3 = [s for s in com._store.all() if s['address'] == 0x55667788]
         assert len(stored3) == 1
         assert stored3[0]['rorg'] == 0xF6
-        assert 'func' not in stored3[0], 'F6 without a learn telegram should be stored by RORG only (user sets EEP)'
+        assert stored3[0]['func'] == 0x01, 'F6 should be teachable with a default EEP (Push Button, no manual edit)'
+        assert stored3[0]['type'] == 0x01
 
 
 def test_send_teachin_to_actor():
