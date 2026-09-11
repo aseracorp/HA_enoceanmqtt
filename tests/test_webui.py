@@ -275,6 +275,97 @@ def test_bidirectional_and_smartack_reply():
         com._send_bidirectional_reply(bs4b, com.sensors[1])
         assert len(com.enocean.sent) == n, 'plain sensor should not trigger a reply'
 
+def test_teachin_captures_non_ute_devices():
+    """learn mode captures unknown devices sending regular telegrams
+    (4BS data, RPS/F6 switches without a teach-in button) - not just UTE"""
+    import datetime
+    from enocean.protocol.packet import RadioPacket
+
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        # --- 1. 4BS regular data telegram (like the user's log) ---
+        p = RadioPacket(PACKET.RADIO_ERP1,
+                        data=[0xa5, 0xa0, 0x2e, 0xea, 0x0d, 0x05, 0xa2, 0xa1, 0x38, 0x00],
+                        optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
+        p.parse()
+        p.received = datetime.datetime.utcnow()
+        com.set_learn_mode(True)
+        com._process_radio_packet(p)
+        stored = com._store.all()
+        assert len(stored) == 1, 'unknown 4BS device should be captured in learn mode'
+        assert stored[0]['address'] == 0x05A2A138
+        assert stored[0]['rorg'] == 0xA5
+        assert com.learn_mode is False, 'teach-in should be one-shot'
+
+        # --- 2. 4BS learn telegram (LRN bit) extracts EEP ---
+        p2 = RadioPacket(PACKET.RADIO_ERP1,
+                         data=[0xa5, 0x08, 0x00, 0x28, 0x02, 0x11, 0x22, 0x33, 0x44, 0x00],
+                         optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
+        p2.parse()
+        p2.received = datetime.datetime.utcnow()
+        assert com._is_4bs_learn_telegram(p2) is True
+        com.set_learn_mode(True)
+        com._process_radio_packet(p2)
+        stored2 = [s for s in com._store.all() if s['address'] == 0x11223344]
+        assert len(stored2) == 1
+        assert stored2[0]['rorg'] == 0xA5 and stored2[0]['func'] == 0x02 and stored2[0]['type'] == 0x05
+
+        # --- 3. RPS F6 switch (no teach-in button) ---
+        p3 = RadioPacket(PACKET.RADIO_ERP1,
+                         data=[0xf6, 0x10, 0x00, 0x55, 0x66, 0x77, 0x88, 0x00],
+                         optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
+        p3.parse()
+        p3.received = datetime.datetime.utcnow()
+        com.set_learn_mode(True)
+        com._process_radio_packet(p3)
+        stored3 = [s for s in com._store.all() if s['address'] == 0x55667788]
+        assert len(stored3) == 1
+        assert stored3[0]['rorg'] == 0xF6
+        assert stored3[0]['func'] == 0x01, 'F6 should get a default EEP (push button)'
+
+
+def test_send_teachin_to_actor():
+    """sending a teach-in telegram to an actor works; plain sensors are rejected"""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        # 4BS actor (A5-20-01)
+        assert com.add_sensor({'name': 'my_actor', 'address': 0x0A0B0C0D, 'eep': 'A5-20-01'})['ok']
+        ok, msg = com._send_teachin('my_actor')
+        assert ok, msg
+        assert len(com.enocean.sent) >= 1
+        last = com.enocean.sent[-1]
+        assert last.rorg == 0xA5
+        assert getattr(last, 'learn', False) is not False
+
+        # plain one-way sensor -> rejected
+        assert com.add_sensor({'name': 'a_temp', 'address': 0x11111111, 'eep': 'A5-02-05'})['ok']
+        ok2, _ = com._send_teachin('a_temp')
+        assert ok2 is False
+
+        # unknown device -> rejected
+        ok3, _ = com._send_teachin('nope')
+        assert ok3 is False
+
 if __name__ == '__main__':
     test_sensor_store()
     test_eep_registry()
@@ -282,4 +373,7 @@ if __name__ == '__main__':
     test_web_interface()
     test_eep_classification()
     test_bidirectional_and_smartack_reply()
+    test_teachin_captures_non_ute_devices()
+    test_send_teachin_to_actor()
     print('ALL TESTS PASSED')
+

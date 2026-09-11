@@ -31,6 +31,15 @@ editing the configuration file:
 * **Universal Teach-In (UTE)** — enable teach-in mode, press the teach-in button on
   your EnOcean device and it is added to the configuration automatically (with a
   teach-in response sent for bidirectional devices).
+* **Teach-in without UTE** — many devices do not send UTE telegrams at all
+  (RPS/F6 rocker switches have no teach-in button, and regular 4BS/VLD sensors
+  just send data). With teach-in mode on, the first telegram from an unknown
+  device is captured and added automatically; 4BS learn telegrams (LRN bit)
+  have their EEP extracted directly, other devices get a default EEP for their
+  RORG that can be refined afterwards.
+* **Send teach-in to actors** — actors (4BS/VLD) have a teach-in button in the
+  web UI that transmits a teach-in telegram so the device registers this
+  gateway as its controller.
 * **Bi-directional telegrams** — A5-20-01 style 4BS actors and D2-11-01 smartACK
   sensors are replied to automatically. smartACK replies are sent on a fast path
   (before the MQTT publish) to stay within the device's tight response window.
@@ -57,6 +66,7 @@ therefore **no authentication is built in** — do not expose the port directly.
 | ------ | --------------------- | ------------------------------------ |
 | GET    | `/api/status`         | Sensors, EEP catalog and gateway state |
 | POST   | `/api/learn`          | Enable/disable UTE teach-in (`{"enabled":true}`) |
+| POST   | `/api/teachin`        | Send teach-in telegram to an actor (`{"name":"..."}`) |
 | POST   | `/api/sensors`        | Add a sensor (`{"name":"...","address":123,"eep":"A5-02-05"}`) |
 | DELETE | `/api/sensors/<name>` | Remove a sensor                      |
 
