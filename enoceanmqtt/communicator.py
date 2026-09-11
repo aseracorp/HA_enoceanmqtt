@@ -16,7 +16,7 @@ from enocean.protocol.constants import PACKET, RETURN_CODE, RORG
 import enocean.utils
 import paho.mqtt.client as mqtt
 
-from enoceanmqtt.sensor_store import SensorStore
+from enoceanmqtt.sensor_store import SensorStore, HistoryStore
 from enoceanmqtt.eep_registry import get_registry
 
 
@@ -52,6 +52,12 @@ class Communicator:
         # rolling history of decoded values (for the value graph)
         self._history = {}
         self._history_max = int(self.conf.get('webui_history', 200))
+        # persistent history so the graph has data across restarts
+        hist_path = self.conf.get('webui_history_store')
+        if not hist_path:
+            base = os.path.dirname(os.path.abspath(self._resolve_sensor_store_path() or ''))
+            hist_path = os.path.join(base, 'history.json') if base else None
+        self._history_store = HistoryStore(hist_path, self._history_max) if hist_path else None
 
         # EEP catalog + persistent store for web-added sensors
         self._eep_registry = get_registry()
@@ -379,7 +385,10 @@ class Communicator:
         if sensor is None:
             return {'ok': False, 'error': 'Device not found'}
         address = sensor.get('address')
-        hist = self._history.get(address, [])
+        if self._history_store is not None:
+            hist = self._history_store.get(address, self._history_max)
+        else:
+            hist = self._history.get(address, [])
         return {'ok': True, 'name': name, 'history': hist[-self._history_max:]}
 
     def save_config(self, payload):
@@ -1081,11 +1090,14 @@ class Communicator:
                     'ts': packet.received.isoformat() if packet.received else None,
                 }
                 # append to the rolling history for the value graph
+                entry = {'values': dict(mqtt_json),
+                         'ts': packet.received.isoformat() if packet.received else None}
                 hist = self._history.setdefault(address, [])
-                hist.append({'values': dict(mqtt_json),
-                             'ts': packet.received.isoformat() if packet.received else None})
+                hist.append(entry)
                 if len(hist) > self._history_max:
                     del hist[:len(hist) - self._history_max]
+                if self._history_store is not None:
+                    self._history_store.append(address, entry)
         else:
             # learn request received
             logging.info("learn request not emitted to mqtt")

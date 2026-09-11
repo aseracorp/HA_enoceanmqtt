@@ -96,3 +96,58 @@ class SensorStore:
             os.replace(tmp, self.path)
         except Exception as exc:   # pylint: disable=broad-except
             logging.error("Cannot write sensor store %s: %s", self.path, exc)
+
+
+class HistoryStore:
+    """JSON-backed rolling history of decoded values per device address.
+
+    The gateway keeps only an in-memory rolling buffer by default; persisting
+    to a file lets the web UI value graph show data across restarts. Each
+    device address maps to a list of {values, ts} entries (oldest first).
+    """
+
+    def __init__(self, path, max_entries=500):
+        self.path = path
+        self.max_entries = max_entries
+        self._data = {}
+        self._load()
+
+    def _load(self):
+        if not self.path or not os.path.isfile(self.path):
+            return
+        try:
+            with open(self.path, 'r', encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                self._data = data
+        except Exception as exc:   # pylint: disable=broad-except
+            logging.error("Cannot read history store %s: %s", self.path, exc)
+            self._data = {}
+
+    def _save(self):
+        if not self.path:
+            return
+        try:
+            tmp = self.path + '.tmp'
+            with open(tmp, 'w', encoding="utf-8") as f:
+                json.dump(self._data, f)
+            os.replace(tmp, self.path)
+        except Exception as exc:   # pylint: disable=broad-except
+            logging.error("Cannot write history store %s: %s", self.path, exc)
+
+    def append(self, address, entry):
+        hist = self._data.setdefault(str(address), [])
+        hist.append(entry)
+        if len(hist) > self.max_entries:
+            del hist[:len(hist) - self.max_entries]
+        self._save()
+
+    def get(self, address, limit=None):
+        hist = self._data.get(str(address), [])
+        if limit:
+            hist = hist[-limit:]
+        return hist
+
+    def latest(self, address):
+        hist = self._data.get(str(address), [])
+        return hist[-1] if hist else None

@@ -47,8 +47,8 @@ async function loadStatus() {
     renderGateway();
     renderLearn();
     renderSensors();
-    populateEepSelect('f-eep', addMode);
-    populateEepSelect('e-eep', addMode);
+    populateEepDatalist('f-eep-list', addMode);
+    populateEepDatalist('e-eep-list', addMode);
     populateSenders(state.virtual_senders);
     applyTranslations();
     loadConfig();
@@ -65,10 +65,10 @@ function renderGateway() {
 
   if (gw) {
     gwEl.className = 'pill ' + (gw.connected ? 'ok' : 'bad');
-    gwEl.innerHTML = '<span class="dot"></span>Gateway ' + (gw.connected ? 'connected' : 'offline');
+    gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + (gw.connected ? t('connected') : t('offline'));
     mqttEl.className = 'pill ' + (gw.mqtt ? 'ok' : 'bad');
-    mqttEl.innerHTML = '<span class="dot"></span>MQTT ' + (gw.mqtt ? 'connected' : 'offline');
-    baseEl.textContent = 'Base ID: ' + (gw.base_id || '—');
+    mqttEl.innerHTML = '<span class="dot"></span>MQTT ' + (gw.mqtt ? t('connected') : t('offline'));
+    baseEl.textContent = t('base_id') + ': ' + (gw.base_id || '—');
   }
 }
 
@@ -254,7 +254,7 @@ function renderSensors() {
   const cats = activeDeviceCat;
   const filtered = state.sensors.filter((s) => cats === 'all' || deviceCategory(s) === cats);
   const count = $('device-count');
-  if (count) count.textContent = state.sensors.length + ' device' + (state.sensors.length === 1 ? '' : 's');
+  if (count) count.textContent = state.sensors.length + ' ' + t('device_count');
 
   if (!filtered.length) {
     const msg = state.sensors.length ? (cats === 'actor' ? t('no_actors') : t('no_sensors')) : t('no_devices');
@@ -353,8 +353,9 @@ function openEdit(name) {
   $('e-name').value = s.name;
   $('e-address').value = (s.address !== undefined && s.address !== null && s.address !== 0xFFFFFFFF)
     ? '0x' + s.address.toString(16).toUpperCase().padStart(8, '0') : '';
-  $('e-eep').value = s.eep || '';
-  populateEepSelect('e-eep', addMode, s.eep);
+  $('e-eep-search').value = s.eep || '';
+  populateEepDatalist('e-eep-list', addMode);
+  updateEepInfo('e-eep-search', 'e-eep-info');
   $('edit-overlay').hidden = false;
 }
 
@@ -366,7 +367,7 @@ $('edit-overlay')?.addEventListener('click', (e) => {
 $('edit-ok')?.addEventListener('click', async () => {
   if (!editingDevice) return;
   const name = $('e-name').value.trim();
-  const eep = $('e-eep').value.trim();
+  const eep = $('e-eep-search').value.trim();
   const addrVal = $('e-address').value.trim();
   const address = addrVal ? parseAddress(addrVal) : null;
   if (addrVal && address === null) return toast(t('err_bad_address'), 'error');
@@ -422,33 +423,70 @@ async function setLearn(on) {
 /* ---------------- add sensor ---------------- */
 let eepFilter = '';
 
-function populateEepSelect(selectId, mode, selected) {
-  const sel = $(selectId);
-  if (!sel) return;
+// translated EEP description keywords (fallback: keep English)
+const EEP_NAME_TR = {
+  en: {},
+  de: { 'Battery Powered Actuator': 'Batteriebetriebener Aktor', 'Temperature Sensor': 'Temperatursensor', 'Push Button': 'Taster', 'Rocker Switch': 'Wippschalter', 'Smoke Detector': 'Rauchmelder', 'Window Handle': 'Fenster-Griff', 'Contact': 'Kontakt', 'Switch': 'Schalter', 'Dimmer': 'Dimmer', 'Blind': 'Jalousie', 'Valve': 'Ventil', 'Occupancy': 'Präsenz', 'Illumination': 'Beleuchtung' },
+  fr: { 'Battery Powered Actuator': 'Actionneur sur batterie', 'Temperature Sensor': 'Capteur de température', 'Push Button': 'Bouton-poussoir', 'Rocker Switch': 'Interrupteur à bascule', 'Smoke Detector': 'Détecteur de fumée', 'Window Handle': 'Poignée de fenêtre', 'Contact': 'Contact', 'Switch': 'Interrupteur', 'Dimmer': 'Variateur', 'Blind': 'Volet', 'Valve': 'Vanne', 'Occupancy': 'Présence', 'Illumination': 'Éclairage' },
+  it: { 'Battery Powered Actuator': 'Attuatore a batteria', 'Temperature Sensor': 'Sensore di temperatura', 'Push Button': 'Pulsante', 'Rocker Switch': 'Interruttore a bilanciere', 'Smoke Detector': 'Rivelatore di fumo', 'Window Handle': 'Maniglia finestra', 'Contact': 'Contatto', 'Switch': 'Interruttore', 'Dimmer': 'Dimmer', 'Blind': 'Tapparella', 'Valve': 'Valvola', 'Occupancy': 'Presenza', 'Illumination': 'Illuminazione' },
+};
+function translateEepName(name) {
+  const map = EEP_NAME_TR[currentLang] || {};
+  if (!map || !name) return name;
+  let out = name;
+  for (const k in map) {
+    if (out.includes(k)) out = out.replace(new RegExp(k, 'i'), map[k]);
+  }
+  return out;
+}
+
+function populateEepDatalist(datalistId, mode) {
+  const dl = $(datalistId);
+  if (!dl) return;
   const catFilter = (p) => {
     if (!mode) return true;
-    // sensor mode: measuring EEPs (category sensor)
-    // actor mode: receiving EEPs (category actor)
-    // bidirectional mode: EEPs that can both send and receive
     if (mode === 'sensor') return p.category === 'sensor';
     if (mode === 'actor') return p.category === 'actor';
     if (mode === 'bidirectional') return p.category === 'bidirectional';
     return true;
   };
-  const q = eepFilter.toLowerCase();
-  const opts = (state.eep || []).filter((p) =>
-    catFilter(p) && (!q ||
-      p.eep.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)));
-  sel.innerHTML = '<option value="">' + t('select_eep') + '</option>' +
-    opts.map((p) => '<option value="' + escapeHtml(p.eep) + '"' +
-      ((p.eep === selected) ? ' selected' : '') + '>' +
-      escapeHtml(p.eep) + ' — ' + escapeHtml(p.name) + '</option>').join('');
+  const opts = (state.eep || []).filter(catFilter);
+  dl.innerHTML = opts.map((p) =>
+    '<option value="' + escapeHtml(p.eep) + '">' + escapeHtml(translateEepName(p.name)) + '</option>').join('');
 }
-// EEP search-as-you-type filter
-$('f-eep-search')?.addEventListener('input', (e) => {
-  eepFilter = e.target.value;
-  populateEepSelect('f-eep', addMode);
-});
+
+function resolveEep(value) {
+  const v = (value || '').trim();
+  if (!v) return null;
+  const hit = (state.eep || []).find((p) =>
+    p.eep.toLowerCase() === v.toLowerCase() ||
+    p.eep.replace(/[-:]/g, '').toLowerCase() === v.replace(/[-:]/g, '').toLowerCase() ||
+    p.name.toLowerCase() === v.toLowerCase());
+  return hit ? hit.eep : (v.toUpperCase().includes('-') ? v.toUpperCase() : null);
+}
+
+function eepViewerUrl(eep) {
+  if (!eep) return 'https://www.enocean.com/en/enocean_modules/eep/';
+  const parts = eep.split('-');
+  if (parts.length === 3) {
+    return 'https://www.enocean.com/en/enocean_modules/eep/' + parts[0] + '-' + parts[1] + '-' + parts[2] + '/';
+  }
+  return 'https://www.enocean.com/en/enocean_modules/eep/';
+}
+function updateEepInfo(inputId, infoId) {
+  const input = $(inputId);
+  const info = $(infoId);
+  if (!input || !info) return;
+  const eep = resolveEep(input.value);
+  if (eep) {
+    info.hidden = false;
+    info.onclick = () => window.open(eepViewerUrl(eep), '_blank');
+  } else {
+    info.hidden = true;
+  }
+}
+$('f-eep-search')?.addEventListener('input', () => updateEepInfo('f-eep-search', 'f-eep-info'));
+$('e-eep-search')?.addEventListener('input', () => updateEepInfo('e-eep-search', 'e-eep-info'));
 
 function parseAddress(val) {
   let s = String(val || '').trim();
@@ -470,8 +508,8 @@ function setAddMode(mode) {
   $('f-addr-field').hidden = !showAddr;
   $('f-sender-field').hidden = !showSender;
   // EEP dropdown: repopulate filtered by the chosen category
-  populateEepSelect('f-eep', mode);
-  populateEepSelect('e-eep', mode);
+  populateEepDatalist('f-eep-list', mode);
+  populateEepDatalist('e-eep-list', mode);
   if (showSender && $('f-sender')) {
     // prefill a fresh (unused) virtual sender if available
     if (!$('f-sender').value) $('f-sender').selectedIndex = 0;
@@ -498,7 +536,7 @@ function populateSenders(senders) {
 $('add-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = $('f-name').value.trim();
-  const eep = $('f-eep').value;
+  const eep = resolveEep($('f-eep-search').value);
   if (!name) return toast(t('err_no_name'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
 
@@ -631,6 +669,12 @@ const I18N = {
     err_no_sender: 'Please select a sender ID',
     sensor_added: 'Sensor added', actor_added: 'Actor added', bidir_added: 'Bidirectional added',
     err_add_device: 'Failed to add device: ', device_removed: 'Device removed',
+    connected: 'connected',
+    offline: 'offline',
+    base_id: 'Base ID',
+    eep_placeholder: 'A5-20-01, temperature, switch…',
+    device_count: 'devices',
+    eep_viewer: 'Open in EEP viewer',
     err_remove_device: 'Failed to remove device: ',
   },
   de: {
@@ -667,6 +711,12 @@ const I18N = {
     err_no_sender: 'Bitte eine Sender-ID wählen',
     sensor_added: 'Sensor hinzugefügt', actor_added: 'Aktor hinzugefügt', bidir_added: 'Bidirektionales Gerät hinzugefügt',
     err_add_device: 'Gerät konnte nicht hinzugefügt werden: ', device_removed: 'Gerät entfernt',
+    connected: 'verbunden',
+    offline: 'offline',
+    base_id: 'Basis-ID',
+    eep_placeholder: 'A5-20-01, Temperatur, Schalter…',
+    device_count: 'Geräte',
+    eep_viewer: 'Im EEP-Viewer öffnen',
     err_remove_device: 'Gerät konnte nicht entfernt werden: ',
   },
   fr: {
@@ -703,6 +753,12 @@ const I18N = {
     err_no_sender: 'Veuillez choisir un ID émetteur',
     sensor_added: 'Capteur ajouté', actor_added: 'Actionneur ajouté', bidir_added: 'Appareil bidirectionnel ajouté',
     err_add_device: 'Échec de l\'ajout : ', device_removed: 'Appareil supprimé',
+    connected: 'connecté',
+    offline: 'hors ligne',
+    base_id: 'ID de base',
+    eep_placeholder: 'A5-20-01, température, interrupteur…',
+    device_count: 'appareils',
+    eep_viewer: 'Ouvrir dans la visionneuse EEP',
     err_remove_device: 'Échec de la suppression : ',
   },
   it: {
@@ -739,6 +795,12 @@ const I18N = {
     err_no_sender: 'Seleziona un ID mittente',
     sensor_added: 'Sensore aggiunto', actor_added: 'Attuatore aggiunto', bidir_added: 'Dispositivo bidirezionale aggiunto',
     err_add_device: 'Impossibile aggiungere il dispositivo: ', device_removed: 'Dispositivo rimosso',
+    connected: 'connesso',
+    offline: 'offline',
+    base_id: 'ID base',
+    eep_placeholder: 'A5-20-01, temperatura, interruttore…',
+    device_count: 'dispositivi',
+    eep_viewer: 'Apri nel visualizzatore EEP',
     err_remove_device: 'Impossibile rimuovere il dispositivo: ',
   },
 };
@@ -756,6 +818,13 @@ function applyTranslations() {
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     const key = el.getAttribute('data-i18n');
     if (key && t(key)) el.textContent = t(key);
+  });
+  document.querySelectorAll('[data-ph]').forEach((el) => {
+    const key = el.getAttribute('data-ph');
+    if (key && t(key)) el.setAttribute('placeholder', t(key));
+  });
+  document.querySelectorAll('.eep-info').forEach((el) => {
+    el.title = t('eep_viewer');
   });
   const learnBtn = $('btn-learn-on');
   if (learnBtn) learnBtn.textContent = state.learn ? t('stop_teachin') : t('start_teachin');

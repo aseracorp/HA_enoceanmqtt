@@ -643,10 +643,13 @@ def test_config_save_and_history():
         assert 'mqtt_keepalive = 42' in content
         assert 'webui_port = 8123' in content
 
-        # add a sensor + inject history
+        # add a sensor + inject history (both in-memory and persistent store)
         com.add_sensor({'name': 't', 'address': 0x12345678, 'eep': 'A5-02-05'})
-        com._history[0x12345678] = [{'values': {'TMP': 20.0}, 'ts': '2026-09-11T09:00:00Z'},
-                                    {'values': {'TMP': 21.0}, 'ts': '2026-09-11T10:00:00Z'}]
+        for tmp_c, ts in [(20.0, '2026-09-11T09:00:00Z'), (21.0, '2026-09-11T10:00:00Z')]:
+            entry = {'values': {'TMP': tmp_c}, 'ts': ts}
+            com._history.setdefault(0x12345678, []).append(entry)
+            if com._history_store:
+                com._history_store.append(0x12345678, entry)
         h = com.get_history('t')
         assert h['ok']
         assert len(h['history']) == 2
