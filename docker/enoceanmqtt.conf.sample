@@ -44,8 +44,21 @@ mqtt_pwd        = password
 ## Enable/Disable MQTT debugging. Requires --debug on the command line.
 mqtt_debug      = false
 
+## ---------------------------------------------------------------------------
+## Web interface (sensor management UI)
+## Put this behind the Cosmos Proxy (auth proxy) - no authentication built in.
+## ---------------------------------------------------------------------------
+# webui_disable     = false
+# webui_host        = 0.0.0.0
+# webui_port        = 8091
+# webui_sensor_store = /config/sensors.json   # where web-added sensors are saved
+
+
 
 ## all other sections define the sensors to monitor
+
+## Sensors added through the web interface (UTE teach-in or manual) are stored
+## in sensors.json (see webui_sensor_store) and do NOT need to be edited here.
 
 # Define an FSB14 device
 [my_fsb14]

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EnOceanMQTT · Sensor Manager</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23222222'/><circle cx='16' cy='16' r='7' fill='none' stroke='%23ff64c8' stroke-width='3'/><circle cx='16' cy='16' r='2.5' fill='%23c864ff'/></svg>">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 32 32" width="30" height="30">
+            <circle cx="16" cy="16" r="8" fill="none" stroke="#ff64c8" stroke-width="3"/>
+            <circle cx="16" cy="16" r="3" fill="#c864ff"/>
+          </svg>
+        </div>
+        <div>
+          <h1>EnOceanMQTT</h1>
+          <span class="subtitle">Sensor Manager</span>
+        </div>
+      </div>
+      <div class="gateway">
+        <span class="pill" id="gw-status"><span class="dot"></span>Gateway</span>
+        <span class="pill" id="mqtt-status"><span class="dot"></span>MQTT</span>
+        <span class="pill pill-accent" id="base-id">Base&nbsp;ID: —</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="content">
+    <!-- Teach-in banner -->
+    <section class="card teachin-card" id="learn-card">
+      <div class="teachin-info">
+        <h2>Universal Teach-In (UTE)</h2>
+        <p>
+          Enable teach-in mode, then press the <strong>teach-in button</strong> on your EnOcean
+          sensor. The sensor sends a <strong>UTE telegram</strong> with its EEP; it is added to
+          the configuration automatically and acknowledged.
+        </p>
+        <p class="hint">Teach-in mode automatically turns off after a device is received.</p>
+      </div>
+      <div class="teachin-actions">
+        <div class="switch-row">
+          <span id="learn-state" class="state-text">Teach-in OFF</span>
+          <label class="switch">
+            <input type="checkbox" id="learn-toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <button class="btn btn-primary" id="btn-learn-on">Start teach-in</button>
+      </div>
+    </section>
+
+    <!-- Add sensor -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Add sensor</h2>
+        <span class="card-sub">Manually configure a device using its address &amp; EEP</span>
+      </div>
+      <form id="add-form" class="add-form">
+        <div class="field">
+          <label for="f-name">Name</label>
+          <input type="text" id="f-name" placeholder="e.g. living_room_temperature" required>
+        </div>
+        <div class="field">
+          <label for="f-address">Address</label>
+          <input type="text" id="f-address" placeholder="0x003DD63B" required>
+        </div>
+        <div class="field field-grow">
+          <label for="f-eep-search">EEP (Equipment Profile)</label>
+          <input type="text" id="f-eep-search" placeholder="Search: temperature, switch, A5-02-05…" autocomplete="off">
+          <div class="eep-list" id="f-eep-list"></div>
+          <input type="hidden" id="f-eep">
+        </div>
+        <div class="field">
+          <label for="f-sender">Sender / Base ID <span class="opt">(optional)</span></label>
+          <input type="text" id="f-sender" placeholder="auto (gateway base id)">
+        </div>
+        <button class="btn btn-primary" type="submit" id="btn-add">Add sensor</button>
+      </form>
+    </section>
+
+    <!-- Sensors -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Configured sensors</h2>
+        <span class="card-sub" id="sensor-count">0 devices</span>
+      </div>
+      <div class="sensor-table-wrap">
+        <table class="sensor-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Address</th>
+              <th>EEP</th>
+              <th>Status</th>
+              <th>Last seen</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="sensor-body">
+            <tr class="empty-row"><td colspan="6">No sensors configured yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span id="footer-info">EnOceanMQTT web interface</span>
+      <span id="footer-error" class="error-text"></span>
+    </footer>
+  </main>
+</div>
+
+<!-- Confirm dialog -->
+<div class="modal-overlay" id="modal-overlay" hidden>
+  <div class="modal">
+    <h3 id="modal-title">Remove sensor?</h3>
+    <p id="modal-body">Are you sure?</p>
+    <div class="modal-actions">
+      <button class="btn" id="modal-cancel">Cancel</button>
+      <button class="btn btn-danger" id="modal-ok">Remove</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

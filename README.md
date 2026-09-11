@@ -13,6 +13,45 @@ The Python EnOcean library is based on an EEP.xml file which contains the defini
 As for EnOceanMQTT, it needs a configuration file in which are indicated among other things the MQTT parameters as well as the EnOcean devices to manage.  
 The Home Assistant overlay is in charge of creating automatically and managing MQTT devices in Home Assistant. It maps an EnOcean device to one or more MQTT devices in HA thanks to a mapping file.  
 
+
+# Web Interface (Sensor Manager)
+
+HA_enoceanmqtt embeds a small web interface to manage your EnOcean sensors without
+editing the configuration file:
+
+* **Status overview** — see all configured sensors, their EEP, online/offline
+  status and last-seen time.
+* **Add sensors** — manually add a sensor by address and EEP (the EEP picker is
+  generated from the same EnOcean EEP database as the official PDF).
+* **Universal Teach-In (UTE)** — enable teach-in mode, press the teach-in button on
+  your EnOcean device and it is added to the configuration automatically (with a
+  teach-in response sent for bidirectional devices).
+
+Sensors added through the web interface are stored in a `sensors.json` file
+(next to the configuration file, or as configured through `webui_sensor_store`)
+and are merged into the running configuration at startup.
+
+The interface listens on `0.0.0.0:8091` by default (`webui_host` / `webui_port`
+can be changed in the configuration). It is meant to be put behind the
+[Cosmos Proxy](https://github.com/azukaar/Cosmos-Server) (an authentication proxy),
+therefore **no authentication is built in** — do not expose the port directly.
+
+| Config option            | Default     | Description                                        |
+| ----------------------- | ----------- | ---------------------------------------------------|
+| `webui_disable`         | `false`     | Set to `1`/`true` to disable the web interface      |
+| `webui_host`            | `0.0.0.0`   | Bind address                                        |
+| `webui_port`            | `8091`      | Listen port                                         |
+| `webui_sensor_store`    | (auto)      | Where web-added sensors are persisted (`sensors.json`) |
+
+## API
+
+| Method | Path                  | Description                          |
+| ------ | --------------------- | ------------------------------------ |
+| GET    | `/api/status`         | Sensors, EEP catalog and gateway state |
+| POST   | `/api/learn`          | Enable/disable UTE teach-in (`{"enabled":true}`) |
+| POST   | `/api/sensors`        | Add a sensor (`{"name":"...","address":123,"eep":"A5-02-05"}`) |
+| DELETE | `/api/sensors/<name>` | Remove a sensor                      |
+
 # Standalone Installation
 
 HA_enoceanmqtt can be installed as a standard python application on a Linux system.

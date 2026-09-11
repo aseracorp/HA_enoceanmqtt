@@ -118,6 +118,10 @@ enoceanmqtt:
   ## Enable/Disable MQTT debugging. Requires --debug on the command line.
   mqtt_debug: false
 
+  ## Web interface (sensor management UI). Put behind the Cosmos Proxy.
+  webui_disable: false
+  webui_port: 8091
+
   # Set device list here
   #   devices:
   #     button/softremote: &rockerswitch
