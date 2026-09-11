@@ -58,19 +58,8 @@
     <section class="card teachin-card" id="learn-card">
       <div class="teachin-info">
         <h2 data-i18n="teachin_title">Teach-In</h2>
-        <p>
-          Start teach-in, then trigger the device you want to add: press its
-          <strong>teach-in button</strong> (or simply use a regular switch, e.g. an
-          F6 rocker — it does <strong>not</strong> need a teach-in button). The device is
-          added automatically. Devices using a <strong>4BS or UTE learn telegram</strong>
-          are recognised with their EEP; bi-directional devices are acknowledged.
-        </p>
-        <p class="hint">
-          If the EEP is not part of the telegram (e.g. RPS/F6 switches), a default
-          EEP for the device type is assigned - you can fine-tune it with the edit
-          button.
-          Teach-in mode automatically turns off after a device is received.
-        </p>
+        <p data-i18n="teachin_desc"></p>
+        <p class="hint" data-i18n="teachin_hint"></p>
       </div>
       <div class="teachin-actions">
         <button class="btn btn-primary" id="btn-learn-on" data-i18n="start_teachin">Start teach-in</button>
@@ -81,27 +70,28 @@
     <section class="card">
       <div class="card-header">
         <h2 data-i18n="add_device">Add device</h2>
-        <span class="card-sub">Manually add a sensor (sender) or an actor (receiver)</span>
+        <span class="card-sub" data-i18n="add_sub">Manually add a sensor (sender) or an actor (receiver)</span>
       </div>
       <div class="device-tabs" style="margin-bottom:14px">
         <button type="button" class="device-tab active" data-addcat="sensor" id="add-tab-sensor" data-i18n="add_sensor">Add Sensor (sender)</button>
         <button type="button" class="device-tab" data-addcat="actor" id="add-tab-actor" data-i18n="add_actor">Add Actor (receiver)</button>
+        <button type="button" class="device-tab" data-addcat="bidirectional" id="add-tab-bidir" data-i18n="add_bidir">Add Bidirectional</button>
       </div>
       <form id="add-form" class="add-form">
         <div class="field">
-          <label for="f-name">Name</label>
+          <label for="f-name" data-i18n="name">Name</label>
           <input type="text" id="f-name" placeholder="e.g. living_room_temperature" required>
         </div>
         <div class="field" id="f-addr-field">
-          <label for="f-address">Address</label>
+          <label for="f-address" data-i18n="address">Address</label>
           <input type="text" id="f-address" placeholder="0x003DD63B" required>
         </div>
         <div class="field" id="f-sender-field" hidden>
-          <label for="f-sender">Sender ID <span class="opt">(transceiver address)</span></label>
+          <label for="f-sender" data-i18n="sender_id">Sender ID</label>
           <select id="f-sender"></select>
         </div>
         <div class="field field-grow">
-          <label for="f-eep">EEP (Equipment Profile)</label>
+          <label for="f-eep" data-i18n="eep_label">EEP (Equipment Profile)</label>
           <select id="f-eep" required>
             <option value="">Select an EEP…</option>
           </select>
@@ -114,13 +104,13 @@
     <section class="card collapsible collapsed" id="config-card">
       <div class="card-header">
         <h2 data-i18n="configuration">Configuration</h2>
-        <span class="card-sub">[CONFIG] section of enoceanmqtt.conf - changes apply after restart</span>
+        <span class="card-sub" data-i18n="config_sub">[CONFIG] section of enoceanmqtt.conf - changes apply after restart</span>
       </div>
       <form id="config-form" class="add-form">
         <div class="config-grid" id="config-grid"></div>
         <div class="form-actions">
-          <button class="btn btn-primary" type="submit" id="btn-config-save">Save configuration</button>
-          <span class="card-sub">A restart is required for most settings to take effect.</span>
+          <button class="btn btn-primary" type="submit" id="btn-config-save" data-i18n="save_config">Save configuration</button>
+          <span class="card-sub" data-i18n="config_restart">A restart is required for most settings to take effect.</span>
         </div>
       </form>
     </section>
@@ -134,6 +124,7 @@
       <div class="device-tabs" role="tablist">
         <button class="device-tab active" data-cat="all" id="tab-all" data-i18n="all">All</button>
         <button class="device-tab" data-cat="sensor" id="tab-sensors" data-i18n="sensors">Sensors</button>
+        <button class="device-tab" data-cat="bidirectional" id="tab-bidir" data-i18n="bidirectional">Bidirectional</button>
         <button class="device-tab" data-cat="actor" id="tab-actors" data-i18n="actors">Actors</button>
       </div>
       <div class="sensor-table-wrap">
@@ -142,7 +133,7 @@
             <tr>
               <th data-i18n="col_name">Name</th>
               <th data-i18n="col_addr">Address / Sender</th>
-              <th>EEP</th>
+              <th data-i18n="col_eep">EEP</th>
               <th data-i18n="col_type">Type</th>
               <th data-i18n="col_rssi">RSSI</th>
               <th data-i18n="col_lastseen">Last seen</th>
@@ -158,7 +149,7 @@
     </section>
 
     <footer class="footer">
-      <span id="footer-info">HA_enoceanmqtt web configurator</span>
+      <span id="footer-info" data-i18n="footer_info">HA_enoceanmqtt web configurator</span>
       <span class="footer-links">
         <a href="https://github.com/aseracorp/HA_enoceanmqtt" target="_blank" rel="noopener">GitHub</a>
         <span class="footer-sep">·</span>
@@ -172,11 +163,11 @@
 <!-- Confirm dialog -->
 <div class="modal-overlay" id="modal-overlay" hidden>
   <div class="modal">
-    <h3 id="modal-title">Remove sensor?</h3>
-    <p id="modal-body">Are you sure?</p>
+    <h3 id="modal-title" data-i18n="remove_title">Remove sensor?</h3>
+    <p id="modal-body" data-i18n="remove_body">Are you sure?</p>
     <div class="modal-actions">
-      <button class="btn" id="modal-cancel">Cancel</button>
-      <button class="btn btn-danger" id="modal-ok">Remove</button>
+      <button class="btn" id="modal-cancel" data-i18n="cancel">Cancel</button>
+      <button class="btn btn-danger" id="modal-ok" data-i18n="remove">Remove</button>
     </div>
   </div>
 </div>
@@ -184,24 +175,24 @@
 <!-- edit device modal -->
 <div class="modal-overlay" id="edit-overlay" hidden>
   <div class="modal">
-    <h3>Edit device</h3>
+    <h3 data-i18n="edit_device">Edit device</h3>
     <div class="field">
-      <label for="e-name">Name</label>
+      <label for="e-name" data-i18n="name">Name</label>
       <input type="text" id="e-name" placeholder="device name">
     </div>
     <div class="field">
-      <label for="e-address">Address</label>
+      <label for="e-address" data-i18n="address">Address</label>
       <input type="text" id="e-address" placeholder="0x003DD63B">
     </div>
     <div class="field">
-      <label for="e-eep">EEP (Equipment Profile)</label>
+      <label for="e-eep" data-i18n="eep_label">EEP (Equipment Profile)</label>
       <select id="e-eep">
         <option value="">Select an EEP…</option>
       </select>
     </div>
     <div class="modal-actions">
-      <button class="btn" id="edit-cancel">Cancel</button>
-      <button class="btn btn-primary" id="edit-ok">Save</button>
+      <button class="btn" id="edit-cancel" data-i18n="cancel">Cancel</button>
+      <button class="btn btn-primary" id="edit-ok" data-i18n="save">Save</button>
     </div>
   </div>
 </div>
@@ -209,10 +200,10 @@
 <!-- value graph modal -->
 <div class="modal-overlay" id="graph-overlay" hidden>
   <div class="modal modal-wide">
-    <h3 id="graph-title">Value history</h3>
-    <div id="graph-body">No data.</div>
+    <h3 id="graph-title" data-i18n="graph_title">Value history</h3>
+    <div id="graph-body" data-i18n="graph_nodata">No data.</div>
     <div class="modal-actions">
-      <button class="btn" id="graph-close">Close</button>
+      <button class="btn" id="graph-close" data-i18n="close">Close</button>
     </div>
   </div>
 </div>

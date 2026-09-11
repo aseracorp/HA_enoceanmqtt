@@ -453,11 +453,20 @@ class Communicator:
         bidirectional = sensor.get('bidirectional', bidirectional)
         smartack = sensor.get('smartack', smartack)
 
-        # Categorise by data model: sensors have a device address; actors use a
-        # virtual sender ID (sender) and usually target 0xFFFFFFFF (broadcast).
-        # A device with a configured sender is an actor.
-        if sensor.get('sender') is not None or address == 0xFFFFFFFF:
+        # Categorise by data model:
+        #  - A BIDIRECTIONAL device (can both send and receive, e.g. A5-20-xx,
+        #    D2-11 smartACK, D2-01, D2-06) is its own third category - it is
+        #    ALWAYS bidirectional, regardless of whether a sender is set.
+        #  - An ACTOR is a virtual device (virtual=1 AND a sender ID, address
+        #    usually 0xFFFFFFFF) whose EEP is a one-way receiver.
+        #  - Everything else is a sensor (has a device address).
+        is_virtual = bool(sensor.get('virtual')) or address == 0xFFFFFFFF
+        if bidirectional:
+            category = 'bidirectional'
+        elif sensor.get('sender') is not None and is_virtual:
             category = 'actor'
+        else:
+            category = 'sensor'
 
         # mark UTC timestamps so the browser renders them in the local timezone
         last_seen_iso = None

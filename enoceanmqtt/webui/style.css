@@ -145,7 +145,8 @@ select option { background-color: var(--bg-elevated); color: var(--text); }
 /* collapsible card */
 .card.collapsible > .card-header { cursor: pointer; user-select: none; }
 .card.collapsible > .card-header::after {
-  content: '▾'; float: right; transition: transform 0.2s; color: var(--text-muted);
+  content: '▾'; float: right; font-size: 20px; line-height: 1;
+  margin-right: 4px; transition: transform 0.2s; color: var(--text-muted);
 }
 .card.collapsible.collapsed > .card-header::after { transform: rotate(-90deg); }
 .card.collapsible.collapsed > .card-header + * { display: none; }
@@ -324,6 +325,7 @@ select option { background-color: var(--bg-elevated); color: var(--text); }
   border: 1px solid var(--border-strong); background: var(--bg-surface); color: var(--text-secondary);
 }
 .cat-badge.actor { color: var(--primary); border-color: rgba(176,20,25,0.4); background: rgba(176,20,25,0.08); }
+.cat-badge.bidirectional { color: var(--secondary); border-color: rgba(105,12,15,0.4); background: rgba(105,12,15,0.10); }
 .cat-badge.sensor { color: var(--success); border-color: rgba(84,214,44,0.4); background: rgba(84,214,44,0.08); }
 .badge {
   display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px;
@@ -349,6 +351,8 @@ select option { background-color: var(--bg-elevated); color: var(--text); }
 .modal-wide { width: 640px; max-width: calc(100vw - 40px); }
 .graph-wrap { width: 100%; overflow: hidden; }
 .latest-val a { color: var(--primary); text-decoration: none; }
+.val-link { color: var(--primary); text-decoration: none; white-space: nowrap; }
+.val-link:hover { text-decoration: underline; }
 .latest-val a:hover { text-decoration: underline; }
 
 /* ---------------- footer ---------------- */
