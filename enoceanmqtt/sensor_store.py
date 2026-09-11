@@ -66,6 +66,23 @@ class SensorStore:
         self._save()
         return len(self._sensors) < before
 
+    def update(self, name, changes):
+        """update fields of a stored sensor by bare name.
+
+        ``changes`` is a dict of the fields to set (e.g. ``{'name': ...,
+        'rorg': ..., 'func': ..., 'type': ...}``). If ``changes`` contains a
+        new ``name``, the sensor is renamed. Returns the stored sensor or None.
+        """
+        for i, sensor in enumerate(self._sensors):
+            if sensor.get('name') == name:
+                updated = dict(sensor)
+                updated.update(changes)
+                # renaming: keep position stable, update the entry in place
+                self._sensors[i] = updated
+                self._save()
+                return dict(updated)
+        return None
+
     def _save(self):
         if not self.path:
             return

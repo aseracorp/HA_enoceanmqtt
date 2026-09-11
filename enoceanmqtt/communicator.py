@@ -176,8 +176,8 @@ class Communicator:
             'name': full_name,
             'address': stored['address'],
             'rorg': stored['rorg'],
-            'func': stored['func'],
-            'type': stored['type'],
+            'func': stored.get('func'),
+            'type': stored.get('type'),
             'source': 'dynamic',
             'persistent': '1',
         }
@@ -188,6 +188,18 @@ class Communicator:
         for key in ('category', 'bidirectional', 'smartack'):
             if stored.get(key) is not None:
                 sensor[key] = stored[key]
+        # resolve missing flags from the EEP registry so bidirectional /
+        # smartACK behaviour works even for freshly taught-in devices
+        if (stored.get('func') is not None and stored.get('type') is not None and
+                sensor.get('bidirectional') is None):
+            profile = self._eep_registry.get(sensor['rorg'], sensor['func'], sensor['type'])
+            if profile:
+                if sensor.get('category') is None:
+                    sensor['category'] = profile.get('category', 'sensor')
+                if sensor.get('bidirectional') is None:
+                    sensor['bidirectional'] = bool(profile.get('bidirectional'))
+                if sensor.get('smartack') is None:
+                    sensor['smartack'] = bool(profile.get('smartack'))
         return sensor
 
     def _load_dynamic_sensors(self, target_name=None):
@@ -273,6 +285,62 @@ class Communicator:
             return {'ok': True}
         return {'ok': False, 'error': 'Could not remove sensor'}
 
+    def update_sensor(self, name, payload):
+        """update a web-added sensor (rename and/or change the EEP)."""
+        name = str(name).strip()
+        stored = self._store.get(name)
+        if not stored:
+            return {'ok': False, 'error': 'Sensor not found'}
+
+        changes = {}
+        # optional rename
+        new_name = payload.get('name')
+        if new_name is not None:
+            new_name = str(new_name).strip()
+            if not new_name:
+                return {'ok': False, 'error': 'A sensor name is required'}
+            prefix = self.conf.get('mqtt_prefix', 'enocean/')
+            if new_name != name and any(
+                    s.get('name') == prefix + new_name for s in self.sensors):
+                return {'ok': False, 'error': 'A sensor with this name already exists'}
+            changes['name'] = new_name
+
+        # optional EEP change
+        eep = payload.get('eep')
+        if eep is not None:
+            eep = str(eep).strip()
+            parts = [p for p in eep.replace('0x', '').split('-') if p] if eep else []
+            if len(parts) != 3:
+                return {'ok': False, 'error': 'Invalid EEP, expected e.g. A5-08-01'}
+            try:
+                changes['rorg'] = int(parts[0], 16)
+                changes['func'] = int(parts[1], 16)
+                changes['type'] = int(parts[2], 16)
+            except ValueError:
+                return {'ok': False, 'error': 'Invalid EEP'}
+
+        if not changes:
+            return {'ok': False, 'error': 'Nothing to update'}
+
+        updated = self._store.update(name, changes)
+        if updated is None:
+            return {'ok': False, 'error': 'Could not update sensor'}
+
+        # reload the merged sensors (handles rename + EEP change + HA discovery)
+        prefix = self.conf.get('mqtt_prefix', 'enocean/')
+        old_full = prefix + name
+        old_sensor = next((s for s in self.sensors if s.get('name') == old_full), None)
+        self._load_dynamic_sensors()
+        new_full = prefix + (changes.get('name') or name)
+        new_sensor = next((s for s in self.sensors if s.get('name') == new_full), None)
+
+        # HA overlay: remove discovery of the old name, publish for the new
+        if old_sensor is not None and (changes.get('name') or old_full != new_full):
+            self._on_sensor_removed(old_sensor)
+        if new_sensor is not None:
+            self._on_sensors_changed(new_sensor)
+        return {'ok': True, 'sensor': self.describe_sensor(new_sensor) if new_sensor else None}
+
     def _on_sensors_changed(self, sensor=None):
         """hook called after sensors are added/changed (overridden by overlays)"""
         logging.debug("Sensors changed: %s", sensor.get('name') if sensor else 'all')
@@ -327,6 +395,7 @@ class Communicator:
         return {
             'name': display_name,
             'address': address,
+            'sender': sensor.get('sender'),
             'eep': eep,
             'eep_name': eep_name,
             'rorg_name': rorg_name,
@@ -385,10 +454,15 @@ class Communicator:
         name = 'learn_' + format(address, '08x')
         stored = {'name': name, 'address': address, 'rorg': rorg}
         if func is not None and type_ is not None:
+            # EEP was extracted from the telegram (e.g. a 4BS learn telegram)
             stored['func'] = func
             stored['type'] = type_
-        # pick a sane default EEP for the RORG if none was provided
-        if 'func' not in stored:
+        else:
+            # Devices like RPS/F6 rocker switches and 1BS contacts do not
+            # carry an EEP in their telegram - they are identified by their
+            # ID alone. Assign a sensible default profile for the RORG so the
+            # device is immediately usable after teach-in (no manual edit
+            # required); it can still be refined with the edit button.
             default = self._eep_registry.default_for_rorg(rorg)
             if default:
                 stored['func'] = default['func']
@@ -418,13 +492,52 @@ class Communicator:
         return bool((packet.data[1] >> 3) & 1)
 
     def _handle_4bs_learn_telegram(self, packet):
-        """extract the EEP from a 4BS learn telegram and register the device"""
+        """extract the EEP from a 4BS learn telegram and register the device.
+
+        The 4BS teach-in telegram encodes the EEP as:
+          DB3 bits 7..1 = FUNC (7 bits)
+          DB3 bit 0 + DB2 bits 7..2 = TYPE (6 bits)
+        (matches the EnOcean EEP 2.x spec and the enocean library's own
+        ``rorg_func``/``rorg_type`` extraction in ``RadioPacket.parse``).
+        """
         # data layout: [0]=RORG, [1]=DB0, [2]=DB1, [3]=DB2, [4]=DB3, [5..8]=sender
         db2 = packet.data[3]
         db3 = packet.data[4]
-        func = db3
-        type_ = db2 >> 3
-        return self._learn_unknown_device(packet, rorg=packet.rorg, func=func, type_=type_)
+        func = (db3 >> 1) & 0x7F
+        type_ = ((db3 & 0x01) << 5) | ((db2 >> 2) & 0x1F)
+        device = self._learn_unknown_device(packet, rorg=packet.rorg, func=func, type_=type_)
+        # bidirectional devices expect a teach-in response so the pairing is
+        # completed on both sides (we learned them, they learn us)
+        if device is not None and (device.get('bidirectional') or device.get('smartack')):
+            self._send_4bs_teachin_response(packet, func, type_)
+        return device
+
+    def _send_4bs_teachin_response(self, in_packet, func, type_):
+        """reply to a 4BS teach-in telegram with an acknowledge teach-in.
+
+        For bidirectional 4BS devices the sensor expects the controller to
+        confirm the teach-in; we send a 4BS telegram back with the LRN bit
+        set and the same EEP, targeting the device's sender address."""
+        if getattr(in_packet, 'sender', None):
+            destination = list(in_packet.sender)
+        else:
+            destination = None
+        sender = self.enocean_sender
+        if destination is None:
+            return
+        try:
+            packet = RadioPacket.create(RORG.BS4, func, type_,
+                                        sender=sender,
+                                        destination=destination,
+                                        learn=True)
+            # set the learn/teach-in bit (LRN) in DB0 and the contains-eep bit
+            if len(packet.data) >= 5:
+                packet.data[1] |= 0x88
+            self.enocean.send(packet)
+            logging.info("Sent 4BS teach-in response to %s (EEP %02X-%02X-%02X)",
+                         enocean.utils.to_hex_string(destination), RORG.BS4, func, type_)
+        except Exception as exc:   # pylint: disable=broad-except
+            logging.error("Failed to send 4BS teach-in response: %s", exc)
 
     def _handle_ute_packet(self, packet):
         """handle an incoming Universal Teach-In (UTE) telegram"""
@@ -1156,9 +1269,13 @@ class Communicator:
         # teach-in: if learn mode is active and the device is unknown, capture it.
         # This handles devices that do not send UTE telegrams at all - regular
         # 4BS/VLD sensors and RPS (F6) rocker switches just send normal data.
+        # 4BS learn telegrams also get a teach-in response (for bidirectional
+        # devices); mark that so we don't reply again below.
+        replied_teachin = False
         if not found_sensor and self.learn_mode:
             if self._is_4bs_learn_telegram(packet):
                 self._handle_4bs_learn_telegram(packet)
+                replied_teachin = True
             else:
                 self._learn_unknown_device(packet)
             # teach-in is one-shot for this press - a regular telegram does not
@@ -1192,7 +1309,8 @@ class Communicator:
         # window (~a few hundred ms), so answer BEFORE the (slower) MQTT
         # publish cycle. Other bidirectional devices get the reply after the
         # packet has been published.
-        needs_reply = self._needs_bidirectional_reply(packet, found_sensor)
+        needs_reply = (not replied_teachin) and \
+            self._needs_bidirectional_reply(packet, found_sensor)
         if needs_reply and found_sensor.get('smartack'):
             self._send_bidirectional_reply(packet, found_sensor)
 

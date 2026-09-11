@@ -35,9 +35,21 @@ def _asset(name):
         return None
 
 
+def _binary_asset(name):
+    """load a binary file from the webui directory, or None"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, 'webui', name)
+    try:
+        with open(path, 'rb') as f:
+            return f.read()
+    except OSError:
+        return None
+
+
 INDEX_HTML = _asset('index.html')
 STYLE_CSS = _asset('style.css')
 APP_JS = _asset('app.js')
+FAVICON_PNG = _binary_asset('icon.png')
 
 
 class WebInterface:
@@ -99,6 +111,9 @@ class WebInterface:
     def remove_sensor(self, name):
         return self.communicator.remove_sensor(name)
 
+    def update_sensor(self, name, payload):
+        return self.communicator.update_sensor(name, payload)
+
     # -- handler factory ------------------------------------------------------
     def _handler_class(self):
         web = self
@@ -147,6 +162,10 @@ class WebInterface:
                     if APP_JS is None:
                         return self._send(404, {'ok': False, 'error': 'not found'})
                     return self._send(200, APP_JS, 'application/javascript; charset=utf-8')
+                if self.command == 'GET' and path in ('/favicon.png', '/icon.png'):
+                    if FAVICON_PNG is None:
+                        return self._send(404, {'ok': False, 'error': 'not found'})
+                    return self._send(200, FAVICON_PNG, 'image/png')
 
                 # --- JSON API ---
                 if self.command == 'GET' and path == '/api/status':
@@ -167,6 +186,11 @@ class WebInterface:
                     name = path[len('/api/sensors/'):]
                     result = web.remove_sensor(name)
                     code = 200 if result.get('ok') else 404
+                    return self._send(code, result)
+                if self.command in ('PUT', 'POST') and path.startswith('/api/sensors/'):
+                    name = path[len('/api/sensors/'):]
+                    result = web.update_sensor(name, self._read_body())
+                    code = 200 if result.get('ok') else 400
                     return self._send(code, result)
 
                 return self._send(404, {'ok': False, 'error': 'not found'})

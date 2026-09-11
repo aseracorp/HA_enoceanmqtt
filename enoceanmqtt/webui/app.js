@@ -68,11 +68,7 @@ function renderGateway() {
 }
 
 function renderLearn() {
-  const toggle = $('learn-toggle');
-  const stateEl = $('learn-state');
   const btn = $('btn-learn-on');
-  if (toggle) toggle.checked = state.learn;
-  if (stateEl) { stateEl.textContent = state.learn ? 'Teach-in ON' : 'Teach-in OFF'; stateEl.className = 'state-text' + (state.learn ? ' on' : ''); }
   if (btn) btn.textContent = state.learn ? 'Stop teach-in' : 'Start teach-in';
   const card = $('learn-card');
   if (card) card.style.borderColor = state.learn ? 'rgba(255,100,200,0.5)' : '';
@@ -114,10 +110,20 @@ function renderSensors() {
     const eepName = s.eep_name ? escapeHtml(s.eep_name) : '';
     const statusCls = s.status === 'online' ? 'online' : (s.status === 'offline' ? 'offline' : 'never');
     const statusTxt = s.status === 'online' ? 'Online' : (s.status === 'offline' ? 'Offline' : 'Never seen');
-    const addr = s.address !== undefined ? '0x' + s.address.toString(16).toUpperCase().padStart(8, '0') : '—';
+    const isActor = deviceCategory(s) === 'actor';
+    // Address column: for sensors show the device address; for actors show the
+    // (virtual) sender id; for bidirectional devices show both.
+    const fmtAddr = (v) => v !== undefined && v !== null ? '0x' + Number(v).toString(16).toUpperCase().padStart(8, '0') : '—';
+    let addrHtml;
+    if (isActor) {
+      addrHtml = fmtAddr(s.sender);
+    } else if (s.bidirectional) {
+      addrHtml = fmtAddr(s.address) + '<div style="color:var(--text-muted);font-size:11px">send ' + fmtAddr(s.sender) + '</div>';
+    } else {
+      addrHtml = fmtAddr(s.address);
+    }
     const source = s.source === 'dynamic' ? ' <span class="pill" style="font-size:10px;padding:1px 6px">web</span>' : '';
     const name = escapeHtml(s.name);
-    const isActor = deviceCategory(s) === 'actor';
     const catTxt = isActor ? 'Actor' : 'Sensor';
     const catCls = isActor ? 'actor' : 'sensor';
     const badges = [];
@@ -125,13 +131,14 @@ function renderSensors() {
     if (s.smartack) badges.push('<span class="badge smartack" title="smartACK — requires fast acknowledgement">smartACK</span>');
     return `<tr data-name="${escapeHtml(s.name)}" data-cat="${catCls}">
       <td>${name}${source}</td>
-      <td class="mono">${addr}</td>
+      <td class="mono">${addrHtml}</td>
       <td><span class="mono">${eep}</span>${eepName ? '<div style="color:var(--text-muted);font-size:11px">' + eepName + '</div>' : ''}</td>
       <td><span class="cat-badge ${catCls}">${catTxt}</span>${badges.join('')}</td>
       <td><span class="status-badge ${statusCls}">${statusTxt}</span></td>
       <td class="mono">${escapeHtml(fmtLastSeen(s.last_seen))}</td>
       <td><div class="row-actions">
         ${isActor ? '<button class="icon-btn teachin-btn" title="Send teach-in telegram to this actor" data-teachin="${escapeHtml(s.name)}">⤓</button>' : ''}
+        <button class="icon-btn" title="Edit device" data-edit="${escapeHtml(s.name)}">✎</button>
         <button class="icon-btn" title="Remove device" data-del="${escapeHtml(s.name)}">✕</button>
       </div></td>
     </tr>`;
@@ -145,7 +152,48 @@ function renderSensors() {
   tbody.querySelectorAll('[data-teachin]').forEach((btn) => {
     btn.addEventListener('click', () => sendTeachIn(btn.getAttribute('data-teachin')));
   });
+  // bind edit buttons
+  tbody.querySelectorAll('[data-edit]').forEach((btn) => {
+    btn.addEventListener('click', () => openEdit(btn.getAttribute('data-edit')));
+  });
 }
+
+/* ---------------- edit device ---------------- */
+let editingDevice = null;
+
+function openEdit(name) {
+  const s = state.sensors.find((x) => x.name === name);
+  if (!s) return;
+  editingDevice = name;
+  $('e-name').value = s.name;
+  $('e-eep').value = s.eep || '';
+  $('e-eep-list').classList.remove('open');
+  $('edit-overlay').hidden = false;
+}
+
+$('edit-cancel')?.addEventListener('click', () => { $('edit-overlay').hidden = true; editingDevice = null; });
+$('edit-overlay')?.addEventListener('click', (e) => {
+  if (e.target === $('edit-overlay')) { $('edit-overlay').hidden = true; editingDevice = null; }
+});
+
+$('edit-ok')?.addEventListener('click', async () => {
+  if (!editingDevice) return;
+  const name = $('e-name').value.trim();
+  const eep = $('e-eep').value.trim();
+  try {
+    const res = await api('/api/sensors/' + encodeURIComponent(editingDevice), {
+      method: 'PUT',
+      body: JSON.stringify({ name: name, eep: eep })
+    });
+    if (!res.ok) throw new Error(res.error || 'update failed');
+    toast('Device updated', 'success');
+    $('edit-overlay').hidden = true;
+    editingDevice = null;
+    await loadStatus();
+  } catch (err) {
+    toast('Failed to update device: ' + err.message, 'error');
+  }
+});
 
 async function sendTeachIn(name) {
   try {
@@ -181,10 +229,14 @@ async function setLearn(on) {
 
 /* ---------------- add sensor ---------------- */
 function initEepSearch() {
-  const input = $('f-eep-search');
-  const list = $('f-eep-list');
-  const hidden = $('f-eep');
-  if (!input) return;
+  bindEepSearch('f-eep-search', 'f-eep-list', 'f-eep');
+}
+
+function bindEepSearch(inputId, listId, hiddenId) {
+  const input = $(inputId);
+  const list = $(listId);
+  const hidden = $(hiddenId);
+  if (!input || !list || !hidden) return;
 
   input.addEventListener('input', () => {
     const q = input.value.trim();
@@ -292,9 +344,10 @@ $('theme-toggle')?.addEventListener('click', () => {
 });
 
 /* ---------------- events ---------------- */
-$('learn-toggle')?.addEventListener('change', (e) => setLearn(e.target.checked));
 $('btn-learn-on')?.addEventListener('click', () => setLearn(!state.learn));
 
 /* ---------------- init ---------------- */
+initEepSearch();
+bindEepSearch('e-eep', 'e-eep-list', 'e-eep');
 loadStatus();
 setInterval(loadStatus, 5000);
