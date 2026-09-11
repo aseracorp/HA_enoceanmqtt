@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EnOceanMQTT · Sensor Manager</title>
+<title>HA_enoceanmqtt · Sensor Manager</title>
 <script>
   /* Resolve the theme before first paint to avoid a flash of the wrong
      mode: explicit choice in localStorage wins, otherwise follow the OS. */
@@ -20,7 +20,7 @@
   })();
 </script>
 <link rel="stylesheet" href="/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23222222'/><circle cx='16' cy='16' r='7' fill='none' stroke='%23ff64c8' stroke-width='3'/><circle cx='16' cy='16' r='2.5' fill='%23c864ff'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23222222'/><circle cx='16' cy='16' r='7' fill='none' stroke='%23B01419' stroke-width='3'/><circle cx='16' cy='16' r='2.5' fill='%23690C0F'/></svg>">
 </head>
 <body>
 <div class="app">
@@ -29,12 +29,12 @@
       <div class="brand">
         <div class="brand-mark">
           <svg viewBox="0 0 32 32" width="30" height="30">
-            <circle cx="16" cy="16" r="8" fill="none" stroke="#ff64c8" stroke-width="3"/>
-            <circle cx="16" cy="16" r="3" fill="#c864ff"/>
+            <circle cx="16" cy="16" r="8" fill="none" stroke="#B01419" stroke-width="3"/>
+            <circle cx="16" cy="16" r="3" fill="#690C0F"/>
           </svg>
         </div>
         <div>
-          <h1>EnOceanMQTT</h1>
+          <h1>HA_enoceanmqtt</h1>
           <span class="subtitle">Sensor Manager</span>
         </div>
       </div>
@@ -103,11 +103,16 @@
       </form>
     </section>
 
-    <!-- Sensors -->
+    <!-- Sensors / Actors -->
     <section class="card">
       <div class="card-header">
-        <h2>Configured sensors</h2>
-        <span class="card-sub" id="sensor-count">0 devices</span>
+        <h2>Devices</h2>
+        <span class="card-sub" id="device-count">0 devices</span>
+      </div>
+      <div class="device-tabs" role="tablist">
+        <button class="device-tab active" data-cat="all" id="tab-all">All</button>
+        <button class="device-tab" data-cat="sensor" id="tab-sensors">Sensors</button>
+        <button class="device-tab" data-cat="actor" id="tab-actors">Actors</button>
       </div>
       <div class="sensor-table-wrap">
         <table class="sensor-table">
@@ -116,20 +121,21 @@
               <th>Name</th>
               <th>Address</th>
               <th>EEP</th>
+              <th>Type</th>
               <th>Status</th>
               <th>Last seen</th>
               <th></th>
             </tr>
           </thead>
           <tbody id="sensor-body">
-            <tr class="empty-row"><td colspan="6">No sensors configured yet.</td></tr>
+            <tr class="empty-row"><td colspan="7">No devices configured yet.</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <footer class="footer">
-      <span id="footer-info">EnOceanMQTT web interface</span>
+      <span id="footer-info">HA_enoceanmqtt web interface</span>
       <span id="footer-error" class="error-text"></span>
     </footer>
   </main>

@@ -176,7 +176,7 @@ def test_web_interface():
         try:
             with urllib.request.urlopen(f'http://127.0.0.1:{port}/') as r:
                 body = r.read()
-                assert r.status == 200 and b'EnOceanMQTT' in body
+                assert r.status == 200 and b'HA_enoceanmqtt' in body
             with urllib.request.urlopen(f'http://127.0.0.1:{port}/style.css') as r:
                 assert b':root' in r.read()
             with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/status') as r:
@@ -186,9 +186,100 @@ def test_web_interface():
             web.stop()
 
 
+def test_eep_classification():
+    """profiles are classified as sensor/actor and marked bidir/smartack"""
+    reg = get_registry()
+
+    def p(eep):
+        r, f, t = [int(x, 16) for x in eep.split('-')]
+        return reg.get(r, f, t)
+
+    assert p('A5-02-05')['category'] == 'sensor'
+    assert p('A5-02-05')['bidirectional'] is False
+
+    # A5-20-01: bi-directional actor
+    assert p('A5-20-01')['category'] == 'actor'
+    assert p('A5-20-01')['bidirectional'] is True
+
+    # D2-11-01: smartACK sensor (added via override, not in old EEP.xml)
+    assert p('D2-11-01')['category'] == 'sensor'
+    assert p('D2-11-01')['smartack'] is True
+
+    # D2-01-01: actor (electronic switch) that is also bidirectional
+    assert p('D2-01-01')['category'] == 'actor'
+    assert p('D2-01-01')['bidirectional'] is True
+
+
+def test_bidirectional_and_smartack_reply():
+    """bidirectional devices get replied to; smartACK is sent fast (before publish)"""
+    import datetime
+    from enoceanmqtt.communicator import Communicator
+
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        # build a smartACK sensor (D2-11-01) and a normal sensor
+        com.sensors = [
+            {'name': 'enoceanmqtt/smart_device', 'address': 0xDEADBEEF,
+             'rorg': 0xD2, 'func': 0x11, 'type': 0x01, 'smartack': True},
+            {'name': 'enoceanmqtt/temp', 'address': 0x12345678,
+             'rorg': 0xA5, 'func': 0x02, 'type': 0x05, 'smartack': False,
+             'bidirectional': False},
+            {'name': 'enoceanmqtt/actor', 'address': 0x11111111,
+             'rorg': 0xA5, 'func': 0x14, 'type': 0x01, 'bidirectional': True,
+             'category': 'actor'},
+        ]
+        com._index_sensors()
+
+        # --- smartACK fast path: reply sent ---
+        from enocean.protocol.packet import RadioPacket
+        from enocean.protocol.constants import PACKET
+        # craft a VLD packet from the smart device (raw - the old enocean
+        # library does not know the D2-11-01 profile)
+        vld = RadioPacket(PACKET.RADIO_ERP1,
+                          data=[0xD2, 0x01, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF, 0x00],
+                          optional=[0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00])
+        vld.parse()
+        com._send_bidirectional_reply(vld, com.sensors[0])
+        assert len(com.enocean.sent) >= 1, 'smartACK reply should be sent'
+        sent = com.enocean.sent[-1]
+        assert sent.rorg == 0xD2, 'smartACK reply should be VLD'
+        assert sent.destination == [0xDE, 0xAD, 0xBE, 0xEF], \
+            'reply should target the device sender'
+
+        # --- bidirectional actor (A5-20-01) gets a reply too ---
+        bs4 = RadioPacket(PACKET.RADIO_ERP1,
+                          data=[0xA5, 0x00, 0x00, 0x00, 0x00, 0x11, 0x11, 0x11, 0x11, 0x00],
+                          optional=[0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00])
+        bs4.parse()
+        com._send_bidirectional_reply(bs4, com.sensors[2])
+        assert len(com.enocean.sent) >= 2, 'bidirectional actor reply should be sent'
+        assert com.enocean.sent[-1].destination == [0x11, 0x11, 0x11, 0x11]
+
+        # --- normal sensor does NOT get a reply ---
+        n = len(com.enocean.sent)
+        bs4b = RadioPacket(PACKET.RADIO_ERP1,
+                           data=[0xA5, 0x00, 0x00, 0x00, 0x00, 0x12, 0x34, 0x56, 0x78, 0x00],
+                           optional=[0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00])
+        bs4b.parse()
+        assert not com._needs_bidirectional_reply(bs4b, com.sensors[1])
+        com._send_bidirectional_reply(bs4b, com.sensors[1])
+        assert len(com.enocean.sent) == n, 'plain sensor should not trigger a reply'
+
 if __name__ == '__main__':
     test_sensor_store()
     test_eep_registry()
     test_ute_teachin()
     test_web_interface()
+    test_eep_classification()
+    test_bidirectional_and_smartack_reply()
     print('ALL TESTS PASSED')

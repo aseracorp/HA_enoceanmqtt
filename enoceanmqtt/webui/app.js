@@ -90,17 +90,26 @@ function fmtLastSeen(ts) {
   return then.toLocaleString();
 }
 
+let activeDeviceCat = 'all';
+
+function deviceCategory(s) {
+  return s.category === 'actor' ? 'actor' : 'sensor';
+}
+
 function renderSensors() {
   const tbody = $('sensor-body');
-  const count = $('sensor-count');
+  const cats = activeDeviceCat;
+  const filtered = state.sensors.filter((s) => cats === 'all' || deviceCategory(s) === cats);
+  const count = $('device-count');
   if (count) count.textContent = state.sensors.length + ' device' + (state.sensors.length === 1 ? '' : 's');
 
-  if (!state.sensors.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No sensors configured yet.</td></tr>';
+  if (!filtered.length) {
+    const msg = state.sensors.length ? (cats === 'actor' ? 'No actors configured.' : 'No sensors configured.') : 'No devices configured yet.';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="7">' + msg + '</td></tr>';
     return;
   }
 
-  tbody.innerHTML = state.sensors.map((s) => {
+  tbody.innerHTML = filtered.map((s) => {
     const eep = s.eep ? escapeHtml(s.eep) : '—';
     const eepName = s.eep_name ? escapeHtml(s.eep_name) : '';
     const statusCls = s.status === 'online' ? 'online' : (s.status === 'offline' ? 'offline' : 'never');
@@ -108,14 +117,21 @@ function renderSensors() {
     const addr = s.address !== undefined ? '0x' + s.address.toString(16).toUpperCase().padStart(8, '0') : '—';
     const source = s.source === 'dynamic' ? ' <span class="pill" style="font-size:10px;padding:1px 6px">web</span>' : '';
     const name = escapeHtml(s.name);
-    return `<tr data-name="${escapeHtml(s.name)}">
+    const isActor = deviceCategory(s) === 'actor';
+    const catTxt = isActor ? 'Actor' : 'Sensor';
+    const catCls = isActor ? 'actor' : 'sensor';
+    const badges = [];
+    if (s.bidirectional) badges.push('<span class="badge bidir" title="Bi-directional device">⇅ bidir</span>');
+    if (s.smartack) badges.push('<span class="badge smartack" title="smartACK — requires fast acknowledgement">smartACK</span>');
+    return `<tr data-name="${escapeHtml(s.name)}" data-cat="${catCls}">
       <td>${name}${source}</td>
       <td class="mono">${addr}</td>
       <td><span class="mono">${eep}</span>${eepName ? '<div style="color:var(--text-muted);font-size:11px">' + eepName + '</div>' : ''}</td>
+      <td><span class="cat-badge ${catCls}">${catTxt}</span>${badges.join('')}</td>
       <td><span class="status-badge ${statusCls}">${statusTxt}</span></td>
       <td class="mono">${escapeHtml(fmtLastSeen(s.last_seen))}</td>
       <td><div class="row-actions">
-        <button class="icon-btn" title="Remove sensor" data-del="${escapeHtml(s.name)}">✕</button>
+        <button class="icon-btn" title="Remove device" data-del="${escapeHtml(s.name)}">✕</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -125,6 +141,17 @@ function renderSensors() {
     btn.addEventListener('click', () => confirmRemove(btn.getAttribute('data-del')));
   });
 }
+
+function setDeviceCat(cat) {
+  activeDeviceCat = cat;
+  document.querySelectorAll('.device-tab').forEach((t) => {
+    t.classList.toggle('active', t.getAttribute('data-cat') === cat);
+  });
+  renderSensors();
+}
+document.querySelectorAll('.device-tab').forEach((t) => {
+  t.addEventListener('click', () => setDeviceCat(t.getAttribute('data-cat')));
+});
 
 /* ---------------- teach-in ---------------- */
 async function setLearn(on) {

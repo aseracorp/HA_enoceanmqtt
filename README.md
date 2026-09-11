@@ -19,13 +19,21 @@ The Home Assistant overlay is in charge of creating automatically and managing M
 HA_enoceanmqtt embeds a small web interface to manage your EnOcean sensors without
 editing the configuration file:
 
-* **Status overview** — see all configured sensors, their EEP, online/offline
-  status and last-seen time.
-* **Add sensors** — manually add a sensor by address and EEP (the EEP picker is
+* **Status overview** — see all configured devices (sensors **and** actors),
+  their EEP, category, online/offline status and last-seen time.
+* **Sensors vs actors** — devices are segregated into *Sensors* (measuring /
+  reporting devices) and *Actors* (devices that receive commands, e.g. switches,
+  dimmers, blinds). Use the tabs to filter. Bi-directional devices are shown
+  with a `⇅ bidir` badge, smartACK devices (e.g. D2-11-01) with a `smartACK`
+  badge.
+* **Add devices** — manually add a device by address and EEP (the EEP picker is
   generated from the same EnOcean EEP database as the official PDF).
 * **Universal Teach-In (UTE)** — enable teach-in mode, press the teach-in button on
   your EnOcean device and it is added to the configuration automatically (with a
   teach-in response sent for bidirectional devices).
+* **Bi-directional telegrams** — A5-20-01 style 4BS actors and D2-11-01 smartACK
+  sensors are replied to automatically. smartACK replies are sent on a fast path
+  (before the MQTT publish) to stay within the device's tight response window.
 
 Sensors added through the web interface are stored in a `sensors.json` file
 (next to the configuration file, or as configured through `webui_sensor_store`)

@@ -59,7 +59,8 @@ def load_config_file(config_files):
                 new_sens = {'name': mqtt_prefix + section}
                 for key in config_parser[section]:
                     try:
-                        if key in ('command', 'channel', 'publish_json', 'default_data', 'model'):
+                        if key in ('command', 'channel', 'publish_json', 'default_data', 'model',
+                                   'category', 'bidirectional', 'smartack', 'answer'):
                             new_sens[key] = config_parser[section][key]
                         else:
                             new_sens[key] = int(config_parser[section][key], 0)
