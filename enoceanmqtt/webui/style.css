@@ -230,6 +230,11 @@ html, body {
 .error-text { color: var(--danger); }
 
 /* ---------------- modal ---------------- */
+/* The [hidden] attribute must always win so the modal stays closed until
+   explicitly shown - without this, the `display: flex` below overrides the
+   browser's default [hidden] { display: none } and the overlay is visible
+   permanently, blocking the whole page. */
+.modal-overlay[hidden] { display: none !important; }
 .modal-overlay {
   position: fixed; inset: 0; z-index: 100;
   background: rgba(0,0,0,0.6);
