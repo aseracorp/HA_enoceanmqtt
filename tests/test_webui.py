@@ -619,6 +619,37 @@ def test_virtual_senders_range():
         assert 0xFF800000 not in senders
 
 
+def test_teachin_capture_no_autoadd():
+    """capture-only teach-in fills the dialog but does NOT persist the device"""
+    import datetime
+    from enocean.protocol.packet import RadioPacket
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+        # 4BS learn telegram A5-08-01
+        p = RadioPacket(PACKET.RADIO_ERP1,
+                        data=[0xa5, 0x20, 0x08, 0x02, 0x80, 0x11, 0x22, 0x33, 0x44, 0x00],
+                        optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
+        p.parse(); p.received = datetime.datetime.utcnow()
+        com.start_capture()
+        com._process_radio_packet(p)
+        assert com.captured_device is not None
+        assert com.captured_device['eep'] == 'A5-08-01'
+        assert com._store.all() == [], 'capture mode must NOT persist the device'
+        # get_captured clears it
+        dev = com.get_captured()
+        assert dev['eep'] == 'A5-08-01'
+        assert com.captured_device is None
+
+
 def test_next_free_sender():
     """next_free_sender returns the first unused virtual sender (base+1..)"""
     with tempfile.TemporaryDirectory() as tmp:
@@ -746,5 +777,6 @@ if __name__ == '__main__':
     test_latest_value_with_meta()
     test_smartack_is_bidirectional()
     test_next_free_sender()
+    test_teachin_capture_no_autoadd()
     print('ALL TESTS PASSED')
 
