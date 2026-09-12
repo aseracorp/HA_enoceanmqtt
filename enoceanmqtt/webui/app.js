@@ -213,6 +213,16 @@ const CONFIG_LABELS = {
   overlay: 'Overlay', webui_port: 'Web UI port', webui_disable: 'Disable web UI',
   db_file: 'Device DB file', webui_sensor_store: 'Sensor store file',
 };
+// translated config labels (de/fr/it) - falls back to English
+const CONFIG_LABELS_TR = {
+  de: { enocean_port: 'EnOcean-Port', mqtt_host: 'MQTT-Host', mqtt_port: 'MQTT-Port', mqtt_prefix: 'MQTT-Präfix', mqtt_keepalive: 'MQTT-Keepalive', mqtt_user: 'MQTT-Benutzer', mqtt_ssl: 'MQTT-SSL', log_packets: 'Pakete protokollieren', overlay: 'Overlay', webui_port: 'WebUI-Port', webui_disable: 'WebUI deaktivieren', db_file: 'Geräte-DB-Datei', webui_sensor_store: 'Sensor-Speicher' },
+  fr: { enocean_port: 'Port EnOcean', mqtt_host: 'Hôte MQTT', mqtt_port: 'Port MQTT', mqtt_prefix: 'Préfixe MQTT', mqtt_keepalive: 'Keepalive MQTT', mqtt_user: 'Utilisateur MQTT', mqtt_ssl: 'MQTT SSL', log_packets: 'Journaliser les paquets', overlay: 'Overlay', webui_port: 'Port WebUI', webui_disable: 'Désactiver WebUI', db_file: 'Fichier DB', webui_sensor_store: 'Stockage capteurs' },
+  it: { enocean_port: 'Porta EnOcean', mqtt_host: 'Host MQTT', mqtt_port: 'Porta MQTT', mqtt_prefix: 'Prefisso MQTT', mqtt_keepalive: 'Keepalive MQTT', mqtt_user: 'Utente MQTT', mqtt_ssl: 'MQTT SSL', log_packets: 'Registra pacchetti', overlay: 'Overlay', webui_port: 'Porta WebUI', webui_disable: 'Disabilita WebUI', db_file: 'File DB', webui_sensor_store: 'Archivio sensori' },
+};
+function configLabel(key) {
+  const tr = CONFIG_LABELS_TR[currentLang] || {};
+  return tr[key] || CONFIG_LABELS[key] || key;
+}
 
 async function loadConfig() {
   try {
@@ -225,11 +235,20 @@ async function loadConfig() {
 }
 
 function configViewHtml(conf, keys) {
-  return '<table class="config-table">' + keys.map((k) => {
-    const label = CONFIG_LABELS[k] || k;
-    const val = conf[k] === undefined || conf[k] === null ? '' : String(conf[k]);
-    return '<tr><td>' + escapeHtml(label) + '</td><td class="mono">' + escapeHtml(val) + '</td></tr>';
-  }).join('') + '</table>';
+  // 2 columns of name|value pairs -> 4 cells per row
+  const rows = [];
+  for (let i = 0; i < keys.length; i += 2) {
+    const cells = [];
+    for (let j = 0; j < 2; j++) {
+      const k = keys[i + j];
+      if (!k) { cells.push('<td></td><td></td>'); continue; }
+      const label = configLabel(k);
+      const val = conf[k] === undefined || conf[k] === null ? '' : String(conf[k]);
+      cells.push('<td class="k">' + escapeHtml(label) + '</td><td class="mono">' + escapeHtml(val) + '</td>');
+    }
+    rows.push('<tr>' + cells.join('') + '</tr>');
+  }
+  return '<table class="config-table config-4col">' + rows.join('') + '</table>';
 }
 
 function populateConfig(conf) {
@@ -261,12 +280,12 @@ function openConfigEdit() {
   const keys = Object.keys(conf).filter((k) => !CONFIG_HIDDEN.has(k));
   grid.classList.add('config-two-col');
   grid.innerHTML = keys.map((k) => {
-    const label = CONFIG_LABELS[k] || k;
+    const label = configLabel(k);
     const raw = conf[k];
     if (isBoolConf(k, raw)) {
       const checked = ['1', 'true', 'yes', 'on'].includes(String(raw == null ? '' : raw).trim().toLowerCase());
       return '<div class="field config-bool"><label for="cfg-' + escapeHtml(k) + '">' + escapeHtml(label) + '</label>' +
-        '<label class="switch row"><input type="checkbox" id="cfg-' + escapeHtml(k) + '" data-cfgkey="' + escapeHtml(k) + '"' + (checked ? ' checked' : '') + '><span class="slider"></span></label>' +
+        '<input type="checkbox" id="cfg-' + escapeHtml(k) + '" data-cfgkey="' + escapeHtml(k) + '"' + (checked ? ' checked' : '') + '>' +
         '<input type="hidden" data-cfgkey="' + escapeHtml(k) + '" data-boolhidden="' + escapeHtml(k) + '" value="' + (checked ? '1' : '0') + '"></div>';
     }
     return '<div class="field"><label for="cfg-' + escapeHtml(k) + '">' + escapeHtml(label) + '</label>' +
@@ -445,15 +464,21 @@ function openEdit(name) {
   $('e-default_data').value = (s.default_data !== undefined && s.default_data !== null)
     ? fmtAddrInput(s.default_data) : '';
   $('e-eep-search').value = s.eep || '';
-  // fields per device type: sensor=addr, actor=sender, bidirectional=both+settings
+  // fields per device type: sensor=Name/Address/EEP; actor=Name/Sender/EEP;
+  // bidirectional=Name/Address/Sender/EEP (direction/answer/default_data are
+  // filled automatically from the stored values, not shown for editing).
   const showAddr = cat !== 'actor';
   const showSender = cat !== 'sensor';
   $('e-addr-field').hidden = !showAddr;
   $('e-sender-field').hidden = !showSender;
-  $('e-dir-field').hidden = cat !== 'bidirectional';
-  $('e-answer-field').hidden = cat !== 'bidirectional';
-  $('e-default-field').hidden = cat !== 'bidirectional';
+  $('e-dir-field').hidden = true;
+  $('e-answer-field').hidden = true;
+  $('e-default-field').hidden = true;
   populateSenders($('e-sender'), state.virtual_senders, s.sender);
+  if (s.sender !== undefined && s.sender !== null) {
+    const selE = $('e-sender');
+    if (selE) selE.value = fmtAddr(s.sender);
+  }
   populateEepDatalist('e-eep-list', addMode);
   updateEepInfo('e-eep-search', 'e-eep-info');
   } catch (e) {
@@ -667,14 +692,18 @@ let addMode = 'sensor';
 function populateSenders(senders, selOrNull, selected) {
   const sel = selOrNull || $('f-sender');
   if (!sel) return;
+  // never trust the argument - coerce to an array
+  const list = (Array.isArray(senders) ? senders
+    : (Array.isArray(state && state.virtual_senders) ? state.virtual_senders : []));
   const used = new Set(state.sensors.filter((s) => s.sender).map((s) => s.sender));
-  const opts = (senders || []).map((v) => {
+  const opts = list.map((v) => {
     const hex = fmtAddr(v);
     const isUsed = used.has(v);
     const isSel = (selected !== undefined && selected !== null && Number(selected) === v);
     return '<option value="' + hex + '"' + (isUsed && !isSel ? ' disabled' : '') + (isSel ? ' selected' : '') + '>' + hex + (isUsed && !isSel ? ' (used)' : '') + '</option>';
   });
   sel.innerHTML = opts.length ? opts.join('') : '<option value="">(no base ID yet)</option>';
+  sel.disabled = opts.length === 0;
 }
 
 /* ---------------- Add-device modals ---------------- */
@@ -900,7 +929,7 @@ const I18N = {
     add_sensor: 'Sensor', add_actor: 'Actor', add_bidir: 'Bidirectional', add: 'Add',
     teachin_active: 'Teach-in active - press the button on your sensor…',
     sensor_name: 'Sensor name', cancel: 'Cancel', save_sensor: 'Save sensor',
-    desc_sensor: 'Measuring device (sender)', desc_actor: 'Receiving device', desc_bidir: 'Sends and receives',
+    desc_sensor: 'Sender', desc_actor: 'Receiver', desc_bidir: 'Sends and receives',
     name: 'Name', address: 'Address', sender_id: 'Sender ID', eep_label: 'EEP (Equipment Profile)',
     all: 'All', sensors: 'Sensors', actors: 'Actors', devices: 'Devices',
     configuration: 'Configuration', config_sub: '[CONFIG] section of enoceanmqtt.conf',
@@ -928,29 +957,25 @@ const I18N = {
     teachin_enabled: 'Teach-in enabled - press the button on your device', teachin_disabled: 'Teach-in disabled',
     err_teachin: 'Failed to change teach-in: ',
     err_no_name: 'Please enter a name', err_no_eep: 'Please select an EEP from the list',
-    err_no_sender: 'Please select a sender ID',
-    sensor_added: 'Sensor added', actor_added: 'Actor added', bidir_added: 'Bidirectional added',
-    err_add_device: 'Failed to add device: ', device_removed: 'Device removed',
     manual_hint: 'or fill in the fields below manually.',
-    manual_hint: 'oder füllen Sie die Felder unten manuell aus.',
-    manual_hint: 'ou remplissez les champs ci-dessous manuellement.',
-    manual_hint: 'oppure compila i campi qui sotto manualmente.',
     send_teachin: 'Send teach-in',
     save_actor: 'Save actor',
     save_device: 'Save device',
-    manual_hint: 'or fill in the fields below manually.',
+    manual_hint: 'oder füllen Sie die Felder unten manuell aus.',
     send_teachin: 'Teach-In senden',
     save_actor: 'Aktor speichern',
     save_device: 'Gerät speichern',
-    manual_hint: 'oder füllen Sie die Felder unten manuell aus.',
+    manual_hint: 'ou remplissez les champs ci-dessous manuellement.',
     send_teachin: 'Envoyer l\'enseignement',
     save_actor: 'Enregistrer l\'actionneur',
     save_device: 'Enregistrer l\'appareil',
-    manual_hint: 'ou remplissez les champs ci-dessous manuellement.',
+    manual_hint: 'oppure compila i campi qui sotto manualmente.',
     send_teachin: 'Invia teach-in',
     save_actor: 'Salva attuatore',
     save_device: 'Salva dispositivo',
-    manual_hint: 'oppure compila i campi qui sotto manualmente.',
+    err_no_sender: 'Please select a sender ID',
+    sensor_added: 'Sensor added', actor_added: 'Actor added', bidir_added: 'Bidirectional added',
+    err_add_device: 'Failed to add device: ', device_removed: 'Device removed',
     err_remove_device: 'Failed to remove device: ',
   },
   de: {
@@ -962,7 +987,7 @@ const I18N = {
     add_sensor: 'Sensor', add_actor: 'Aktor', add_bidir: 'Bidirektional', add: 'Hinzufügen',
     teachin_active: 'Anlernen aktiv - Taste am Sensor drücken…',
     sensor_name: 'Sensorname', cancel: 'Abbrechen', save_sensor: 'Sensor speichern',
-    desc_sensor: 'Messgerät (Sender)', desc_actor: 'Empfangsgerät', desc_bidir: 'Sendet und empfängt',
+    desc_sensor: 'Sender', desc_actor: 'Empfänger', desc_bidir: 'Sendet und empfängt',
     name: 'Name', address: 'Adresse', sender_id: 'Sender-ID', eep_label: 'EEP (Geräteprofil)',
     all: 'Alle', sensors: 'Sensoren', actors: 'Aktoren', devices: 'Geräte',
     configuration: 'Konfiguration', config_sub: '[CONFIG]-Abschnitt von enoceanmqtt.conf',
@@ -1004,7 +1029,7 @@ const I18N = {
     add_sensor: 'Capteur', add_actor: 'Actionneur', add_bidir: 'Bidirectionnel', add: 'Ajouter',
     teachin_active: 'Enseignement actif - appuyez sur le bouton du capteur…',
     sensor_name: 'Nom du capteur', cancel: 'Annuler', save_sensor: 'Enregistrer le capteur',
-    desc_sensor: 'Appareil de mesure (émetteur)', desc_actor: 'Appareil récepteur', desc_bidir: 'Émet et reçoit',
+    desc_sensor: 'Émetteur', desc_actor: 'Récepteur', desc_bidir: 'Émet et reçoit',
     name: 'Nom', address: 'Adresse', sender_id: 'ID émetteur', eep_label: 'EEP (profil)',
     all: 'Tous', sensors: 'Capteurs', actors: 'Actionneurs', devices: 'Appareils',
     configuration: 'Configuration', config_sub: 'Section [CONFIG] de enoceanmqtt.conf',
@@ -1046,7 +1071,7 @@ const I18N = {
     add_sensor: 'Sensore', add_actor: 'Attuatore', add_bidir: 'Bidirezionale', add: 'Aggiungi',
     teachin_active: 'Teach-in attivo - premi il pulsante sul sensore…',
     sensor_name: 'Nome sensore', cancel: 'Annulla', save_sensor: 'Salva sensore',
-    desc_sensor: 'Dispositivo di misura (mittente)', desc_actor: 'Dispositivo ricevente', desc_bidir: 'Invia e riceve',
+    desc_sensor: 'Mittente', desc_actor: 'Ricevitore', desc_bidir: 'Invia e riceve',
     name: 'Nome', address: 'Indirizzo', sender_id: 'ID mittente', eep_label: 'EEP (profilo)',
     all: 'Tutti', sensors: 'Sensori', actors: 'Attuatori', devices: 'Dispositivi',
     configuration: 'Configurazione', config_sub: 'Sezione [CONFIG] di enoceanmqtt.conf',

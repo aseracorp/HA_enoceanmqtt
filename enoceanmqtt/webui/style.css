@@ -404,14 +404,17 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 /* ---------------- config table ---------------- */
 .config-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .config-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
-.config-table td:first-child { color: var(--text-secondary); width: 40%; }
+.config-table td.k { color: var(--text-secondary); width: 35%; }
 .config-table td.mono { font-family: 'JetBrains Mono', monospace; }
+.config-4col { table-layout: fixed; }
+.config-4col td:nth-child(odd) { color: var(--text-secondary); width: 17%; }
+.config-4col td:nth-child(even) { width: 33%; }
 
 /* ---------------- config editor ---------------- */
 .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .config-two-col { grid-template-columns: repeat(2, 1fr); }
 .config-bool { flex-direction: row; align-items: center; justify-content: space-between; }
-.config-bool .switch { align-self: flex-end; }
+.config-bool input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--primary); flex: 0 0 auto; margin: 0; }
 
 .form-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
 .modal-wide { width: 640px; max-width: calc(100vw - 40px); }
