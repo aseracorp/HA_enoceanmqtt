@@ -345,6 +345,15 @@ select option { background-color: var(--bg-elevated); color: var(--text); }
 }
 .icon-btn:hover { background: rgba(255,77,79,0.12); color: var(--danger); border-color: rgba(255,77,79,0.3); }
 
+/* EEP combobox + info icon */
+.eep-combo { position: relative; display: flex; align-items: center; gap: 6px; }
+.eep-combo input[type="text"] { flex: 1; }
+.eep-info {
+  cursor: pointer; font-size: 15px; color: var(--primary);
+  flex: 0 0 auto; padding: 0 4px; user-select: none;
+}
+.eep-info:hover { text-decoration: underline; }
+
 /* ---------------- config editor ---------------- */
 .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .form-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; }

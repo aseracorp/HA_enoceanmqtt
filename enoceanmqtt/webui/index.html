@@ -92,10 +92,11 @@
         </div>
         <div class="field field-grow">
           <label for="f-eep-search" data-i18n="eep_label">EEP (Equipment Profile)</label>
-          <input type="text" id="f-eep-search" placeholder="EEPs… type to filter" autocomplete="off">
-          <select id="f-eep" required>
-            <option value="">Select an EEP…</option>
-          </select>
+          <div class="eep-combo">
+            <input type="text" id="f-eep-search" list="f-eep-list" data-ph="eep_placeholder" placeholder="A5-20-01, temperature, switch…" autocomplete="off" required>
+            <span class="eep-info" id="f-eep-info" title="Open in EEP viewer" hidden>ⓘ</span>
+          </div>
+          <datalist id="f-eep-list"></datalist>
         </div>
         <button class="btn btn-primary" type="submit" id="btn-add" data-i18n="add_device">Add device</button>
       </form>
@@ -186,10 +187,12 @@
       <input type="text" id="e-address" placeholder="0x003DD63B">
     </div>
     <div class="field">
-      <label for="e-eep" data-i18n="eep_label">EEP (Equipment Profile)</label>
-      <select id="e-eep">
-        <option value="">Select an EEP…</option>
-      </select>
+      <label for="e-eep-search" data-i18n="eep_label">EEP (Equipment Profile)</label>
+      <div class="eep-combo">
+        <input type="text" id="e-eep-search" list="e-eep-list" data-ph="eep_placeholder" placeholder="A5-20-01, temperature, switch…" autocomplete="off">
+        <span class="eep-info" id="e-eep-info" title="Open in EEP viewer" hidden>ⓘ</span>
+        <datalist id="e-eep-list"></datalist>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn" id="edit-cancel" data-i18n="cancel">Cancel</button>
