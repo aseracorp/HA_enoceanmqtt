@@ -60,16 +60,15 @@ function renderGateway() {
   const gw = state.gateway;
   const gwEl = $('gw-status');
   const mqttEl = $('mqtt-status');
-  const baseEl = $('base-id');
 
   if (gw) {
     gwEl.className = 'pill ' + (gw.connected ? 'ok' : 'bad');
     const gwAddr = (state.config && state.config.enocean_port) ? state.config.enocean_port : (gw.base_id || '—');
-    gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + escapeHtml(String(gwAddr));
+    gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + escapeHtml(String(gwAddr)) +
+      (gw.base_id ? ' (' + escapeHtml(String(gw.base_id)) + ')' : '');
     mqttEl.className = 'pill ' + (gw.mqtt ? 'ok' : 'bad');
     const mqttAddr = (state.config && state.config.mqtt_host) ? state.config.mqtt_host + (state.config.mqtt_port ? ':' + state.config.mqtt_port : '') : '—';
     mqttEl.innerHTML = '<span class="dot"></span>MQTT ' + escapeHtml(String(mqttAddr));
-    baseEl.textContent = t('base_id') + ': ' + (gw.base_id || '—');
     // hover tooltips with configured settings
     const cfg = state.config || {};
     if (cfg.enocean_port) gwEl.setAttribute('data-tip', 'Port: ' + cfg.enocean_port + (cfg.log_packets !== undefined ? '\nLog packets: ' + cfg.log_packets : ''));
@@ -145,17 +144,24 @@ async function showGraph(name, field) {
 function renderMiniGraph(svgId, pts, key) {
   const svg = document.getElementById(svgId);
   if (!svg || pts.length < 2) return;
-  const W = 600, H = 180, PAD = 8;
+  const W = 600, H = 180, PADL = 46, PADR = 10, PADT = 10, PADB = 22, PW = W - PADL - PADR, PH = H - PADT - PADB;
   const vals = pts.map((p) => p.v);
   const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
   const span = (max - min) || 1;
   const t0 = pts[0].t, t1 = pts[pts.length - 1].t || (t0 + 1);
-  const X = (t) => PAD + (t - t0) / (t1 - t0) * (W - 2 * PAD);
-  const Y = (v) => H - PAD - (v - min) / span * (H - 2 * PAD);
-  svg.innerHTML = '<polyline fill="none" stroke="var(--primary)" stroke-width="2" points="' +
+  const X = (t) => PADL + (t - t0) / (t1 - t0) * PW;
+  const Y = (v) => PADT + (1 - (v - min) / span) * PH;
+  const fmtV = (v) => (Math.round(v * 100) / 100).toString();
+  const fmtT = (t) => { const d = new Date(t); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
+  svg.innerHTML = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>' +
+    '<polyline fill="none" stroke="var(--primary)" stroke-width="2" points="' +
     pts.map((p) => X(p.t).toFixed(1) + ',' + Y(p.v).toFixed(1)).join(' ') + '"/>' +
-    '<text x="' + PAD + '" y="' + (H - 2) + '" fill="var(--text-muted)" font-size="11">' + escapeHtml(String(min)) + '</text>' +
-    '<text x="' + (W - PAD - 40) + '" y="' + (H - 2) + '" fill="var(--text-muted)" font-size="11">' + escapeHtml(String(max)) + '</text>' +
+    // Y axis labels (start = min at bottom, end = max at top), left-aligned
+    '<text x="' + (PADL - 6) + '" y="' + (Y(max) + 4) + '" fill="var(--text-muted)" font-size="12" text-anchor="end">' + escapeHtml(fmtV(max)) + '</text>' +
+    '<text x="' + (PADL - 6) + '" y="' + (Y(min) + 4) + '" fill="var(--text-muted)" font-size="12" text-anchor="end">' + escapeHtml(fmtV(min)) + '</text>' +
+    // X axis time labels (start at left, end at right)
+    '<text x="' + PADL + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="12">' + escapeHtml(fmtT(t0)) + '</text>' +
+    '<text x="' + (W - PADR) + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="12" text-anchor="end">' + escapeHtml(fmtT(t1)) + '</text>' +
     '<g id="mini-hover"></g>';
   // hover: nearest sample -> dot + context box (below the graph)
   const ctl = document.getElementById('mini-hoverctl');
@@ -167,7 +173,7 @@ function renderMiniGraph(svgId, pts, key) {
     for (const p of pts) { const d = Math.abs(X(p.t) - px); if (d < bestD) { bestD = d; best = p; } }
     const bx = X(best.t), by = Y(best.v);
     if (g) g.innerHTML = '<circle cx="' + bx.toFixed(1) + '" cy="' + by.toFixed(1) + '" r="4" fill="var(--primary)" stroke="#fff" stroke-width="1.5"/>' +
-      '<line x1="' + bx.toFixed(1) + '" y1="' + (PAD) + '" x2="' + bx.toFixed(1) + '" y2="' + (H - PAD) + '" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="3,3"/>';
+      '<line x1="' + bx.toFixed(1) + '" y1="' + PADT + '" x2="' + bx.toFixed(1) + '" y2="' + (H - PADB) + '" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="3,3"/>';
     if (ctl) {
       const d = new Date(best.t);
       ctl.hidden = false;

@@ -732,8 +732,6 @@ def test_config_save_and_history():
         for tmp_c, ts in [(20.0, '2026-09-11T09:00:00Z'), (21.0, '2026-09-11T10:00:00Z')]:
             entry = {'values': {'TMP': tmp_c}, 'ts': ts}
             com._history.setdefault(0x12345678, []).append(entry)
-            if com._history_store:
-                com._history_store.append(0x12345678, entry)
         h = com.get_history('t')
         assert h['ok']
         assert len(h['history']) == 2
