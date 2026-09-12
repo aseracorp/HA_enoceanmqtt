@@ -39,6 +39,7 @@
         <span class="pill" id="gw-status"><span class="dot"></span><span data-i18n="gateway">Gateway</span></span>
         <span class="pill" id="mqtt-status"><span class="dot"></span>MQTT</span>
         <span class="pill pill-accent" id="base-id">Base&nbsp;ID: —</span>
+        <button type="button" class="btn btn-primary config-btn" id="btn-top-config" title="Configuration" aria-label="Configuration">⚙</button>
         <select class="lang-select" id="lang-select" title="Language / Sprache / Langue / Lingua" aria-label="Language">
           <option value="en">EN</option>
           <option value="de">DE</option>
@@ -54,33 +55,6 @@
   </header>
 
   <main class="content">
-    <!-- Settings / Config (always visible, compact) -->
-    <section class="card" id="config-card">
-      <div class="card-header">
-        <h2 data-i18n="configuration">Configuration</h2>
-        <span class="card-sub" data-i18n="config_sub">[CONFIG] section of enoceanmqtt.conf</span>
-        <button class="btn" id="btn-config-edit" title="Edit configuration" aria-label="Edit configuration">✎</button>
-      </div>
-      <div class="config-view" id="config-view">
-        <span class="card-sub">Loading…</span>
-      </div>
-    </section>
-
-    <!-- Config edit popup -->
-    <div class="modal-overlay" id="configedit-overlay" hidden>
-      <div class="modal modal-wide">
-        <h3 data-i18n="edit_config">Edit configuration</h3>
-        <div class="config-grid" id="config-grid"></div>
-        <div class="modal-actions">
-          <button class="btn" id="configedit-cancel" data-i18n="cancel">Cancel</button>
-          <button class="btn" id="configedit-save" data-i18n="save_config">Save configuration</button>
-          <button class="btn btn-primary" id="configedit-save-restart">Save &amp; restart</button>
-        </div>
-      </div>
-    </div>
-
-
-
     <!-- Add device -->
     <section class="card">
       <div class="card-header">
@@ -161,6 +135,19 @@
     <div class="modal-actions">
       <button class="btn" id="modal-cancel" data-i18n="cancel">Cancel</button>
       <button class="btn btn-danger" id="modal-ok" data-i18n="remove">Remove</button>
+    </div>
+  </div>
+</div>
+
+<!-- Config edit popup -->
+<div class="modal-overlay" id="configedit-overlay" hidden>
+  <div class="modal modal-wide">
+    <h3 data-i18n="edit_config">Edit configuration</h3>
+    <div class="config-grid" id="config-grid"></div>
+    <div class="modal-actions">
+      <button class="btn" id="configedit-cancel" data-i18n="cancel">Cancel</button>
+      <button class="btn" id="configedit-save" data-i18n="save_config">Save configuration</button>
+      <button class="btn btn-primary" id="configedit-save-restart">Save &amp; restart</button>
     </div>
   </div>
 </div>
@@ -293,6 +280,10 @@
   </div>
 </div>
 
+<script src="/lang/en.js"></script>
+<script src="/lang/de.js"></script>
+<script src="/lang/fr.js"></script>
+<script src="/lang/it.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

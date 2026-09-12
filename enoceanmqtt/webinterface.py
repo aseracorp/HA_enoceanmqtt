@@ -191,6 +191,12 @@ class WebInterface:
                     if APP_JS is None:
                         return self._send(404, {'ok': False, 'error': 'not found'})
                     return self._send(200, APP_JS, 'application/javascript; charset=utf-8')
+                if self.command == 'GET' and path.startswith('/lang/'):
+                    lang_name = path[len('/lang/'):]
+                    text = _asset('lang/' + lang_name)
+                    if text is None:
+                        return self._send(404, {'ok': False, 'error': 'not found'})
+                    return self._send(200, text, 'application/javascript; charset=utf-8')
                 if self.command == 'GET' and path in ('/favicon.png', '/icon.png'):
                     if FAVICON_PNG is None:
                         return self._send(404, {'ok': False, 'error': 'not found'})

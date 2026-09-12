@@ -64,9 +64,11 @@ function renderGateway() {
 
   if (gw) {
     gwEl.className = 'pill ' + (gw.connected ? 'ok' : 'bad');
-    gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + (gw.connected ? t('connected') : t('offline'));
+    const gwAddr = (state.config && state.config.enocean_port) ? state.config.enocean_port : (gw.base_id || '—');
+    gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + escapeHtml(String(gwAddr));
     mqttEl.className = 'pill ' + (gw.mqtt ? 'ok' : 'bad');
-    mqttEl.innerHTML = '<span class="dot"></span>MQTT ' + (gw.mqtt ? t('connected') : t('offline'));
+    const mqttAddr = (state.config && state.config.mqtt_host) ? state.config.mqtt_host + (state.config.mqtt_port ? ':' + state.config.mqtt_port : '') : '—';
+    mqttEl.innerHTML = '<span class="dot"></span>MQTT ' + escapeHtml(String(mqttAddr));
     baseEl.textContent = t('base_id') + ': ' + (gw.base_id || '—');
     // hover tooltips with configured settings
     const cfg = state.config || {};
@@ -130,7 +132,7 @@ async function showGraph(name, field) {
     const pts = hist.filter((h) => h.values && h.values[key] !== undefined)
       .map((h) => ({ t: new Date(h.ts).getTime(), v: Number(h.values[key]) }));
     const isBinary = pts.every((p) => p.v === 0 || p.v === 1);
-    $('graph-body').innerHTML = '<div class="graph-wrap"><svg id="mini-graph" viewBox="0 0 600 180" preserveAspectRatio="none"><g id="mini-hover"></g></svg>' +
+    $('graph-body').innerHTML = '<div class="graph-wrap"><svg id="mini-graph" viewBox="0 0 600 180" preserveAspectRatio="none"></svg>' +
       '<div class="graph-hoverctl" id="mini-hoverctl" hidden></div></div>' +
       '<div class="graph-legend"><b>' + escapeHtml(key) + '</b> &middot; ' + pts.length + ' samples &middot; ' +
       (isBinary ? 'state' : 'value') + '</div>';
@@ -153,7 +155,8 @@ function renderMiniGraph(svgId, pts, key) {
   svg.innerHTML = '<polyline fill="none" stroke="var(--primary)" stroke-width="2" points="' +
     pts.map((p) => X(p.t).toFixed(1) + ',' + Y(p.v).toFixed(1)).join(' ') + '"/>' +
     '<text x="' + PAD + '" y="' + (H - 2) + '" fill="var(--text-muted)" font-size="11">' + escapeHtml(String(min)) + '</text>' +
-    '<text x="' + (W - PAD - 40) + '" y="' + (H - 2) + '" fill="var(--text-muted)" font-size="11">' + escapeHtml(String(max)) + '</text>';
+    '<text x="' + (W - PAD - 40) + '" y="' + (H - 2) + '" fill="var(--text-muted)" font-size="11">' + escapeHtml(String(max)) + '</text>' +
+    '<g id="mini-hover"></g>';
   // hover: nearest sample -> dot + context box (below the graph)
   const ctl = document.getElementById('mini-hoverctl');
   const g = document.getElementById('mini-hover');
@@ -163,7 +166,7 @@ function renderMiniGraph(svgId, pts, key) {
     let best = pts[0], bestD = Infinity;
     for (const p of pts) { const d = Math.abs(X(p.t) - px); if (d < bestD) { bestD = d; best = p; } }
     const bx = X(best.t), by = Y(best.v);
-    g.innerHTML = '<circle cx="' + bx.toFixed(1) + '" cy="' + by.toFixed(1) + '" r="4" fill="var(--primary)" stroke="#fff" stroke-width="1.5"/>' +
+    if (g) g.innerHTML = '<circle cx="' + bx.toFixed(1) + '" cy="' + by.toFixed(1) + '" r="4" fill="var(--primary)" stroke="#fff" stroke-width="1.5"/>' +
       '<line x1="' + bx.toFixed(1) + '" y1="' + (PAD) + '" x2="' + bx.toFixed(1) + '" y2="' + (H - PAD) + '" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="3,3"/>';
     if (ctl) {
       const d = new Date(best.t);
@@ -172,7 +175,7 @@ function renderMiniGraph(svgId, pts, key) {
         (ctl.dataset.unit ? ' ' + ctl.dataset.unit : '') + ' &middot; ' + escapeHtml(d.toLocaleTimeString());
     }
   });
-  svg.addEventListener('mouseleave', () => { g.innerHTML = ''; if (ctl) ctl.hidden = true; });
+  svg.addEventListener('mouseleave', () => { if (g) g.innerHTML = ''; if (ctl) ctl.hidden = true; });
 }
 function renderBinaryGraph(svgId, pts) {
   const svg = document.getElementById(svgId);
@@ -301,6 +304,7 @@ function openConfigEdit() {
   $('configedit-overlay').hidden = false;
 }
 $('btn-config-edit')?.addEventListener('click', openConfigEdit);
+$('btn-top-config')?.addEventListener('click', openConfigEdit);
 $('configedit-cancel')?.addEventListener('click', () => { $('configedit-overlay').hidden = true; });
 
 function configPayloadFromGrid() {
@@ -708,11 +712,12 @@ function populateSenders(senders, selOrNull, selected) {
 
 /* ---------------- Add-device modals ---------------- */
 function firstFreeSender() {
-  const used = new Set(state.sensors.filter((s) => s.sender).map((s) => s.sender));
-  for (const v of (state.virtual_senders || [])) {
+  const list = (Array.isArray(state && state.virtual_senders) ? state.virtual_senders : []);
+  const used = new Set((state.sensors || []).filter((s) => s.sender).map((s) => s.sender));
+  for (const v of list) {
     if (!used.has(v)) return v;
   }
-  return (state.virtual_senders || [])[0] || null;
+  return list[0] || null;
 }
 function openAddModal(kind) {
   if (kind === 'sensor') {
@@ -919,201 +924,24 @@ $('modal-ok')?.addEventListener('click', async () => {
 });
 
 /* ---------------- i18n ---------------- */
-const I18N = {
-  en: {
-    subtitle: 'Web Configurator', gateway: 'Gateway', mqtt: 'MQTT',
-    teachin_title: 'Teach-In', teachin_desc: 'Start teach-in, then trigger the device you want to add: press its teach-in button (or simply use a regular switch, e.g. an F6 rocker - it does not need a teach-in button). The device is added automatically. Devices using a 4BS or UTE learn telegram are recognised with their EEP; bi-directional devices are acknowledged.',
-    teachin_hint: 'If the EEP is not part of the telegram (e.g. RPS/F6 switches), a default EEP for the device type is assigned - you can fine-tune it with the edit button. Teach-in mode automatically turns off after a device is received.',
-    start_teachin: 'Start teach-in', stop_teachin: 'Stop teach-in',
-    add_device: 'Add device', add_sub: 'Choose what kind of device to add',
-    add_sensor: 'Sensor', add_actor: 'Actor', add_bidir: 'Bidirectional', add: 'Add',
-    teachin_active: 'Teach-in active - press the button on your sensor…',
-    sensor_name: 'Sensor name', cancel: 'Cancel', save_sensor: 'Save sensor',
-    desc_sensor: 'Sender', desc_actor: 'Receiver', desc_bidir: 'Sends and receives',
-    name: 'Name', address: 'Address', sender_id: 'Sender ID', eep_label: 'EEP (Equipment Profile)',
-    all: 'All', sensors: 'Sensors', actors: 'Actors', devices: 'Devices',
-    configuration: 'Configuration', config_sub: '[CONFIG] section of enoceanmqtt.conf',
-    edit_config: 'Edit configuration',
-    save_config: 'Save configuration',
-    col_name: 'Name', col_addr: 'Address / Sender', col_type: 'Type', col_eep: 'EEP',
-    col_status: 'Status', col_lastseen: 'Last seen', col_latest: 'Latest', col_rssi: 'RSSI',
-    remove_device: 'Remove device', edit_device: 'Edit device',
-    remove_title: 'Remove device?', remove_body: 'Are you sure you want to remove this device?',
-    remove: 'Remove', save: 'Save', close: 'Close',
-    graph_title: 'Value history', graph_nodata: 'No data.',
-    footer_info: 'HA_enoceanmqtt web configurator',
-    select_eep: 'Select an EEP…',
-    st_online: 'Online', st_offline: 'Offline', st_never: 'Never seen',
-    actor: 'Actor', sensor: 'Sensor', bidirectional: 'Bidirectional',
-    no_actors: 'No actors configured.', no_sensors: 'No sensors configured.', no_devices: 'No devices configured yet.',
-    connected: 'connected', offline: 'offline', base_id: 'Base ID',
-    eep_placeholder: 'A5-20-01, temperature, switch…', device_count: 'devices',
-    eep_viewer: 'Open in EEP viewer', send_label: 'send',
-    err_load_status: 'Failed to load status: ', err_load_config: 'Failed to load configuration: ',
-    config_saved: 'Configuration saved - restart required', err_save_config: 'Failed to save configuration: ',
-    err_bad_address: 'Please enter a valid address (e.g. 0x003DD63B)',
-    device_updated: 'Device updated', err_update_device: 'Failed to update device: ',
-    teachin_sent: 'Teach-in sent', err_send_teachin: 'Failed to send teach-in: ',
-    teachin_enabled: 'Teach-in enabled - press the button on your device', teachin_disabled: 'Teach-in disabled',
-    err_teachin: 'Failed to change teach-in: ',
-    err_no_name: 'Please enter a name', err_no_eep: 'Please select an EEP from the list',
-    manual_hint: 'or fill in the fields below manually.',
-    send_teachin: 'Send teach-in',
-    save_actor: 'Save actor',
-    save_device: 'Save device',
-    manual_hint: 'oder füllen Sie die Felder unten manuell aus.',
-    send_teachin: 'Teach-In senden',
-    save_actor: 'Aktor speichern',
-    save_device: 'Gerät speichern',
-    manual_hint: 'ou remplissez les champs ci-dessous manuellement.',
-    send_teachin: 'Envoyer l\'enseignement',
-    save_actor: 'Enregistrer l\'actionneur',
-    save_device: 'Enregistrer l\'appareil',
-    manual_hint: 'oppure compila i campi qui sotto manualmente.',
-    send_teachin: 'Invia teach-in',
-    save_actor: 'Salva attuatore',
-    save_device: 'Salva dispositivo',
-    err_no_sender: 'Please select a sender ID',
-    sensor_added: 'Sensor added', actor_added: 'Actor added', bidir_added: 'Bidirectional added',
-    err_add_device: 'Failed to add device: ', device_removed: 'Device removed',
-    err_remove_device: 'Failed to remove device: ',
-  },
-  de: {
-    subtitle: 'Web-Konfigurator', gateway: 'Gateway', mqtt: 'MQTT',
-    teachin_title: 'Anlernen', teachin_desc: 'Anlernen starten, dann das gewünschte Gerät auslösen: dessen Anlern-Taste drücken (oder einfach einen normalen Schalter verwenden, z.B. einen F6-Rocker - der benötigt keine Anlern-Taste). Das Gerät wird automatisch hinzugefügt. Geräte mit 4BS- oder UTE-Lerntelegramm werden mit ihrer EEP erkannt; bidirektionale Geräte werden bestätigt.',
-    teachin_hint: 'Wenn die EEP nicht Teil des Telegramms ist (z.B. RPS/F6-Schalter), wird eine Standard-EEP für den Gerätetyp zugewiesen - Sie können sie mit der Bearbeiten-Schaltfläche verfeinern. Der Anlern-Modus schaltet sich nach einem empfangenen Gerät automatisch aus.',
-    start_teachin: 'Anlernen starten', stop_teachin: 'Anlernen stoppen',
-    add_device: 'Gerät hinzufügen', add_sub: 'Wählen Sie, welche Art von Gerät hinzugefügt werden soll',
-    add_sensor: 'Sensor', add_actor: 'Aktor', add_bidir: 'Bidirektional', add: 'Hinzufügen',
-    teachin_active: 'Anlernen aktiv - Taste am Sensor drücken…',
-    sensor_name: 'Sensorname', cancel: 'Abbrechen', save_sensor: 'Sensor speichern',
-    desc_sensor: 'Sender', desc_actor: 'Empfänger', desc_bidir: 'Sendet und empfängt',
-    name: 'Name', address: 'Adresse', sender_id: 'Sender-ID', eep_label: 'EEP (Geräteprofil)',
-    all: 'Alle', sensors: 'Sensoren', actors: 'Aktoren', devices: 'Geräte',
-    configuration: 'Konfiguration', config_sub: '[CONFIG]-Abschnitt von enoceanmqtt.conf',
-    edit_config: 'Konfiguration bearbeiten',
-    save_config: 'Konfiguration speichern',
-    col_name: 'Name', col_addr: 'Adresse / Sender', col_type: 'Typ', col_eep: 'EEP',
-    col_status: 'Status', col_lastseen: 'Zuletzt gesehen', col_latest: 'Letzter Wert', col_rssi: 'RSSI',
-    remove_device: 'Gerät entfernen', edit_device: 'Gerät bearbeiten',
-    remove_title: 'Gerät entfernen?', remove_body: 'Sind Sie sicher, dass Sie dieses Gerät entfernen möchten?',
-    remove: 'Entfernen', save: 'Speichern', close: 'Schließen',
-    graph_title: 'Werteverlauf', graph_nodata: 'Keine Daten.',
-    footer_info: 'HA_enoceanmqtt Web-Konfigurator',
-    select_eep: 'EEP auswählen…',
-    st_online: 'Online', st_offline: 'Offline', st_never: 'Nie gesehen',
-    actor: 'Aktor', sensor: 'Sensor', bidirectional: 'Bidirektional',
-    no_actors: 'Keine Aktoren konfiguriert.', no_sensors: 'Keine Sensoren konfiguriert.', no_devices: 'Noch keine Geräte konfiguriert.',
-    connected: 'verbunden', offline: 'offline', base_id: 'Basis-ID',
-    eep_placeholder: 'A5-20-01, Temperatur, Schalter…', device_count: 'Geräte',
-    eep_viewer: 'Im EEP-Viewer öffnen', send_label: 'Senden',
-    err_load_status: 'Status konnte nicht geladen werden: ', err_load_config: 'Konfiguration konnte nicht geladen werden: ',
-    config_saved: 'Konfiguration gespeichert - Neustart erforderlich', err_save_config: 'Konfiguration konnte nicht gespeichert werden: ',
-    err_bad_address: 'Bitte eine gültige Adresse eingeben (z.B. 0x003DD63B)',
-    device_updated: 'Gerät aktualisiert', err_update_device: 'Gerät konnte nicht aktualisiert werden: ',
-    teachin_sent: 'Anlernen gesendet', err_send_teachin: 'Anlernen konnte nicht gesendet werden: ',
-    teachin_enabled: 'Anlernen aktiviert - Taste am Gerät drücken', teachin_disabled: 'Anlernen deaktiviert',
-    err_teachin: 'Anlernen konnte nicht geändert werden: ',
-    err_no_name: 'Bitte einen Namen eingeben', err_no_eep: 'Bitte eine EEP aus der Liste wählen',
-    err_no_sender: 'Bitte eine Sender-ID wählen',
-    sensor_added: 'Sensor hinzugefügt', actor_added: 'Aktor hinzugefügt', bidir_added: 'Bidirektionales Gerät hinzugefügt',
-    err_add_device: 'Gerät konnte nicht hinzugefügt werden: ', device_removed: 'Gerät entfernt',
-    err_remove_device: 'Gerät konnte nicht entfernt werden: ',
-  },
-  fr: {
-    subtitle: 'Configurateur Web', gateway: 'Passerelle', mqtt: 'MQTT',
-    teachin_title: 'Enseignement', teachin_desc: 'Démarrer l\'enseignement, puis déclencher l\'appareil à ajouter : appuyez sur son bouton d\'enseignement (ou utilisez simplement un interrupteur normal, par ex. un rocker F6 - il n\'a pas besoin de bouton d\'enseignement). L\'appareil est ajouté automatiquement. Les appareils utilisant un télégramme d\'apprentissage 4BS ou UTE sont reconnus avec leur EEP ; les appareils bidirectionnels sont acquittés.',
-    teachin_hint: 'Si l\'EEP ne fait pas partie du télégramme (par ex. interrupteurs RPS/F6), une EEP par défaut pour le type d\'appareil est attribuée - vous pouvez l\'affiner avec le bouton Modifier. Le mode enseignement s\'arrête automatiquement après un appareil reçu.',
-    start_teachin: 'Démarrer l\'enseignement', stop_teachin: 'Arrêter l\'enseignement',
-    add_device: 'Ajouter un appareil', add_sub: 'Choisissez le type d\'appareil à ajouter',
-    add_sensor: 'Capteur', add_actor: 'Actionneur', add_bidir: 'Bidirectionnel', add: 'Ajouter',
-    teachin_active: 'Enseignement actif - appuyez sur le bouton du capteur…',
-    sensor_name: 'Nom du capteur', cancel: 'Annuler', save_sensor: 'Enregistrer le capteur',
-    desc_sensor: 'Émetteur', desc_actor: 'Récepteur', desc_bidir: 'Émet et reçoit',
-    name: 'Nom', address: 'Adresse', sender_id: 'ID émetteur', eep_label: 'EEP (profil)',
-    all: 'Tous', sensors: 'Capteurs', actors: 'Actionneurs', devices: 'Appareils',
-    configuration: 'Configuration', config_sub: 'Section [CONFIG] de enoceanmqtt.conf',
-    edit_config: 'Modifier la configuration',
-    save_config: 'Enregistrer la configuration',
-    col_name: 'Nom', col_addr: 'Adresse / Émetteur', col_type: 'Type', col_eep: 'EEP',
-    col_status: 'État', col_lastseen: 'Vu pour la dernière fois', col_latest: 'Dernière valeur', col_rssi: 'RSSI',
-    remove_device: 'Supprimer l\'appareil', edit_device: 'Modifier l\'appareil',
-    remove_title: 'Supprimer l\'appareil ?', remove_body: 'Êtes-vous sûr de vouloir supprimer cet appareil ?',
-    remove: 'Supprimer', save: 'Enregistrer', close: 'Fermer',
-    graph_title: 'Historique des valeurs', graph_nodata: 'Pas de données.',
-    footer_info: 'HA_enoceanmqtt configurateur web',
-    select_eep: 'Choisir un EEP…',
-    st_online: 'En ligne', st_offline: 'Hors ligne', st_never: 'Jamais vu',
-    actor: 'Actionneur', sensor: 'Capteur', bidirectional: 'Bidirectionnel',
-    no_actors: 'Aucun actionneur configuré.', no_sensors: 'Aucun capteur configuré.', no_devices: 'Aucun appareil configuré.',
-    connected: 'connecté', offline: 'hors ligne', base_id: 'ID de base',
-    eep_placeholder: 'A5-20-01, température, interrupteur…', device_count: 'appareils',
-    eep_viewer: 'Ouvrir dans la visionneuse EEP', send_label: 'envoyer',
-    err_load_status: 'Échec du chargement de l\'état : ', err_load_config: 'Échec du chargement de la configuration : ',
-    config_saved: 'Configuration enregistrée - redémarrage requis', err_save_config: 'Échec de l\'enregistrement : ',
-    err_bad_address: 'Veuillez saisir une adresse valide (ex. 0x003DD63B)',
-    device_updated: 'Appareil mis à jour', err_update_device: 'Échec de la mise à jour : ',
-    teachin_sent: 'Enseignement envoyé', err_send_teachin: 'Échec de l\'envoi : ',
-    teachin_enabled: 'Enseignement activé - appuyez sur le bouton', teachin_disabled: 'Enseignement désactivé',
-    err_teachin: 'Échec du changement d\'enseignement : ',
-    err_no_name: 'Veuillez saisir un nom', err_no_eep: 'Veuillez choisir un EEP dans la liste',
-    err_no_sender: 'Veuillez choisir un ID émetteur',
-    sensor_added: 'Capteur ajouté', actor_added: 'Actionneur ajouté', bidir_added: 'Appareil bidirectionnel ajouté',
-    err_add_device: 'Échec de l\'ajout : ', device_removed: 'Appareil supprimé',
-    err_remove_device: 'Échec de la suppression : ',
-  },
-  it: {
-    subtitle: 'Configuratore Web', gateway: 'Gateway', mqtt: 'MQTT',
-    teachin_title: 'Teach-In', teachin_desc: 'Avvia teach-in, poi attiva il dispositivo da aggiungere: premi il suo pulsante teach-in (o usa semplicemente un interruttore normale, es. un rocker F6 - non serve un pulsante teach-in). Il dispositivo viene aggiunto automaticamente. I dispositivi che usano un telegramma di apprendimento 4BS o UTE sono riconosciuti con la loro EEP; i dispositivi bidirezionali vengono confermati.',
-    teachin_hint: 'Se l\'EEP non fa parte del telegramma (es. interruttori RPS/F6), viene assegnata una EEP predefinita per il tipo di dispositivo - puoi perfezionarla con il pulsante Modifica. La modalità teach-in si disattiva automaticamente dopo un dispositivo ricevuto.',
-    start_teachin: 'Avvia teach-in', stop_teachin: 'Ferma teach-in',
-    add_device: 'Aggiungi dispositivo', add_sub: 'Scegli il tipo di dispositivo da aggiungere',
-    add_sensor: 'Sensore', add_actor: 'Attuatore', add_bidir: 'Bidirezionale', add: 'Aggiungi',
-    teachin_active: 'Teach-in attivo - premi il pulsante sul sensore…',
-    sensor_name: 'Nome sensore', cancel: 'Annulla', save_sensor: 'Salva sensore',
-    desc_sensor: 'Mittente', desc_actor: 'Ricevitore', desc_bidir: 'Invia e riceve',
-    name: 'Nome', address: 'Indirizzo', sender_id: 'ID mittente', eep_label: 'EEP (profilo)',
-    all: 'Tutti', sensors: 'Sensori', actors: 'Attuatori', devices: 'Dispositivi',
-    configuration: 'Configurazione', config_sub: 'Sezione [CONFIG] di enoceanmqtt.conf',
-    edit_config: 'Modifica configurazione',
-    save_config: 'Salva configurazione',
-    col_name: 'Nome', col_addr: 'Indirizzo / Mittente', col_type: 'Tipo', col_eep: 'EEP',
-    col_status: 'Stato', col_lastseen: 'Ultimo visto', col_latest: 'Ultimo valore', col_rssi: 'RSSI',
-    remove_device: 'Rimuovi dispositivo', edit_device: 'Modifica dispositivo',
-    remove_title: 'Rimuovere il dispositivo?', remove_body: 'Sicuro di voler rimuovere questo dispositivo?',
-    remove: 'Rimuovi', save: 'Salva', close: 'Chiudi',
-    graph_title: 'Cronologia valori', graph_nodata: 'Nessun dato.',
-    footer_info: 'HA_enoceanmqtt configuratore web',
-    select_eep: 'Seleziona un EEP…',
-    st_online: 'Online', st_offline: 'Offline', st_never: 'Mai visto',
-    actor: 'Attuatore', sensor: 'Sensore', bidirectional: 'Bidirezionale',
-    no_actors: 'Nessun attuatore configurato.', no_sensors: 'Nessun sensore configurato.', no_devices: 'Nessun dispositivo configurato.',
-    connected: 'connesso', offline: 'offline', base_id: 'ID base',
-    eep_placeholder: 'A5-20-01, temperatura, interruttore…', device_count: 'dispositivi',
-    eep_viewer: 'Apri nel visualizzatore EEP', send_label: 'invio',
-    err_load_status: 'Impossibile caricare lo stato: ', err_load_config: 'Impossibile caricare la configurazione: ',
-    config_saved: 'Configurazione salvata - riavvio richiesto', err_save_config: 'Impossibile salvare la configurazione: ',
-    err_bad_address: 'Inserisci un indirizzo valido (es. 0x003DD63B)',
-    device_updated: 'Dispositivo aggiornato', err_update_device: 'Impossibile aggiornare il dispositivo: ',
-    teachin_sent: 'Teach-in inviato', err_send_teachin: 'Impossibile inviare teach-in: ',
-    teachin_enabled: 'Teach-in attivato - premi il pulsante', teachin_disabled: 'Teach-in disattivato',
-    err_teachin: 'Impossibile modificare teach-in: ',
-    err_no_name: 'Inserisci un nome', err_no_eep: 'Seleziona una EEP dalla lista',
-    err_no_sender: 'Seleziona un ID mittente',
-    sensor_added: 'Sensore aggiunto', actor_added: 'Attuatore aggiunto', bidir_added: 'Dispositivo bidirezionale aggiunto',
-    err_add_device: 'Impossibile aggiungere il dispositivo: ', device_removed: 'Dispositivo rimosso',
-    err_remove_device: 'Impossibile rimuovere il dispositivo: ',
-  },
-};
+
 
 let currentLang = 'en';
 function setLang(lang) {
-  currentLang = I18N[lang] ? lang : 'en';
+  currentLang = (lang === 'de' || lang === 'fr' || lang === 'it' || lang === 'en') ? lang : 'en';
   try { localStorage.setItem('enm-lang', currentLang); } catch (e) { /* ignore */ }
   applyTranslations();
 }
+function langDict(code) {
+  return (typeof window !== 'undefined' && window['LANG_' + code]) || {};
+}
 function t(key) {
-  return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key);
+  // fallback: language dict, then English, then the key itself
+  const d = langDict(currentLang);
+  if (d && d[key] !== undefined) return d[key];
+  const en = langDict('en');
+  if (en && en[key] !== undefined) return en[key];
+  return key;
 }
 function applyTranslations() {
   document.querySelectorAll('[data-i18n]').forEach((el) => {
@@ -1140,7 +968,7 @@ document.querySelectorAll('.card.collapsible > .card-header').forEach((h) => {
 (function () {
   try {
     const saved = localStorage.getItem('enm-lang');
-    currentLang = I18N[saved] ? saved : 'en';
+    currentLang = (saved === 'de' || saved === 'fr' || saved === 'it') ? saved : 'en';
     const sel = $('lang-select');
     if (sel) sel.value = currentLang;
   } catch (e) { /* ignore */ }
