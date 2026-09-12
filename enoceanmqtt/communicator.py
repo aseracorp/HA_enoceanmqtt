@@ -44,6 +44,7 @@ class Communicator:
 
         # UTE teach-in state (managed through the web interface / MQTT learn)
         self.learn_mode = False
+        self._restart_requested = False
         # capture-only teach-in: fills the web dialog but does NOT persist
         self.learn_capture = False
         self.captured_device = None
@@ -1605,10 +1606,16 @@ class Communicator:
     #=============================================================================================
     # RUN LOOP
     #=============================================================================================
+    def request_restart(self):
+        """set a flag so the run loop exits cleanly; the process supervisor
+        (docker/systemd) restarts the gateway."""
+        self._restart_requested = True
+        return {'ok': True, 'message': 'Restart scheduled'}
+
     def run(self):
         """the main loop with blocking enocean packet receive handler"""
         # start endless loop for listening
-        while self.enocean.is_alive():
+        while self.enocean.is_alive() and not self._restart_requested:
             # Request transmitter ID, if needed
             if self.enocean_sender is None:
                 self.enocean_sender = self.enocean.base_id

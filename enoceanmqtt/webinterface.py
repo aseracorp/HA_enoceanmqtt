@@ -110,6 +110,10 @@ class WebInterface:
         """persist updated [CONFIG] settings back to the configuration file"""
         return self.communicator.save_config(payload)
 
+    def restart_gateway(self):
+        """schedule a restart of the gateway process (via the run loop)"""
+        return self.communicator.request_restart()
+
     def enable_learn(self, enabled):
         self.communicator.set_learn_mode(bool(enabled))
 
@@ -197,6 +201,9 @@ class WebInterface:
                     return self._send(200, web.get_status())
                 if self.command == 'GET' and path == '/api/config':
                     return self._send(200, web.get_config())
+                if self.command == 'POST' and path == '/api/restart':
+                    result = web.restart_gateway()
+                    return self._send(200, result)
                 if self.command == 'POST' and path == '/api/config':
                     result = web.save_config(self._read_body())
                     code = 200 if result.get('ok') else 400

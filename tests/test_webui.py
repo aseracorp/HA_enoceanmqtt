@@ -673,6 +673,23 @@ def test_next_free_sender():
         assert 0xFF800000 not in com.virtual_senders()
 
 
+def test_request_restart():
+    """request_restart sets the flag and returns ok"""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        r = com.request_restart()
+        assert r['ok'] is True
+        assert com._restart_requested is True
+
+
 def test_config_save_and_history():
     """save_config writes [CONFIG] back; get_history returns the rolling buffer"""
     import datetime
@@ -778,5 +795,6 @@ if __name__ == '__main__':
     test_smartack_is_bidirectional()
     test_next_free_sender()
     test_teachin_capture_no_autoadd()
+    test_request_restart()
     print('ALL TESTS PASSED')
 
