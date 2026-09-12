@@ -68,6 +68,10 @@ function renderGateway() {
     mqttEl.className = 'pill ' + (gw.mqtt ? 'ok' : 'bad');
     mqttEl.innerHTML = '<span class="dot"></span>MQTT ' + (gw.mqtt ? t('connected') : t('offline'));
     baseEl.textContent = t('base_id') + ': ' + (gw.base_id || '—');
+    // hover tooltips with configured settings
+    const cfg = state.config || {};
+    if (cfg.enocean_port) gwEl.setAttribute('data-tip', 'Port: ' + cfg.enocean_port + (cfg.log_packets !== undefined ? '\nLog packets: ' + cfg.log_packets : ''));
+    if (cfg.mqtt_host) mqttEl.setAttribute('data-tip', 'Host: ' + cfg.mqtt_host + (cfg.mqtt_port ? ':' + cfg.mqtt_port : ''));
   }
 }
 
@@ -201,10 +205,27 @@ async function loadConfig() {
   }
 }
 
+function configViewHtml(conf, keys) {
+  return '<table class="config-table">' + keys.map((k) => {
+    const label = CONFIG_LABELS[k] || k;
+    const val = conf[k] === undefined || conf[k] === null ? '' : String(conf[k]);
+    return '<tr><td>' + escapeHtml(label) + '</td><td class="mono">' + escapeHtml(val) + '</td></tr>';
+  }).join('') + '</table>';
+}
+
 function populateConfig(conf) {
+  const view = $('config-view');
+  if (!view) return;
+  const keys = Object.keys(conf || {}).filter((k) => !CONFIG_HIDDEN.has(k));
+  if (!keys.length) { view.innerHTML = '<span class="card-sub">Configuration not available.</span>'; return; }
+  view.innerHTML = configViewHtml(conf, keys);
+}
+
+// Edit popup: fill the grid with inputs
+function openConfigEdit() {
   const grid = $('config-grid');
-  if (!grid) return;
-  if (!conf || typeof conf !== 'object') { grid.innerHTML = '<span class="card-sub">Configuration not available.</span>'; return; }
+  if (!grid || !state.config) return;
+  const conf = state.config;
   const keys = Object.keys(conf).filter((k) => !CONFIG_HIDDEN.has(k));
   grid.innerHTML = keys.map((k) => {
     const label = CONFIG_LABELS[k] || k;
@@ -212,22 +233,39 @@ function populateConfig(conf) {
     return '<div class="field"><label for="cfg-' + escapeHtml(k) + '">' + escapeHtml(label) + '</label>' +
       '<input type="text" id="cfg-' + escapeHtml(k) + '" data-cfgkey="' + escapeHtml(k) + '" value="' + escapeHtml(String(val)) + '"></div>';
   }).join('');
+  $('configedit-overlay').hidden = false;
 }
+$('btn-config-edit')?.addEventListener('click', openConfigEdit);
+$('configedit-cancel')?.addEventListener('click', () => { $('configedit-overlay').hidden = true; });
 
-$('config-form')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
+function configPayloadFromGrid() {
   const payload = {};
   document.querySelectorAll('#config-grid [data-cfgkey]').forEach((inp) => {
     payload[inp.getAttribute('data-cfgkey')] = inp.value;
   });
+  return payload;
+}
+async function saveConfigPayload(payload, andRestart) {
   try {
     const res = await api('/api/config', { method: 'POST', body: JSON.stringify(payload) });
     if (!res.ok) throw new Error(res.error || 'save failed');
     toast(t('config_saved'), 'success');
+    $('configedit-overlay').hidden = true;
+    state.config = Object.assign({}, state.config, payload);
+    populateConfig(state.config);
+    if (andRestart) {
+      // tell the backend to restart (added config flag)
+      try {
+        await fetch('/api/restart', { method: 'POST' });
+      } catch (e) { /* ignore */ }
+      toast('Restarting…', 'info');
+    }
   } catch (err) {
     toast(t('err_save_config') + err.message, 'error');
   }
-});
+}
+$('configedit-save')?.addEventListener('click', () => saveConfigPayload(configPayloadFromGrid(), false));
+$('configedit-save-restart')?.addEventListener('click', () => saveConfigPayload(configPayloadFromGrid(), true));
 
 function fmtLastSeenFull(ts) {
   if (!ts) return '—';
@@ -274,7 +312,7 @@ function renderSensors() {
     if (isActor) {
       addrHtml = fmtAddr(s.sender);
     } else if (s.bidirectional) {
-      addrHtml = fmtAddr(s.address) + '<div style="color:var(--text-muted);font-size:11px">send ' + fmtAddr(s.sender) + '</div>';
+      addrHtml = fmtAddr(s.address) + '<div style="color:var(--text-muted);font-size:11px">' + t('send_label') + ' ' + fmtAddr(s.sender) + '</div>';
     } else {
       addrHtml = fmtAddr(s.address);
     }
@@ -283,7 +321,6 @@ function renderSensors() {
     const catCls = deviceCategory(s);
     const catTxt = catCls === 'actor' ? t('actor') : (catCls === 'bidirectional' ? t('bidirectional') : t('sensor'));
     const badges = [];
-    if (s.bidirectional) badges.push('<span class="badge bidir" title="Bi-directional device">⇅ bidir</span>');
     if (s.smartack) badges.push('<span class="badge smartack" title="smartACK — requires fast acknowledgement">smartACK</span>');
     return `<tr data-name="${escapeHtml(s.name)}" data-cat="${catCls}">
       <td>${name}${source}</td>
@@ -610,13 +647,13 @@ document.querySelectorAll('.add-option').forEach((el) => {
 /* ---- Sensor modal: teach-in / manual ---- */
 function asReset() {
   $('as-name').value = ''; $('as-address').value = ''; $('as-eep').value = '';
-  $('as-prompt').hidden = true; $('as-success').hidden = true; $('as-teachin-btn').hidden = false; $('as-manual-btn').hidden = false;
+  $('as-prompt').hidden = true; $('as-success').hidden = true; $('as-teachin-btn').hidden = false;
 }
 async function enableTeachIn() {
   await api('/api/learn', { method: 'POST', body: JSON.stringify({ enabled: true }) });
 }
 $('as-teachin-btn')?.addEventListener('click', async () => {
-  $('as-teachin-btn').hidden = true; $('as-manual-btn').hidden = true;
+  $('as-teachin-btn').hidden = true;
   $('as-prompt').hidden = false;
   $('as-prompt-state').textContent = 'Teach-in active - press the button on your sensor…';
   // capture-only teach-in: fills the dialog, does NOT add the device yet
@@ -636,9 +673,8 @@ $('as-teachin-btn')?.addEventListener('click', async () => {
   }
   await api('/api/teachin/capture/stop', { method: 'POST', body: JSON.stringify({}) });
   $('as-prompt-state').textContent = 'No telegram received.';
-  $('as-teachin-btn').hidden = false; $('as-manual-btn').hidden = false;
+  $('as-teachin-btn').hidden = false;
 });
-$('as-manual-btn')?.addEventListener('click', () => { $('as-manual-btn').hidden = true; $('as-teachin-btn').hidden = true; });
 $('as-cancel')?.addEventListener('click', () => { $('addsensor-overlay').hidden = true; asReset(); });
 $('as-save')?.addEventListener('click', async () => {
   const name = $('as-name').value.trim();
@@ -763,8 +799,8 @@ $('ab-save')?.addEventListener('click', async () => {
 let pendingRemove = null;
 function confirmRemove(name) {
   pendingRemove = name;
-  $('modal-title').textContent = 'Remove sensor?';
-  $('modal-body').textContent = 'Remove "' + name + '" from the configuration? This also removes it from Home Assistant.';
+  $('modal-title').textContent = t('remove_title') + ' (' + name + ')';
+  $('modal-body').textContent = t('remove_body');
   $('modal-overlay').hidden = false;
 }
 $('modal-cancel')?.addEventListener('click', () => { $('modal-overlay').hidden = true; pendingRemove = null; });
@@ -831,6 +867,14 @@ const I18N = {
     add: 'Hinzufügen',
     add: 'Ajouter',
     add: 'Aggiungi',
+    edit_config: 'Edit configuration',
+    edit_config: 'Konfiguration bearbeiten',
+    edit_config: 'Modifier la configuration',
+    edit_config: 'Modifica configurazione',
+    send_label: 'send',
+    send_label: 'Senden',
+    send_label: 'envoyer',
+    send_label: 'invio',
     err_remove_device: 'Failed to remove device: ',
   },
   de: {

@@ -54,20 +54,30 @@
   </header>
 
   <main class="content">
-    <!-- Settings / Config (collapsed by default) -->
-    <section class="card collapsible collapsed" id="config-card">
+    <!-- Settings / Config (always visible, compact) -->
+    <section class="card" id="config-card">
       <div class="card-header">
         <h2 data-i18n="configuration">Configuration</h2>
-        <span class="card-sub" data-i18n="config_sub">[CONFIG] section of enoceanmqtt.conf - changes apply after restart</span>
+        <span class="card-sub" data-i18n="config_sub">[CONFIG] section of enoceanmqtt.conf</span>
+        <button class="btn btn-primary" id="btn-config-edit" data-i18n="edit_config">Edit</button>
       </div>
-      <form id="config-form" class="add-form">
-        <div class="config-grid" id="config-grid"></div>
-        <div class="form-actions">
-          <button class="btn btn-primary" type="submit" id="btn-config-save" data-i18n="save_config">Save configuration</button>
-          <span class="card-sub" data-i18n="config_restart">A restart is required for most settings to take effect.</span>
-        </div>
-      </form>
+      <div class="config-view" id="config-view">
+        <span class="card-sub">Loading…</span>
+      </div>
     </section>
+
+    <!-- Config edit popup -->
+    <div class="modal-overlay" id="configedit-overlay" hidden>
+      <div class="modal modal-wide">
+        <h3 data-i18n="edit_config">Edit configuration</h3>
+        <div class="config-grid" id="config-grid"></div>
+        <div class="modal-actions">
+          <button class="btn" id="configedit-cancel" data-i18n="cancel">Cancel</button>
+          <button class="btn" id="configedit-save" data-i18n="save_config">Save configuration</button>
+          <button class="btn btn-primary" id="configedit-save-restart">Save &amp; restart</button>
+        </div>
+      </div>
+    </div>
 
 
 
@@ -81,17 +91,17 @@
         <div class="add-option" id="add-opt-sensor" data-addcat="sensor">
           <div class="add-option-icon">📡</div>
           <div class="add-option-text"><b data-i18n="add_sensor">Sensor</b><span class="add-option-desc">Measuring device (sender)</span></div>
-          <button class="btn btn-primary" data-addcat="sensor" data-i18n="add">Add</button>
+          <button type="button" class="btn btn-primary" data-addcat="sensor">Add</button>
         </div>
         <div class="add-option" id="add-opt-actor" data-addcat="actor">
           <div class="add-option-icon">🎛</div>
           <div class="add-option-text"><b data-i18n="add_actor">Actor</b><span class="add-option-desc">Receiving device</span></div>
-          <button class="btn btn-primary" data-addcat="actor" data-i18n="add">Add</button>
+          <button type="button" class="btn btn-primary" data-addcat="actor">Add</button>
         </div>
         <div class="add-option" id="add-opt-bidir" data-addcat="bidirectional">
           <div class="add-option-icon">⇅</div>
           <div class="add-option-text"><b data-i18n="add_bidir">Bidirectional</b><span class="add-option-desc">Sends and receives</span></div>
-          <button class="btn btn-primary" data-addcat="bidirectional" data-i18n="add">Add</button>
+          <button type="button" class="btn btn-primary" data-addcat="bidirectional">Add</button>
         </div>
       </div>
     </section>
@@ -135,6 +145,8 @@
         <a href="https://github.com/aseracorp/HA_enoceanmqtt" target="_blank" rel="noopener">GitHub</a>
         <span class="footer-sep">·</span>
         <a href="https://github.com/aseracorp/HA_enoceanmqtt/blob/develop/LICENSE" target="_blank" rel="noopener">Licence</a>
+        <span class="footer-sep">·</span>
+        <a href="https://tools.enocean-alliance.org/EEPViewer/" target="_blank" rel="noopener">EEP-Viewer</a>
       </span>
       <span id="footer-error" class="error-text"></span>
     </footer>
@@ -213,8 +225,7 @@
     <h3 data-i18n="add_sensor">Add Sensor</h3>
     <div class="teachin-options">
       <button class="btn btn-primary" id="as-teachin-btn">Start teach-in</button>
-      <span class="or-sep">or</span>
-      <button class="btn" id="as-manual-btn">Add manually</button>
+      <span class="or-sep" id="as-manual-hint">or fill in the fields below manually.</span>
     </div>
     <div class="modal-prompt" id="as-prompt" hidden>
       <p data-i18n="teachin_desc"></p>

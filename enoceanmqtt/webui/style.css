@@ -331,7 +331,8 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
   border: 1px solid var(--border-strong); background: var(--bg-surface); color: var(--text-secondary);
 }
 .cat-badge.actor { color: #ff8a8a; border-color: rgba(255,120,120,0.5); background: rgba(176,20,25,0.18); }
-.cat-badge.bidirectional { color: #d8b5ff; border-color: rgba(200,160,255,0.5); background: rgba(120,40,160,0.18); }
+.cat-badge.bidirectional { color: #8a4db8; border-color: rgba(138,77,184,0.4); background: rgba(138,77,184,0.10); }
+:root[data-theme="dark"] .cat-badge.bidirectional { color: #d8b5ff; border-color: rgba(200,160,255,0.5); background: rgba(120,40,160,0.18); }
 .cat-badge.sensor { color: var(--success); border-color: rgba(84,214,44,0.4); background: rgba(84,214,44,0.08); }
 .badge {
   display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px;
@@ -400,6 +401,12 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 .modal-success { background: rgba(84,214,44,0.12); border: 1px solid rgba(84,214,44,0.4); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px; }
 .success-text { color: var(--success); font-weight: 600; margin: 0; }
 
+/* ---------------- config table ---------------- */
+.config-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.config-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.config-table td:first-child { color: var(--text-secondary); width: 40%; }
+.config-table td.mono { font-family: 'JetBrains Mono', monospace; }
+
 /* ---------------- config editor ---------------- */
 .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .form-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
@@ -446,7 +453,7 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 }
 .modal h3 { margin: 0 0 8px; font-size: 16px; }
 .modal p { margin: 0 0 18px; color: var(--text-secondary); }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; padding-top: 4px; }
 
 /* ---------------- footer ---------------- */
 .footer-links { display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; }
