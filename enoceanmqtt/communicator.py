@@ -20,6 +20,25 @@ from enoceanmqtt.sensor_store import SensorStore, HistoryStore
 from enoceanmqtt.eep_registry import get_registry
 
 
+
+
+def _parse_int(value):
+    """parse an integer that may be given as int, '0x...', 'FF:80:00:00' or plain hex"""
+    if isinstance(value, int):
+        return value
+    s = str(value).strip()
+    if not s:
+        return None
+    s = s.replace('0x', '').replace('0X', '')
+    if ':' in s or '-' in s or ' ' in s:
+        s = ''.join(ch for ch in s if ch in '0123456789abcdefABCDEF')
+    try:
+        return int(s, 16) if s else None
+    except ValueError:
+        return None
+
+
+
 class Communicator:
     """the main working class providing the MQTT interface to the enocean packet classes"""
     mqtt = None
@@ -246,11 +265,10 @@ class Communicator:
 
             if not name:
                 return {'ok': False, 'error': 'A sensor name is required'}
-            if not isinstance(address, int):
-                try:
-                    address = int(str(address), 0)
-                except (TypeError, ValueError):
-                    return {'ok': False, 'error': 'Invalid sensor address'}
+            pa = _parse_int(address)
+            if pa is None:
+                return {'ok': False, 'error': 'Invalid sensor address'}
+            address = pa
             if not (0 <= address <= 0xFFFFFFFF):
                 return {'ok': False, 'error': 'Sensor address out of range'}
 
@@ -272,10 +290,10 @@ class Communicator:
             stored = {'name': name, 'address': address,
                       'rorg': rorg, 'func': func, 'type': type_}
             if sender:
-                try:
-                    stored['sender'] = int(str(sender), 0)
-                except (TypeError, ValueError):
+                sp = _parse_int(sender)
+                if sp is None:
                     return {'ok': False, 'error': 'Invalid sender address'}
+                stored['sender'] = sp
             # optional per-sensor overrides (e.g. mark an EEP as bidirectional,
             # or actor / bidirectional settings like direction, answer, default_data)
             for key in ('category', 'bidirectional', 'smartack', 'virtual',
@@ -328,11 +346,10 @@ class Communicator:
         # optional address change
         address = payload.get('address')
         if address is not None:
-            if not isinstance(address, int):
-                try:
-                    address = int(str(address), 0)
-                except (TypeError, ValueError):
-                    return {'ok': False, 'error': 'Invalid sensor address'}
+            pa = _parse_int(address)
+            if pa is None:
+                return {'ok': False, 'error': 'Invalid sensor address'}
+            address = pa
             if not (0 <= address <= 0xFFFFFFFF):
                 return {'ok': False, 'error': 'Sensor address out of range'}
             changes['address'] = address

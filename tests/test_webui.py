@@ -673,6 +673,17 @@ def test_next_free_sender():
         assert 0xFF800000 not in com.virtual_senders()
 
 
+def test_parse_int_formats():
+    """addresses accept colon / 0x / plain hex formats"""
+    from enoceanmqtt.communicator import _parse_int
+    assert _parse_int('0xDEADBEEF') == 0xDEADBEEF
+    assert _parse_int('DE:AD:BE:EF') == 0xDEADBEEF
+    assert _parse_int('DEADBEEF') == 0xDEADBEEF
+    assert _parse_int(0xDEADBEEF) == 0xDEADBEEF
+    assert _parse_int('bogus') is None
+    assert _parse_int('') is None
+
+
 def test_request_restart():
     """request_restart sets the flag and returns ok"""
     with tempfile.TemporaryDirectory() as tmp:
@@ -796,5 +807,6 @@ if __name__ == '__main__':
     test_next_free_sender()
     test_teachin_capture_no_autoadd()
     test_request_restart()
+    test_parse_int_formats()
     print('ALL TESTS PASSED')
 
