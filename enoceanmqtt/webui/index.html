@@ -54,6 +54,23 @@
   </header>
 
   <main class="content">
+    <!-- Settings / Config (collapsed by default) -->
+    <section class="card collapsible collapsed" id="config-card">
+      <div class="card-header">
+        <h2 data-i18n="configuration">Configuration</h2>
+        <span class="card-sub" data-i18n="config_sub">[CONFIG] section of enoceanmqtt.conf - changes apply after restart</span>
+      </div>
+      <form id="config-form" class="add-form">
+        <div class="config-grid" id="config-grid"></div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit" id="btn-config-save" data-i18n="save_config">Save configuration</button>
+          <span class="card-sub" data-i18n="config_restart">A restart is required for most settings to take effect.</span>
+        </div>
+      </form>
+    </section>
+
+
+
     <!-- Teach-in banner -->
     <section class="card teachin-card" id="learn-card">
       <div class="teachin-info">
@@ -70,51 +87,25 @@
     <section class="card">
       <div class="card-header">
         <h2 data-i18n="add_device">Add device</h2>
-        <span class="card-sub" data-i18n="add_sub">Manually add a sensor (sender) or an actor (receiver)</span>
+        <span class="card-sub" data-i18n="add_sub">Choose what kind of device to add</span>
       </div>
-      <div class="device-tabs" style="margin-bottom:14px">
-        <button type="button" class="device-tab active" data-addcat="sensor" id="add-tab-sensor" data-i18n="add_sensor">Add Sensor (sender)</button>
-        <button type="button" class="device-tab" data-addcat="actor" id="add-tab-actor" data-i18n="add_actor">Add Actor (receiver)</button>
-        <button type="button" class="device-tab" data-addcat="bidirectional" id="add-tab-bidir" data-i18n="add_bidir">Add Bidirectional</button>
+      <div class="add-options">
+        <div class="add-option" id="add-opt-sensor" data-addcat="sensor">
+          <div class="add-option-icon">📡</div>
+          <div class="add-option-text"><b data-i18n="add_sensor">Sensor</b><span class="add-option-desc">Measuring device (sender)</span></div>
+          <button class="btn" data-addcat="sensor">Add</button>
+        </div>
+        <div class="add-option" id="add-opt-actor" data-addcat="actor">
+          <div class="add-option-icon">🎛</div>
+          <div class="add-option-text"><b data-i18n="add_actor">Actor</b><span class="add-option-desc">Receiving device</span></div>
+          <button class="btn" data-addcat="actor">Add</button>
+        </div>
+        <div class="add-option" id="add-opt-bidir" data-addcat="bidirectional">
+          <div class="add-option-icon">⇅</div>
+          <div class="add-option-text"><b data-i18n="add_bidir">Bidirectional</b><span class="add-option-desc">Sends and receives</span></div>
+          <button class="btn" data-addcat="bidirectional">Add</button>
+        </div>
       </div>
-      <form id="add-form" class="add-form">
-        <div class="field">
-          <label for="f-name" data-i18n="name">Name</label>
-          <input type="text" id="f-name" placeholder="e.g. living_room_temperature" required>
-        </div>
-        <div class="field" id="f-addr-field">
-          <label for="f-address" data-i18n="address">Address</label>
-          <input type="text" id="f-address" placeholder="0x003DD63B" required>
-        </div>
-        <div class="field" id="f-sender-field" hidden>
-          <label for="f-sender" data-i18n="sender_id">Sender ID</label>
-          <select id="f-sender"></select>
-        </div>
-        <div class="field field-grow">
-          <label for="f-eep-search" data-i18n="eep_label">EEP (Equipment Profile)</label>
-          <div class="eep-combo">
-            <input type="text" id="f-eep-search" list="f-eep-list" data-ph="eep_placeholder" placeholder="A5-20-01, temperature, switch…" autocomplete="off" required>
-            <span class="eep-info" id="f-eep-info" title="Open in EEP viewer" hidden>ⓘ</span>
-          </div>
-          <datalist id="f-eep-list"></datalist>
-        </div>
-        <button class="btn btn-primary" type="submit" id="btn-add" data-i18n="add_device">Add device</button>
-      </form>
-    </section>
-
-    <!-- Settings / Config (collapsed by default) -->
-    <section class="card collapsible collapsed" id="config-card">
-      <div class="card-header">
-        <h2 data-i18n="configuration">Configuration</h2>
-        <span class="card-sub" data-i18n="config_sub">[CONFIG] section of enoceanmqtt.conf - changes apply after restart</span>
-      </div>
-      <form id="config-form" class="add-form">
-        <div class="config-grid" id="config-grid"></div>
-        <div class="form-actions">
-          <button class="btn btn-primary" type="submit" id="btn-config-save" data-i18n="save_config">Save configuration</button>
-          <span class="card-sub" data-i18n="config_restart">A restart is required for most settings to take effect.</span>
-        </div>
-      </form>
     </section>
 
     <!-- Sensors / Actors -->
@@ -165,8 +156,8 @@
 <!-- Confirm dialog -->
 <div class="modal-overlay" id="modal-overlay" hidden>
   <div class="modal">
-    <h3 id="modal-title" data-i18n="remove_title">Remove sensor?</h3>
-    <p id="modal-body" data-i18n="remove_body">Are you sure?</p>
+    <h3 id="modal-title">Remove sensor?</h3>
+    <p id="modal-body">Are you sure?</p>
     <div class="modal-actions">
       <button class="btn" id="modal-cancel" data-i18n="cancel">Cancel</button>
       <button class="btn btn-danger" id="modal-ok" data-i18n="remove">Remove</button>
@@ -182,9 +173,25 @@
       <label for="e-name" data-i18n="name">Name</label>
       <input type="text" id="e-name" placeholder="device name">
     </div>
-    <div class="field">
+    <div class="field" id="e-addr-field">
       <label for="e-address" data-i18n="address">Address</label>
       <input type="text" id="e-address" placeholder="0x003DD63B">
+    </div>
+    <div class="field" id="e-sender-field" hidden>
+      <label for="e-sender" data-i18n="sender_id">Sender ID</label>
+      <select id="e-sender"></select>
+    </div>
+    <div class="field" id="e-dir-field" hidden>
+      <label for="e-direction">Direction</label>
+      <input type="text" id="e-direction" placeholder="1">
+    </div>
+    <div class="field" id="e-answer-field" hidden>
+      <label for="e-answer">Answer</label>
+      <input type="text" id="e-answer" placeholder="1">
+    </div>
+    <div class="field" id="e-default-field" hidden>
+      <label for="e-default_data">Default data</label>
+      <input type="text" id="e-default_data" placeholder="0x32790008">
     </div>
     <div class="field">
       <label for="e-eep-search" data-i18n="eep_label">EEP (Equipment Profile)</label>
@@ -208,6 +215,81 @@
     <div id="graph-body">No data.</div>
     <div class="modal-actions">
       <button class="btn" id="graph-close" data-i18n="close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Add Sensor modal ===== -->
+<div class="modal-overlay" id="addsensor-overlay" hidden>
+  <div class="modal modal-wide">
+    <h3 data-i18n="add_sensor">Add Sensor</h3>
+    <div class="teachin-options">
+      <button class="btn btn-primary" id="as-teachin-btn">Start teach-in</button>
+      <span class="or-sep">or</span>
+      <button class="btn" id="as-manual-btn">Add manually</button>
+    </div>
+    <div class="modal-prompt" id="as-prompt" hidden>
+      <p data-i18n="teachin_desc"></p>
+      <p class="hint" id="as-prompt-state">Waiting for telegram…</p>
+    </div>
+    <div class="modal-success" id="as-success" hidden>
+      <p class="success-text">✔ Sensor detected - confirm the details below.</p>
+    </div>
+    <div class="add-form">
+      <div class="field"><label data-i18n="name">Name</label><input type="text" id="as-name" placeholder="sensor name" required></div>
+      <div class="field"><label data-i18n="address">Address</label><input type="text" id="as-address" placeholder="0x003DD63B"></div>
+      <div class="field"><label data-i18n="eep_label">EEP</label>
+        <div class="eep-combo"><input type="text" id="as-eep" data-ph="eep_placeholder" placeholder="A5-20-01, temperature…" autocomplete="off"><span class="eep-info" id="as-eep-info" hidden>ⓘ</span><div class="eep-dropdown" id="as-eep-drop" hidden><ul id="as-eep-list"></ul></div></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="as-cancel">Cancel</button>
+      <button class="btn btn-primary" id="as-save">Save sensor</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Add Actor modal ===== -->
+<div class="modal-overlay" id="addactor-overlay" hidden>
+  <div class="modal modal-wide">
+    <h3 data-i18n="add_actor">Add Actor</h3>
+    <div class="modal-prompt" id="aa-hint">
+      <p>Enter a name, pick the sender ID to transmit from and the EEP, then send the teach-in telegram so the device learns this gateway.</p>
+    </div>
+    <div class="add-form">
+      <div class="field"><label data-i18n="name">Name</label><input type="text" id="aa-name" placeholder="actor name" required></div>
+      <div class="field"><label data-i18n="sender_id">Sender ID</label><select id="aa-sender"></select></div>
+      <div class="field"><label data-i18n="eep_label">EEP</label>
+        <div class="eep-combo"><input type="text" id="aa-eep" data-ph="eep_placeholder" placeholder="F6-02-01, switch…" autocomplete="off" value="F6-02-01"><span class="eep-info" id="aa-eep-info" hidden>ⓘ</span><div class="eep-dropdown" id="aa-eep-drop" hidden><ul id="aa-eep-list"></ul></div></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="aa-teachin">Send teach-in</button>
+      <button class="btn" id="aa-cancel">Cancel</button>
+      <button class="btn btn-primary" id="aa-save">Save actor</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Add Bidirectional modal ===== -->
+<div class="modal-overlay" id="addbidir-overlay" hidden>
+  <div class="modal modal-wide">
+    <h3 data-i18n="add_bidir">Add Bidirectional</h3>
+    <div class="modal-prompt" id="ab-hint">
+      <p>Start teach-in, then trigger the device. On receipt we answer with a teach-in telegram from the next free sender ID and pre-fill the details below.</p>
+    </div>
+    <div class="add-form">
+      <div class="field"><label data-i18n="name">Name</label><input type="text" id="ab-name" placeholder="device name" required></div>
+      <div class="field"><label data-i18n="address">Address</label><input type="text" id="ab-address" placeholder="0x003DD63B"></div>
+      <div class="field"><label data-i18n="sender_id">Answer Sender ID</label><select id="ab-sender"></select></div>
+      <div class="field"><label data-i18n="eep_label">EEP</label>
+        <div class="eep-combo"><input type="text" id="ab-eep" data-ph="eep_placeholder" placeholder="A5-20-01…" autocomplete="off"><span class="eep-info" id="ab-eep-info" hidden>ⓘ</span><div class="eep-dropdown" id="ab-eep-drop" hidden><ul id="ab-eep-list"></ul></div></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="ab-teachin" data-i18n="start_teachin">Start teach-in</button>
+      <button class="btn" id="ab-cancel">Cancel</button>
+      <button class="btn btn-primary" id="ab-save">Save device</button>
     </div>
   </div>
 </div>

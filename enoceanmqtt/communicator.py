@@ -198,7 +198,8 @@ class Communicator:
             sensor['sender'] = stored['sender']
         if stored.get('ignore'):
             sensor['ignore'] = stored['ignore']
-        for key in ('category', 'bidirectional', 'smartack'):
+        for key in ('category', 'bidirectional', 'smartack', 'virtual',
+                    'direction', 'answer', 'default_data', 'command', 'channel'):
             if stored.get(key) is not None:
                 sensor[key] = stored[key]
         # resolve missing flags from the EEP registry so bidirectional /
@@ -271,8 +272,10 @@ class Communicator:
                     stored['sender'] = int(str(sender), 0)
                 except (TypeError, ValueError):
                     return {'ok': False, 'error': 'Invalid sender address'}
-            # optional per-sensor overrides (e.g. mark an EEP as bidirectional)
-            for key in ('category', 'bidirectional', 'smartack', 'virtual'):
+            # optional per-sensor overrides (e.g. mark an EEP as bidirectional,
+            # or actor / bidirectional settings like direction, answer, default_data)
+            for key in ('category', 'bidirectional', 'smartack', 'virtual',
+                        'direction', 'answer', 'default_data', 'command', 'channel'):
                 if payload.get(key) is not None:
                     stored[key] = payload[key]
             self._store.add(stored)
@@ -390,6 +393,17 @@ class Communicator:
         else:
             hist = self._history.get(address, [])
         return {'ok': True, 'name': name, 'history': hist[-self._history_max:]}
+
+    def next_free_sender(self):
+        """the first unused virtual sender ID (base+1..base+127), or None"""
+        used = set()
+        for s in self.sensors:
+            if s.get('sender') is not None:
+                used.add(s['sender'])
+        for v in self.virtual_senders():
+            if v not in used:
+                return v
+        return None
 
     def save_config(self, payload):
         """persist updated [CONFIG] settings back to the configuration file.
@@ -540,15 +554,18 @@ class Communicator:
         """the usable virtual sender IDs of the transceiver.
 
         EnOcean transceivers (USB300/TCM515 and similar) expose a 32-bit base
-        ID plus a range of 128 assignable addresses (base .. base+127). These
-        are used as the sender ID when transmitting to actors.
+        ID plus a range of 127 additional assignable addresses. The base ID
+        itself is reserved (it is the transceiver's own ID), so the usable
+        sender IDs are base+1 .. base+127 (127 IDs). These are used as the
+        sender ID when transmitting to actors.
         Returns a list of ints (empty until the base ID is known).
         """
         base = self.enocean_sender or getattr(self.enocean, 'base_id', None)
         if base is None:
             return []
         base_int = enocean.utils.combine_hex(base)
-        return [base_int + i for i in range(128)]
+        # base+1 .. base+127 (the base ID itself is not usable as a sender)
+        return [base_int + i for i in range(1, 128)]
 
     #=============================================================================================
     # UNIVERSAL TEACH-IN (UTE)
@@ -656,7 +673,14 @@ class Communicator:
             destination = list(in_packet.sender)
         else:
             destination = None
-        sender = self.enocean_sender
+        # answer from the next free sender ID (not the base ID) so the
+        # bidirectional pairing uses an unused virtual address
+        sender = None
+        nxt = self.next_free_sender()
+        if nxt is not None:
+            sender = [(nxt >> i * 8) & 0xff for i in reversed(range(4))]
+        else:
+            sender = self.enocean_sender
         if destination is None:
             return
         try:

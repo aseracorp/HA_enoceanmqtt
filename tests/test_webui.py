@@ -612,9 +612,34 @@ def test_virtual_senders_range():
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
         senders = com.virtual_senders()
-        assert len(senders) == 128
-        assert senders[0] == 0xFF800000
-        assert senders[127] == 0xFF80007F
+        # the base ID itself is not usable - senders are base+1 .. base+127
+        assert len(senders) == 127
+        assert senders[0] == 0xFF800001
+        assert senders[-1] == 0xFF80007F
+        assert 0xFF800000 not in senders
+
+
+def test_next_free_sender():
+    """next_free_sender returns the first unused virtual sender (base+1..)"""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+        # no devices -> first free is base+1
+        assert com.next_free_sender() == 0xFF800001
+        # occupy base+1 -> next is base+2
+        com.add_sensor({'name': 'a', 'address': 0xFFFFFFFF, 'eep': 'F6-02-01',
+                        'sender': 0xFF800001, 'virtual': 1, 'category': 'actor'})
+        assert com.next_free_sender() == 0xFF800002
+        # the base ID itself is never offered
+        assert 0xFF800000 not in com.virtual_senders()
 
 
 def test_config_save_and_history():
@@ -720,5 +745,6 @@ if __name__ == '__main__':
     test_update_sensor_address()
     test_latest_value_with_meta()
     test_smartack_is_bidirectional()
+    test_next_free_sender()
     print('ALL TESTS PASSED')
 

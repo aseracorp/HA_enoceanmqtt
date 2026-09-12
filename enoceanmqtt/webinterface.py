@@ -96,6 +96,7 @@ class WebInterface:
             'sensors': sensors,
             'eep': com.eep_catalog(),
             'virtual_senders': com.virtual_senders(),
+            'next_free_sender': com.next_free_sender(),
         }
 
     def get_config(self):
