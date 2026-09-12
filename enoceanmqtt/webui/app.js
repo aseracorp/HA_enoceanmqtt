@@ -143,7 +143,7 @@ async function showGraph(name, field) {
 }
 function renderMiniGraph(svgId, pts, key) {
   const svg = document.getElementById(svgId);
-  if (!svg || pts.length < 2) return;
+  if (!svg || pts.length < 1) return;
   const W = 600, H = 180, PADL = 46, PADR = 10, PADT = 10, PADB = 22, PW = W - PADL - PADR, PH = H - PADT - PADB;
   const vals = pts.map((p) => p.v);
   const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
@@ -153,9 +153,10 @@ function renderMiniGraph(svgId, pts, key) {
   const Y = (v) => PADT + (1 - (v - min) / span) * PH;
   const fmtV = (v) => (Math.round(v * 100) / 100).toString();
   const fmtT = (t) => { const d = new Date(t); return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
-  svg.innerHTML = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>' +
-    '<polyline fill="none" stroke="var(--primary)" stroke-width="2" points="' +
-    pts.map((p) => X(p.t).toFixed(1) + ',' + Y(p.v).toFixed(1)).join(' ') + '"/>' +
+  const poly = pts.length > 1 
+    ? '<polyline fill="none" stroke="var(--primary)" stroke-width="2" points="' + pts.map((p) => X(p.t).toFixed(1) + ',' + Y(p.v).toFixed(1)).join(' ') + '"/>'
+    : '<circle cx="' + X(pts[0].t).toFixed(1) + '" cy="' + Y(pts[0].v).toFixed(1) + '" r="5" fill="var(--primary)"/>';
+  svg.innerHTML = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>' + poly +
     // Y axis labels (start = min at bottom, end = max at top), left-aligned
     '<text x="' + (PADL - 6) + '" y="' + (Y(max) + 4) + '" fill="var(--text-muted)" font-size="12" text-anchor="end">' + escapeHtml(fmtV(max)) + '</text>' +
     '<text x="' + (PADL - 6) + '" y="' + (Y(min) + 4) + '" fill="var(--text-muted)" font-size="12" text-anchor="end">' + escapeHtml(fmtV(min)) + '</text>' +
@@ -604,15 +605,22 @@ function populateEepDatalist(listId, mode) {
   renderEepList(ul, '');
 }
 function renderEepList(ul, q) {
+  if (!ul.children.length) {
+    ul.innerHTML = _eepOpts.map((p) =>
+      '<li data-eep="' + escapeHtml(p.eep) + '" data-name="' + escapeHtml(p.name) + '">' +
+        '<span class="eep-code">' + escapeHtml(p.eep) + '</span>' +
+        '<span class="eep-name">' + escapeHtml(translateEepName(p.name)) + '</span></li>').join('');
+  }
   const query = (q || '').toLowerCase();
-  const items = query
-    ? _eepOpts.filter((p) => p.eep.toLowerCase().includes(query) || p.name.toLowerCase().includes(query))
-    : _eepOpts;
-  ul.innerHTML = items.slice(0, 300).map((p) =>
-    '<li data-eep="' + escapeHtml(p.eep) + '" data-name="' + escapeHtml(p.name) + '">' +
-      '<span class="eep-code">' + escapeHtml(p.eep) + '</span>' +
-      '<span class="eep-name">' + escapeHtml(translateEepName(p.name)) + '</span></li>').join('');
-  return items.length;
+  let count = 0;
+  ul.querySelectorAll('li').forEach((li) => {
+    const eep = li.getAttribute('data-eep').toLowerCase();
+    const name = li.getAttribute('data-name').toLowerCase();
+    const match = !query || eep.includes(query) || name.includes(query);
+    li.hidden = !match;
+    if (match) count++;
+  });
+  return count;
 }
 function initEepCombo(searchId, listId, dropId, infoId) {
   const input = $(searchId);
