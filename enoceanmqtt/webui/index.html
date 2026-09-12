@@ -59,7 +59,7 @@
       <div class="card-header">
         <h2 data-i18n="configuration">Configuration</h2>
         <span class="card-sub" data-i18n="config_sub">[CONFIG] section of enoceanmqtt.conf</span>
-        <button class="btn btn-primary" id="btn-config-edit" data-i18n="edit_config">Edit</button>
+        <button class="btn" id="btn-config-edit" title="Edit configuration" aria-label="Edit configuration">✎</button>
       </div>
       <div class="config-view" id="config-view">
         <span class="card-sub">Loading…</span>
@@ -90,17 +90,17 @@
       <div class="add-options">
         <div class="add-option" id="add-opt-sensor" data-addcat="sensor">
           <div class="add-option-icon">📡</div>
-          <div class="add-option-text"><b data-i18n="add_sensor">Sensor</b><span class="add-option-desc">Measuring device (sender)</span></div>
+          <div class="add-option-text"><b data-i18n="add_sensor">Sensor</b><span class="add-option-desc" data-i18n="desc_sensor">Measuring device (sender)</span></div>
           <button type="button" class="btn btn-primary" data-addcat="sensor">Add</button>
         </div>
         <div class="add-option" id="add-opt-actor" data-addcat="actor">
           <div class="add-option-icon">🎛</div>
-          <div class="add-option-text"><b data-i18n="add_actor">Actor</b><span class="add-option-desc">Receiving device</span></div>
+          <div class="add-option-text"><b data-i18n="add_actor">Actor</b><span class="add-option-desc" data-i18n="desc_actor">Receiving device</span></div>
           <button type="button" class="btn btn-primary" data-addcat="actor">Add</button>
         </div>
         <div class="add-option" id="add-opt-bidir" data-addcat="bidirectional">
           <div class="add-option-icon">⇅</div>
-          <div class="add-option-text"><b data-i18n="add_bidir">Bidirectional</b><span class="add-option-desc">Sends and receives</span></div>
+          <div class="add-option-text"><b data-i18n="add_bidir">Bidirectional</b><span class="add-option-desc" data-i18n="desc_bidir">Sends and receives</span></div>
           <button type="button" class="btn btn-primary" data-addcat="bidirectional">Add</button>
         </div>
       </div>
@@ -224,8 +224,8 @@
   <div class="modal modal-wide">
     <h3 data-i18n="add_sensor">Add Sensor</h3>
     <div class="teachin-options">
-      <button class="btn btn-primary" id="as-teachin-btn">Start teach-in</button>
-      <span class="or-sep" id="as-manual-hint">or fill in the fields below manually.</span>
+      <button class="btn btn-primary" id="as-teachin-btn" data-i18n="start_teachin">Start teach-in</button>
+      <span class="or-sep" id="as-manual-hint" data-i18n="manual_hint">or fill in the fields below manually.</span>
     </div>
     <div class="modal-prompt" id="as-prompt" hidden>
       <p data-i18n="teachin_desc"></p>
@@ -235,15 +235,15 @@
       <p class="success-text">✔ Sensor detected - confirm the details below.</p>
     </div>
     <div class="add-form">
-      <div class="field"><label data-i18n="name">Name</label><input type="text" id="as-name" placeholder="sensor name" required></div>
+      <div class="field"><label data-i18n="name">Name</label><input type="text" id="as-name" placeholder="sensor name" data-ph="sensor_name" required></div>
       <div class="field"><label data-i18n="address">Address</label><input type="text" id="as-address" placeholder="0x003DD63B"></div>
       <div class="field"><label data-i18n="eep_label">EEP</label>
         <div class="eep-combo"><input type="text" id="as-eep" data-ph="eep_placeholder" placeholder="A5-20-01, temperature…" autocomplete="off"><span class="eep-info" id="as-eep-info" hidden>ⓘ</span><div class="eep-dropdown" id="as-eep-drop" hidden><ul id="as-eep-list"></ul></div></div>
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn" id="as-cancel">Cancel</button>
-      <button class="btn btn-primary" id="as-save">Save sensor</button>
+      <button class="btn" id="as-cancel" data-i18n="cancel">Cancel</button>
+      <button class="btn btn-primary" id="as-save" data-i18n="save_sensor">Save sensor</button>
     </div>
   </div>
 </div>
@@ -263,9 +263,9 @@
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-primary" id="aa-teachin">Send teach-in</button>
-      <button class="btn" id="aa-cancel">Cancel</button>
-      <button class="btn btn-primary" id="aa-save">Save actor</button>
+      <button class="btn btn-primary" id="aa-teachin" data-i18n="send_teachin">Send teach-in</button>
+      <button class="btn" id="aa-cancel" data-i18n="cancel">Cancel</button>
+      <button class="btn btn-primary" id="aa-save" data-i18n="save_actor">Save actor</button>
     </div>
   </div>
 </div>
@@ -287,8 +287,8 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-primary" id="ab-teachin" data-i18n="start_teachin">Start teach-in</button>
-      <button class="btn" id="ab-cancel">Cancel</button>
-      <button class="btn btn-primary" id="ab-save">Save device</button>
+      <button class="btn" id="ab-cancel" data-i18n="cancel">Cancel</button>
+      <button class="btn btn-primary" id="ab-save" data-i18n="save_device">Save device</button>
     </div>
   </div>
 </div>
