@@ -106,7 +106,9 @@ function fmtLatest(s) {
     if (m.text && m.text !== String(v)) txt = m.text;
     else if (typeof v === 'number') txt = (Math.round(v * 100) / 100).toString();
     else txt = String(v);
-    return '<a href="#" class="val-link" data-valgraph="' + escapeHtml(s.name + '|' + k) + '" title="Graph: ' + escapeHtml(k) + '">' +
+    const tip = m.description ?
+      (m.description + (m.unit ? ' (' + m.unit + ')' : '')) : (k + (m.unit ? ' (' + m.unit + ')' : ''));
+    return '<a href="#" class="val-link" data-valgraph="' + escapeHtml(s.name + '|' + k) + '" data-tip="' + escapeHtml(tip) + '">' +
       txt + (m.unit ? ' ' + m.unit : '') + '</a>';
   }).join(' · ');
 }
@@ -477,7 +479,11 @@ function initEepCombo(searchId, listId, dropId, infoId) {
   const list = $(listId);
   const drop = $(dropId);
   if (!input || !list || !drop) return;
-  input.addEventListener('focus', () => { renderEepList(list, input.value); drop.hidden = false; });
+  input.addEventListener('focus', () => {
+    if (!_eepOpts.length && (state.eep || []).length) populateEepDatalist(listId, addMode);
+    renderEepList(list, input.value);
+    drop.hidden = false;
+  });
   input.addEventListener('input', () => { renderEepList(list, input.value); drop.hidden = false; updateEepInfo(searchId, infoId); });
   input.addEventListener('blur', () => setTimeout(() => { drop.hidden = true; }, 150));
   input.addEventListener('keydown', (e) => {
@@ -504,14 +510,16 @@ function resolveEep(value) {
 }
 
 function eepViewerUrl(eep) {
-  const base = 'https://tools.enocean-alliance.org/EEPViewer/';
-  if (!eep) return base;
+  // EnOcean Alliance EEPViewer PDF schema:
+  // https://tools.enocean-alliance.org/EEPViewer/profiles/{RORG}/{FUNC}/{TYPE}/{RORG}-{FUNC}-{TYPE}.pdf
+  if (!eep) return 'https://tools.enocean-alliance.org/EEPViewer/';
   const parts = eep.split('-');
   if (parts.length === 3) {
-    // EEPViewer accepts e.g. A5-20-01 (no slash needed); pass as query-ish path
-    return base + '#profile=' + parts[0] + '-' + parts[1] + '-' + parts[2];
+    return 'https://tools.enocean-alliance.org/EEPViewer/profiles/' +
+      parts[0] + '/' + parts[1] + '/' + parts[2] + '/' +
+      parts[0] + '-' + parts[1] + '-' + parts[2] + '.pdf';
   }
-  return base;
+  return 'https://tools.enocean-alliance.org/EEPViewer/';
 }
 function updateEepInfo(inputId, infoId) {
   const input = $(inputId);
@@ -853,7 +861,8 @@ function t(key) {
 }
 function applyTranslations() {
   document.querySelectorAll('[data-i18n]').forEach((el) => {
-    if (el.id === 'graph-body') return; // Graph is rendered dynamically - never overwrite it
+    // elements set dynamically must never be overwritten by translations
+    if (el.id === 'graph-body' || el.id === 'modal-title' || el.id === 'modal-body') return;
     const key = el.getAttribute('data-i18n');
     if (key && t(key)) el.textContent = t(key);
   });

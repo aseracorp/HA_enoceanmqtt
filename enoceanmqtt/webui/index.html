@@ -54,6 +54,23 @@
   </header>
 
   <main class="content">
+    <!-- Settings / Config (collapsed by default) -->
+    <section class="card collapsible collapsed" id="config-card">
+      <div class="card-header">
+        <h2 data-i18n="configuration">Configuration</h2>
+        <span class="card-sub" data-i18n="config_sub">[CONFIG] section of enoceanmqtt.conf - changes apply after restart</span>
+      </div>
+      <form id="config-form" class="add-form">
+        <div class="config-grid" id="config-grid"></div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit" id="btn-config-save" data-i18n="save_config">Save configuration</button>
+          <span class="card-sub" data-i18n="config_restart">A restart is required for most settings to take effect.</span>
+        </div>
+      </form>
+    </section>
+
+
+
     <!-- Teach-in banner -->
     <section class="card teachin-card" id="learn-card">
       <div class="teachin-info">
@@ -93,27 +110,12 @@
         <div class="field field-grow">
           <label for="f-eep-search" data-i18n="eep_label">EEP (Equipment Profile)</label>
           <div class="eep-combo">
-            <input type="text" id="f-eep-search" list="f-eep-list" data-ph="eep_placeholder" placeholder="A5-20-01, temperature, switch…" autocomplete="off" required>
+            <input type="text" id="f-eep-search" data-ph="eep_placeholder" placeholder="A5-20-01, temperature, switch…" autocomplete="off" required>
             <span class="eep-info" id="f-eep-info" title="Open in EEP viewer" hidden>ⓘ</span>
+            <div class="eep-dropdown" id="f-eep-drop" hidden><ul id="f-eep-list"></ul></div>
           </div>
-          <datalist id="f-eep-list"></datalist>
         </div>
         <button class="btn btn-primary" type="submit" id="btn-add" data-i18n="add_device">Add device</button>
-      </form>
-    </section>
-
-    <!-- Settings / Config (collapsed by default) -->
-    <section class="card collapsible collapsed" id="config-card">
-      <div class="card-header">
-        <h2 data-i18n="configuration">Configuration</h2>
-        <span class="card-sub" data-i18n="config_sub">[CONFIG] section of enoceanmqtt.conf - changes apply after restart</span>
-      </div>
-      <form id="config-form" class="add-form">
-        <div class="config-grid" id="config-grid"></div>
-        <div class="form-actions">
-          <button class="btn btn-primary" type="submit" id="btn-config-save" data-i18n="save_config">Save configuration</button>
-          <span class="card-sub" data-i18n="config_restart">A restart is required for most settings to take effect.</span>
-        </div>
       </form>
     </section>
 
@@ -165,8 +167,8 @@
 <!-- Confirm dialog -->
 <div class="modal-overlay" id="modal-overlay" hidden>
   <div class="modal">
-    <h3 id="modal-title" data-i18n="remove_title">Remove sensor?</h3>
-    <p id="modal-body" data-i18n="remove_body">Are you sure?</p>
+    <h3 id="modal-title">Remove sensor?</h3>
+    <p id="modal-body">Are you sure?</p>
     <div class="modal-actions">
       <button class="btn" id="modal-cancel" data-i18n="cancel">Cancel</button>
       <button class="btn btn-danger" id="modal-ok" data-i18n="remove">Remove</button>

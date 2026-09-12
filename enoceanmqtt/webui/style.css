@@ -141,12 +141,14 @@ select {
 }
 select:focus { outline: none; border-color: var(--primary); }
 select option { background-color: var(--bg-elevated); color: var(--text); }
+select optgroup { background-color: var(--bg-elevated); color: var(--text-secondary); }
 
 /* collapsible card */
 .card.collapsible > .card-header { cursor: pointer; user-select: none; }
+.card.collapsible > .card-header { display: flex; align-items: center; justify-content: space-between; }
 .card.collapsible > .card-header::after {
-  content: ''; float: right; width: 9px; height: 6px; margin-top: 4px; margin-right: 8px;
-  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  content: ''; flex: 0 0 auto; width: 10px; height: 7px; align-self: center;
+  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='%23888' d='M1 0l4 5 4-5z'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: center; transition: transform 0.2s;
 }
 .card.collapsible.collapsed > .card-header::after { transform: rotate(-90deg); }
@@ -166,7 +168,7 @@ select option { background-color: var(--bg-elevated); color: var(--text); }
   background: var(--bg-surface);
   color: var(--text-secondary);
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 16px; line-height: 1;
+  font-size: 16px; line-height: 1; padding: 0; margin: 0;
   transition: all 0.15s ease;
 }
 .theme-toggle:hover { background: var(--bg-hover); color: var(--text); }
@@ -328,8 +330,8 @@ select option { background-color: var(--bg-elevated); color: var(--text); }
   display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px;
   border: 1px solid var(--border-strong); background: var(--bg-surface); color: var(--text-secondary);
 }
-.cat-badge.actor { color: var(--primary); border-color: rgba(176,20,25,0.4); background: rgba(176,20,25,0.08); }
-.cat-badge.bidirectional { color: var(--secondary); border-color: rgba(105,12,15,0.4); background: rgba(105,12,15,0.10); }
+.cat-badge.actor { color: #ff8a8a; border-color: rgba(255,120,120,0.5); background: rgba(176,20,25,0.18); }
+.cat-badge.bidirectional { color: #d8b5ff; border-color: rgba(200,160,255,0.5); background: rgba(120,40,160,0.18); }
 .cat-badge.sensor { color: var(--success); border-color: rgba(84,214,44,0.4); background: rgba(84,214,44,0.08); }
 .badge {
   display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px;
@@ -375,6 +377,7 @@ select option { background-color: var(--bg-elevated); color: var(--text); }
 
 /* themed select popups (options) - light/dark aware */
 select option { background-color: var(--bg-elevated); color: var(--text); }
+select optgroup { background-color: var(--bg-elevated); color: var(--text-secondary); }
 
 /* ---------------- config editor ---------------- */
 .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }

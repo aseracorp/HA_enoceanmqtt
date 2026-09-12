@@ -612,9 +612,11 @@ def test_virtual_senders_range():
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
         senders = com.virtual_senders()
-        assert len(senders) == 128
-        assert senders[0] == 0xFF800000
-        assert senders[127] == 0xFF80007F
+        # the base ID itself is not usable - senders are base+1 .. base+127
+        assert len(senders) == 127
+        assert senders[0] == 0xFF800001
+        assert senders[-1] == 0xFF80007F
+        assert 0xFF800000 not in senders
 
 
 def test_config_save_and_history():
