@@ -44,6 +44,9 @@ class Communicator:
 
         # UTE teach-in state (managed through the web interface / MQTT learn)
         self.learn_mode = False
+        # capture-only teach-in: fills the web dialog but does NOT persist
+        self.learn_capture = False
+        self.captured_device = None
         self._last_seen = {}
         # latest decoded values per device address (for the web UI)
         self._latest_value = {}
@@ -577,6 +580,24 @@ class Communicator:
         self.enocean.teach_in = False
         logging.info("UTE teach-in mode %s", "enabled" if self.learn_mode else "disabled")
 
+    def start_capture(self):
+        """start capture-only teach-in: fills the web dialog but does NOT add
+        the device to the configuration."""
+        self.learn_capture = True
+        self.learn_mode = True
+        self.captured_device = None
+        logging.info("Teach-in capture mode enabled (dialog only)")
+
+    def stop_capture(self):
+        self.learn_capture = False
+        self.learn_mode = False
+
+    def get_captured(self):
+        """return the captured device (and clear it), or None"""
+        dev = self.captured_device
+        self.captured_device = None
+        return dev
+
     def _learn_unknown_device(self, packet, rorg=None, func=None, type_=None):
         """teach-in an unknown device that sent a telegram while learn mode
         is active.
@@ -608,9 +629,7 @@ class Communicator:
             # ID alone. For RPS/F6 we try to recognize the exact EEP from the
             # telegram's data byte (smoke, leakage, key card, rocker, window
             # handle, push button); otherwise a sensible default profile for
-            # the RORG is used. Either way the device is immediately usable
-            # after teach-in (no manual edit required) and can be refined
-            # with the edit button.
+            # the RORG is used.
             recognized = self._recognize_rps_eep(packet) if rorg == RORG.RPS else None
             if recognized:
                 stored['func'] = recognized[0]
@@ -620,6 +639,19 @@ class Communicator:
                 if default:
                     stored['func'] = default['func']
                     stored['type'] = default['type']
+        if self.learn_capture:
+            # capture-only: expose the detected device for the web dialog to
+            # pre-fill, but do NOT add it to the configuration yet (the user
+            # confirms, especially the name, before saving).
+            self.captured_device = {
+                'name': name, 'address': address, 'rorg': rorg,
+                'func': stored.get('func'), 'type': stored.get('type'),
+                'eep': '%02X-%02X-%02X' % (rorg, stored['func'], stored['type'])
+                       if stored.get('func') is not None else '%02X' % rorg,
+            }
+            self.learn_capture = False
+            self.learn_mode = False
+            return None
         self._store.add(stored)
         new_sensor = self._load_dynamic_sensors(name)
         if new_sensor is not None:

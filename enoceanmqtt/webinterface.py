@@ -121,6 +121,18 @@ class WebInterface:
         ok, message = self.communicator._send_teachin(name)
         return {'ok': ok, 'message': message}
 
+    def start_capture(self):
+        self.communicator.start_capture()
+        return {'ok': True, 'message': 'Teach-in capture started'}
+
+    def stop_capture(self):
+        self.communicator.stop_capture()
+        return {'ok': True}
+
+    def get_captured(self):
+        dev = self.communicator.get_captured()
+        return {'ok': dev is not None, 'device': dev}
+
     def remove_sensor(self, name):
         return self.communicator.remove_sensor(name)
 
@@ -205,6 +217,16 @@ class WebInterface:
                 if self.command == 'POST' and path == '/api/teachin':
                     result = web.send_teachin(str(self._read_body().get('name', '')))
                     code = 200 if result.get('ok') else 400
+                    return self._send(code, result)
+                if self.command == 'POST' and path == '/api/teachin/capture':
+                    result = web.start_capture()
+                    return self._send(200, result)
+                if self.command == 'POST' and path == '/api/teachin/capture/stop':
+                    result = web.stop_capture()
+                    return self._send(200, result)
+                if self.command == 'GET' and path == '/api/teachin/captured':
+                    result = web.get_captured()
+                    code = 200 if result.get('ok') else 200
                     return self._send(code, result)
                 if self.command == 'DELETE' and path.startswith('/api/sensors/'):
                     name = path[len('/api/sensors/'):]

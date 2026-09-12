@@ -45,7 +45,6 @@ async function loadStatus() {
     state.gateway = data.gateway || {};
     state.virtual_senders = data.virtual_senders || [];
     renderGateway();
-    renderLearn();
     renderSensors();
     populateEepDatalist('f-eep-list', addMode);
     populateEepDatalist('e-eep-list', addMode);
@@ -70,13 +69,6 @@ function renderGateway() {
     mqttEl.innerHTML = '<span class="dot"></span>MQTT ' + (gw.mqtt ? t('connected') : t('offline'));
     baseEl.textContent = t('base_id') + ': ' + (gw.base_id || '—');
   }
-}
-
-function renderLearn() {
-  const btn = $('btn-learn-on');
-  if (btn) btn.textContent = state.learn ? 'Stop teach-in' : 'Start teach-in';
-  const card = $('learn-card');
-  if (card) card.style.borderColor = state.learn ? 'rgba(255,100,200,0.5)' : '';
 }
 
 function fmtLastSeen(ts) {
@@ -448,7 +440,6 @@ async function setLearn(on) {
   try {
     await api('/api/learn', { method: 'POST', body: JSON.stringify({ enabled: on }) });
     state.learn = on;
-    renderLearn();
     toast(on ? t('teachin_enabled') : t('teachin_disabled'), 'success');
   } catch (e) {
     toast(t('err_teachin') + e.message, 'error');
@@ -596,18 +587,24 @@ function openAddModal(kind) {
     $('addsensor-overlay').hidden = false;
   } else if (kind === 'actor') {
     populateSenders($('aa-sender'), state.virtual_senders);
-    $('aa-sender').value = (firstFreeSender() !== null && firstFreeSender() !== undefined) ? '0x' + Number(firstFreeSender()).toString(16).toUpperCase().padStart(8, '0') : '';
+    const fsA = firstFreeSender();
+    if (fsA && $('aa-sender')) $('aa-sender').value = '0x' + Number(fsA).toString(16).toUpperCase().padStart(8, '0');
     populateEepDatalist('aa-eep-list', 'actor');
     $('addactor-overlay').hidden = false;
   } else if (kind === 'bidirectional') {
     populateSenders($('ab-sender'), state.virtual_senders);
-    $('ab-sender').value = (firstFreeSender() !== null && firstFreeSender() !== undefined) ? '0x' + Number(firstFreeSender()).toString(16).toUpperCase().padStart(8, '0') : '';
+    const fsB = firstFreeSender();
+    if (fsB && $('ab-sender')) $('ab-sender').value = '0x' + Number(fsB).toString(16).toUpperCase().padStart(8, '0');
     populateEepDatalist('ab-eep-list', 'bidirectional');
     $('addbidir-overlay').hidden = false;
   }
 }
-document.querySelectorAll('.add-option [data-addcat], .add-option[data-addcat]').forEach((el) => {
-  el.addEventListener('click', (e) => { e.preventDefault(); openAddModal(el.getAttribute('data-addcat')); });
+document.querySelectorAll('.add-option').forEach((el) => {
+  el.addEventListener('click', (e) => {
+    e.preventDefault();
+    const cat = e.target.closest('[data-addcat]').getAttribute('data-addcat');
+    if (cat) openAddModal(cat);
+  });
 });
 
 /* ---- Sensor modal: teach-in / manual ---- */
@@ -622,23 +619,22 @@ $('as-teachin-btn')?.addEventListener('click', async () => {
   $('as-teachin-btn').hidden = true; $('as-manual-btn').hidden = true;
   $('as-prompt').hidden = false;
   $('as-prompt-state').textContent = 'Teach-in active - press the button on your sensor…';
-  await enableTeachIn();
-  // poll for a newly captured device (learn_ prefix)
-  for (let i = 0; i < 60; i++) {
+  // capture-only teach-in: fills the dialog, does NOT add the device yet
+  await api('/api/teachin/capture', { method: 'POST', body: JSON.stringify({}) });
+  for (let i = 0; i < 90; i++) {
     await new Promise((r) => setTimeout(r, 1000));
-    const known = new Set(state.sensors.map((s) => s.name));
-    const data = await api('/api/status');
-    const fresh = (data.sensors || []).find((s) => s.name.startsWith('enoceanmqtt/learn_') && !known.has(s.name));
-    if (fresh) {
-      $('as-name').value = fresh.name.replace(/^.*\/learn_/, 'learn_');
-      $('as-address').value = '0x' + Number(fresh.address).toString(16).toUpperCase().padStart(8, '0');
-      $('as-eep').value = fresh.eep || '';
+    const cap = await api('/api/teachin/captured');
+    if (cap && cap.ok && cap.device) {
+      const d = cap.device;
+      $('as-name').value = 'learn_' + Number(d.address).toString(16).toLowerCase();
+      $('as-address').value = '0x' + Number(d.address).toString(16).toUpperCase().padStart(8, '0');
+      $('as-eep').value = d.eep || '';
       $('as-prompt').hidden = true; $('as-success').hidden = false;
-      await api('/api/learn', { method: 'POST', body: JSON.stringify({ enabled: false }) });
       toast('Sensor detected - please confirm the name', 'success');
       return;
     }
   }
+  await api('/api/teachin/capture/stop', { method: 'POST', body: JSON.stringify({}) });
   $('as-prompt-state').textContent = 'No telegram received.';
   $('as-teachin-btn').hidden = false; $('as-manual-btn').hidden = false;
 });
@@ -831,6 +827,10 @@ const I18N = {
     eep_placeholder: 'A5-20-01, temperature, switch…',
     device_count: 'devices',
     eep_viewer: 'Open in EEP viewer',
+    add: 'Add',
+    add: 'Hinzufügen',
+    add: 'Ajouter',
+    add: 'Aggiungi',
     err_remove_device: 'Failed to remove device: ',
   },
   de: {
@@ -984,8 +984,6 @@ function applyTranslations() {
   document.querySelectorAll('.eep-info').forEach((el) => {
     el.title = t('eep_viewer');
   });
-  const learnBtn = $('btn-learn-on');
-  if (learnBtn) learnBtn.textContent = state.learn ? t('stop_teachin') : t('start_teachin');
 }
 $('lang-select')?.addEventListener('change', (e) => setLang(e.target.value));
 // collapsible cards (e.g. Configuration)
@@ -1024,8 +1022,6 @@ $('theme-toggle')?.addEventListener('click', () => {
 });
 
 /* ---------------- events ---------------- */
-$('btn-learn-on')?.addEventListener('click', () => setLearn(!state.learn));
-
 /* ---------------- init ---------------- */
 // wire the EEP combos (add modals + edit modal)
 initEepCombo('as-eep', 'as-eep-list', 'as-eep-drop', 'as-eep-info');
