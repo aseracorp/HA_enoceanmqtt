@@ -145,8 +145,9 @@ select option { background-color: var(--bg-elevated); color: var(--text); }
 /* collapsible card */
 .card.collapsible > .card-header { cursor: pointer; user-select: none; }
 .card.collapsible > .card-header::after {
-  content: '▾'; float: right; font-size: 20px; line-height: 1;
-  margin-right: 4px; transition: transform 0.2s; color: var(--text-muted);
+  content: ''; float: right; width: 9px; height: 6px; margin-top: 4px; margin-right: 8px;
+  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: center; transition: transform 0.2s;
 }
 .card.collapsible.collapsed > .card-header::after { transform: rotate(-90deg); }
 .card.collapsible.collapsed > .card-header + * { display: none; }
@@ -348,7 +349,7 @@ select option { background-color: var(--bg-elevated); color: var(--text); }
 }
 .icon-btn:hover { background: rgba(255,77,79,0.12); color: var(--danger); border-color: rgba(255,77,79,0.3); }
 
-/* EEP combobox + info icon */
+/* EEP combobox + info icon + custom dropdown */
 .eep-combo { position: relative; display: flex; align-items: center; gap: 6px; }
 .eep-combo input[type="text"] { flex: 1; }
 .eep-info {
@@ -356,12 +357,31 @@ select option { background-color: var(--bg-elevated); color: var(--text); }
   flex: 0 0 auto; padding: 0 4px; user-select: none;
 }
 .eep-info:hover { text-decoration: underline; }
+.eep-dropdown {
+  position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 60;
+  background: var(--bg-elevated); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow);
+  max-height: 260px; overflow-y: auto;
+}
+.eep-dropdown ul { list-style: none; margin: 0; padding: 0; }
+.eep-dropdown li {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer;
+}
+.eep-dropdown li:hover, .eep-dropdown li:focus { background: var(--bg-hover); }
+.eep-dropdown .eep-code { font-family: 'JetBrains Mono', monospace; color: var(--secondary); font-size: 12px; min-width: 84px; }
+.eep-dropdown .eep-name { color: var(--text-secondary); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eep-link { color: var(--primary); text-decoration: none; font-size: 13px; }
+.eep-link:hover { text-decoration: underline; }
+
+/* themed select popups (options) - light/dark aware */
+select option { background-color: var(--bg-elevated); color: var(--text); }
 
 /* ---------------- config editor ---------------- */
 .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .form-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
 .modal-wide { width: 640px; max-width: calc(100vw - 40px); }
 .graph-wrap { width: 100%; overflow: hidden; }
+.graph-legend { margin-top: 10px; color: var(--text-secondary); font-size: 13px; padding: 4px 8px; background: var(--bg-surface); border-radius: var(--radius); }
 .latest-val a { color: var(--primary); text-decoration: none; }
 .val-link { color: var(--primary); text-decoration: none; white-space: nowrap; }
 .val-link:hover { text-decoration: underline; }

@@ -189,9 +189,9 @@
     <div class="field">
       <label for="e-eep-search" data-i18n="eep_label">EEP (Equipment Profile)</label>
       <div class="eep-combo">
-        <input type="text" id="e-eep-search" list="e-eep-list" data-ph="eep_placeholder" placeholder="A5-20-01, temperature, switch…" autocomplete="off">
+        <input type="text" id="e-eep-search" data-ph="eep_placeholder" placeholder="A5-20-01, temperature, switch…" autocomplete="off">
         <span class="eep-info" id="e-eep-info" title="Open in EEP viewer" hidden>ⓘ</span>
-        <datalist id="e-eep-list"></datalist>
+        <div class="eep-dropdown" id="e-eep-drop" hidden><ul id="e-eep-list"></ul></div>
       </div>
     </div>
     <div class="modal-actions">
@@ -205,7 +205,7 @@
 <div class="modal-overlay" id="graph-overlay" hidden>
   <div class="modal modal-wide">
     <h3 id="graph-title" data-i18n="graph_title">Value history</h3>
-    <div id="graph-body" data-i18n="graph_nodata">No data.</div>
+    <div id="graph-body">No data.</div>
     <div class="modal-actions">
       <button class="btn" id="graph-close" data-i18n="close">Close</button>
     </div>

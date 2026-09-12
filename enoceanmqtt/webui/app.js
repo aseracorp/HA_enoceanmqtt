@@ -133,7 +133,7 @@ async function showGraph(name, field) {
       .map((h) => ({ t: new Date(h.ts).getTime(), v: Number(h.values[key]) }));
     const isBinary = pts.every((p) => p.v === 0 || p.v === 1);
     $('graph-body').innerHTML = '<div class="graph-wrap"><svg id="mini-graph" viewBox="0 0 600 180" preserveAspectRatio="none"></svg></div>' +
-      '<div style="margin-top:8px;color:var(--text-secondary);font-size:12px">' + escapeHtml(key) + ' · ' + pts.length + ' samples · ' +
+      '<div class="graph-legend"><b>' + escapeHtml(key) + '</b> · ' + pts.length + ' samples · ' +
       (isBinary ? 'state' : 'value') + '</div>';
     if (isBinary) renderBinaryGraph('mini-graph', pts);
     else renderMiniGraph('mini-graph', pts, key);
@@ -294,7 +294,7 @@ function renderSensors() {
     return `<tr data-name="${escapeHtml(s.name)}" data-cat="${catCls}">
       <td>${name}${source}</td>
       <td class="mono">${addrHtml}</td>
-      <td><span class="mono">${eep}</span>${eepName ? '<div style="color:var(--text-muted);font-size:11px">' + eepName + '</div>' : ''}</td>
+      <td><span class="mono">${eep}</span><a href="#" class="eep-link" data-eepviewer="${escapeHtml(eep)}" title="${t('eep_viewer')}">ⓘ</a>${eepName ? '<div style="color:var(--text-muted);font-size:11px">' + escapeHtml(translateEepName(s.eep_name)) + '</div>' : ''}</td>
       <td><span class="cat-badge ${catCls}">${catTxt}</span>${badges.join('')}</td>
       <td class="mono">${rssiHtml}</td>
       <td class="mono" data-tip="${escapeHtml(fmtLastSeenFull(s.last_seen))}">${escapeHtml(fmtLastSeen(s.last_seen))}</td>
@@ -339,6 +339,13 @@ function renderSensors() {
       e.preventDefault();
       const [name, key] = a.getAttribute('data-valgraph').split('|');
       showGraph(name, key);
+    });
+  });
+  // bind EEP viewer icons
+  tbody.querySelectorAll('[data-eepviewer]').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.open(eepViewerUrl(a.getAttribute('data-eepviewer')), '_blank');
     });
   });
 }
@@ -440,9 +447,10 @@ function translateEepName(name) {
   return out;
 }
 
-function populateEepDatalist(datalistId, mode) {
-  const dl = $(datalistId);
-  if (!dl) return;
+let _eepOpts = [];   // full filtered list per mode, rebuilt on mode change
+function populateEepDatalist(listId, mode) {
+  const ul = $(listId);
+  if (!ul) return;
   const catFilter = (p) => {
     if (!mode) return true;
     if (mode === 'sensor') return p.category === 'sensor';
@@ -450,9 +458,39 @@ function populateEepDatalist(datalistId, mode) {
     if (mode === 'bidirectional') return p.category === 'bidirectional';
     return true;
   };
-  const opts = (state.eep || []).filter(catFilter);
-  dl.innerHTML = opts.map((p) =>
-    '<option value="' + escapeHtml(p.eep) + '">' + escapeHtml(translateEepName(p.name)) + '</option>').join('');
+  _eepOpts = (state.eep || []).filter(catFilter);
+  renderEepList(ul, '');
+}
+function renderEepList(ul, q) {
+  const query = (q || '').toLowerCase();
+  const items = query
+    ? _eepOpts.filter((p) => p.eep.toLowerCase().includes(query) || p.name.toLowerCase().includes(query))
+    : _eepOpts;
+  ul.innerHTML = items.slice(0, 300).map((p) =>
+    '<li data-eep="' + escapeHtml(p.eep) + '" data-name="' + escapeHtml(p.name) + '">' +
+      '<span class="eep-code">' + escapeHtml(p.eep) + '</span>' +
+      '<span class="eep-name">' + escapeHtml(translateEepName(p.name)) + '</span></li>').join('');
+  return items.length;
+}
+function initEepCombo(searchId, listId, dropId, infoId) {
+  const input = $(searchId);
+  const list = $(listId);
+  const drop = $(dropId);
+  if (!input || !list || !drop) return;
+  input.addEventListener('focus', () => { renderEepList(list, input.value); drop.hidden = false; });
+  input.addEventListener('input', () => { renderEepList(list, input.value); drop.hidden = false; updateEepInfo(searchId, infoId); });
+  input.addEventListener('blur', () => setTimeout(() => { drop.hidden = true; }, 150));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); const c = list.querySelector('li'); if (c) c.focus(); }
+    else if (e.key === 'Escape') drop.hidden = true;
+  });
+  list.addEventListener('click', (e) => {
+    const li = e.target.closest('li[data-eep]');
+    if (!li) return;
+    input.value = li.getAttribute('data-eep');
+    drop.hidden = true;
+    updateEepInfo(searchId, infoId);
+  });
 }
 
 function resolveEep(value) {
@@ -466,12 +504,14 @@ function resolveEep(value) {
 }
 
 function eepViewerUrl(eep) {
-  if (!eep) return 'https://www.enocean.com/en/enocean_modules/eep/';
+  const base = 'https://tools.enocean-alliance.org/EEPViewer/';
+  if (!eep) return base;
   const parts = eep.split('-');
   if (parts.length === 3) {
-    return 'https://www.enocean.com/en/enocean_modules/eep/' + parts[0] + '-' + parts[1] + '-' + parts[2] + '/';
+    // EEPViewer accepts e.g. A5-20-01 (no slash needed); pass as query-ish path
+    return base + '#profile=' + parts[0] + '-' + parts[1] + '-' + parts[2];
   }
-  return 'https://www.enocean.com/en/enocean_modules/eep/';
+  return base;
 }
 function updateEepInfo(inputId, infoId) {
   const input = $(inputId);
@@ -485,9 +525,6 @@ function updateEepInfo(inputId, infoId) {
     info.hidden = true;
   }
 }
-$('f-eep-search')?.addEventListener('input', () => updateEepInfo('f-eep-search', 'f-eep-info'));
-$('e-eep-search')?.addEventListener('input', () => updateEepInfo('e-eep-search', 'e-eep-info'));
-
 function parseAddress(val) {
   let s = String(val || '').trim();
   if (!s) return null;
@@ -816,6 +853,7 @@ function t(key) {
 }
 function applyTranslations() {
   document.querySelectorAll('[data-i18n]').forEach((el) => {
+    if (el.id === 'graph-body') return; // Graph is rendered dynamically - never overwrite it
     const key = el.getAttribute('data-i18n');
     if (key && t(key)) el.textContent = t(key);
   });
@@ -870,5 +908,7 @@ $('btn-learn-on')?.addEventListener('click', () => setLearn(!state.learn));
 
 /* ---------------- init ---------------- */
 setAddMode('sensor');   // ensure initial field visibility (Sensor = Name/Address/EEP)
+initEepCombo('f-eep-search', 'f-eep-list', 'f-eep-drop', 'f-eep-info');
+initEepCombo('e-eep-search', 'e-eep-list', 'e-eep-drop', 'e-eep-info');
 loadStatus();
 setInterval(loadStatus, 2000);
