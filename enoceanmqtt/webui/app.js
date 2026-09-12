@@ -869,5 +869,6 @@ $('theme-toggle')?.addEventListener('click', () => {
 $('btn-learn-on')?.addEventListener('click', () => setLearn(!state.learn));
 
 /* ---------------- init ---------------- */
+setAddMode('sensor');   // ensure initial field visibility (Sensor = Name/Address/EEP)
 loadStatus();
 setInterval(loadStatus, 2000);
