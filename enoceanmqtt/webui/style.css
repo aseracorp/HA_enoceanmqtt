@@ -379,6 +379,27 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 select option { background-color: var(--bg-elevated); color: var(--text); }
 select optgroup { background-color: var(--bg-elevated); color: var(--text-secondary); }
 
+/* ---------------- add-device options ---------------- */
+.add-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.add-option {
+  display: flex; align-items: center; gap: 12px; padding: 14px;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); cursor: pointer; transition: all 0.15s ease;
+}
+.add-option:hover { border-color: var(--primary); background: var(--bg-hover); }
+.add-option-icon { font-size: 22px; }
+.add-option-text { flex: 1; display: flex; flex-direction: column; }
+.add-option-text b { font-size: 14px; }
+.add-option-desc { color: var(--text-muted); font-size: 12px; }
+
+/* add-modals */
+.teachin-options { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.or-sep { color: var(--text-muted); font-size: 12px; }
+.modal-prompt { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px; }
+.modal-prompt p { margin: 0 0 4px; font-size: 13px; }
+.modal-success { background: rgba(84,214,44,0.12); border: 1px solid rgba(84,214,44,0.4); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px; }
+.success-text { color: var(--success); font-weight: 600; margin: 0; }
+
 /* ---------------- config editor ---------------- */
 .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .form-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; }

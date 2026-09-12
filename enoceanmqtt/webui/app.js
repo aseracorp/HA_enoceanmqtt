@@ -359,10 +359,24 @@ function openEdit(name) {
   const s = state.sensors.find((x) => x.name === name);
   if (!s) return;
   editingDevice = name;
+  const cat = deviceCategory(s);
   $('e-name').value = s.name;
   $('e-address').value = (s.address !== undefined && s.address !== null && s.address !== 0xFFFFFFFF)
     ? '0x' + s.address.toString(16).toUpperCase().padStart(8, '0') : '';
+  $('e-direction').value = s.direction || '';
+  $('e-answer').value = s.answer || '';
+  $('e-default_data').value = (s.default_data !== undefined && s.default_data !== null)
+    ? '0x' + Number(s.default_data).toString(16).toUpperCase() : '';
   $('e-eep-search').value = s.eep || '';
+  // fields per device type: sensor=addr, actor=sender, bidirectional=both+settings
+  const showAddr = cat !== 'actor';
+  const showSender = cat !== 'sensor';
+  $('e-addr-field').hidden = !showAddr;
+  $('e-sender-field').hidden = !showSender;
+  $('e-dir-field').hidden = cat !== 'bidirectional';
+  $('e-answer-field').hidden = cat !== 'bidirectional';
+  $('e-default-field').hidden = cat !== 'bidirectional';
+  populateSenders($('e-sender'), state.virtual_senders, s.sender);
   populateEepDatalist('e-eep-list', addMode);
   updateEepInfo('e-eep-search', 'e-eep-info');
   $('edit-overlay').hidden = false;
@@ -377,12 +391,24 @@ $('edit-ok')?.addEventListener('click', async () => {
   if (!editingDevice) return;
   const name = $('e-name').value.trim();
   const eep = $('e-eep-search').value.trim();
+  const body = { name: name, eep: eep };
   const addrVal = $('e-address').value.trim();
   const address = addrVal ? parseAddress(addrVal) : null;
   if (addrVal && address === null) return toast(t('err_bad_address'), 'error');
+  if (address !== null) body.address = address;
+  // actor/bidirectional: sender + settings
+  const cat = deviceCategory(state.sensors.find((x) => x.name === editingDevice) || {});
+  if (cat !== 'sensor') {
+    const sv = parseInt($('e-sender').value, 0);
+    if (!isNaN(sv)) body.sender = sv;
+  }
+  if (cat === 'bidirectional') {
+    if ($('e-direction').value.trim() !== '') body.direction = parseInt($('e-direction').value, 10);
+    if ($('e-answer').value.trim() !== '') body.answer = parseInt($('e-answer').value, 10);
+    const dd = $('e-default_data').value.trim();
+    if (dd) body.default_data = parseInt(dd, 0);
+  }
   try {
-    const body = { name: name, eep: eep };
-    if (address !== null) body.address = address;
     const res = await api('/api/sensors/' + encodeURIComponent(editingDevice), {
       method: 'PUT',
       body: JSON.stringify(body)
@@ -542,82 +568,167 @@ function parseAddress(val) {
 
 let addMode = 'sensor';
 
-function setAddMode(mode) {
-  addMode = mode;
-  document.querySelectorAll('[data-addcat]').forEach((t) => {
-    t.classList.toggle('active', t.getAttribute('data-addcat') === mode);
-  });
-  // sensor: address only; actor: sender only; bidirectional: both
-  const showAddr = mode !== 'actor';
-  const showSender = mode !== 'sensor';
-  $('f-addr-field').hidden = !showAddr;
-  $('f-sender-field').hidden = !showSender;
-  // EEP dropdown: repopulate filtered by the chosen category
-  populateEepDatalist('f-eep-list', mode);
-  populateEepDatalist('e-eep-list', mode);
-  if (showSender && $('f-sender')) {
-    // prefill a fresh (unused) virtual sender if available
-    if (!$('f-sender').value) $('f-sender').selectedIndex = 0;
-  }
-}
-document.querySelectorAll('[data-addcat]').forEach((t) => {
-  t.addEventListener('click', (e) => {
-    e.preventDefault();
-    setAddMode(t.getAttribute('data-addcat'));
-  });
-});
-
-function populateSenders(senders) {
-  const sel = $('f-sender');
+function populateSenders(senders, selOrNull, selected) {
+  const sel = selOrNull || $('f-sender');
   if (!sel) return;
   const used = new Set(state.sensors.filter((s) => s.sender).map((s) => s.sender));
   const opts = (senders || []).map((v) => {
     const hex = '0x' + Number(v).toString(16).toUpperCase().padStart(8, '0');
-    return '<option value="' + hex + '"' + (used.has(v) ? ' disabled' : '') + '>' + hex + (used.has(v) ? ' (used)' : '') + '</option>';
+    const isUsed = used.has(v);
+    const isSel = (selected !== undefined && selected !== null && Number(selected) === v);
+    return '<option value="' + hex + '"' + (isUsed && !isSel ? ' disabled' : '') + (isSel ? ' selected' : '') + '>' + hex + (isUsed && !isSel ? ' (used)' : '') + '</option>';
   });
   sel.innerHTML = opts.length ? opts.join('') : '<option value="">(no base ID yet)</option>';
 }
 
-$('add-form')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const name = $('f-name').value.trim();
-  const eep = resolveEep($('f-eep-search').value);
+/* ---------------- Add-device modals ---------------- */
+function firstFreeSender() {
+  const used = new Set(state.sensors.filter((s) => s.sender).map((s) => s.sender));
+  for (const v of (state.virtual_senders || [])) {
+    if (!used.has(v)) return v;
+  }
+  return (state.virtual_senders || [])[0] || null;
+}
+function openAddModal(kind) {
+  if (kind === 'sensor') {
+    populateSenders($('f-sender'), state.virtual_senders);
+    populateEepDatalist('f-eep-list', 'sensor');
+    $('addsensor-overlay').hidden = false;
+  } else if (kind === 'actor') {
+    populateSenders($('aa-sender'), state.virtual_senders);
+    $('aa-sender').value = (firstFreeSender() !== null && firstFreeSender() !== undefined) ? '0x' + Number(firstFreeSender()).toString(16).toUpperCase().padStart(8, '0') : '';
+    populateEepDatalist('aa-eep-list', 'actor');
+    $('addactor-overlay').hidden = false;
+  } else if (kind === 'bidirectional') {
+    populateSenders($('ab-sender'), state.virtual_senders);
+    $('ab-sender').value = (firstFreeSender() !== null && firstFreeSender() !== undefined) ? '0x' + Number(firstFreeSender()).toString(16).toUpperCase().padStart(8, '0') : '';
+    populateEepDatalist('ab-eep-list', 'bidirectional');
+    $('addbidir-overlay').hidden = false;
+  }
+}
+document.querySelectorAll('.add-option [data-addcat], .add-option[data-addcat]').forEach((el) => {
+  el.addEventListener('click', (e) => { e.preventDefault(); openAddModal(el.getAttribute('data-addcat')); });
+});
+
+/* ---- Sensor modal: teach-in / manual ---- */
+function asReset() {
+  $('as-name').value = ''; $('as-address').value = ''; $('as-eep').value = '';
+  $('as-prompt').hidden = true; $('as-success').hidden = true; $('as-teachin-btn').hidden = false; $('as-manual-btn').hidden = false;
+}
+async function enableTeachIn() {
+  await api('/api/learn', { method: 'POST', body: JSON.stringify({ enabled: true }) });
+}
+$('as-teachin-btn')?.addEventListener('click', async () => {
+  $('as-teachin-btn').hidden = true; $('as-manual-btn').hidden = true;
+  $('as-prompt').hidden = false;
+  $('as-prompt-state').textContent = 'Teach-in active - press the button on your sensor…';
+  await enableTeachIn();
+  // poll for a newly captured device (learn_ prefix)
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const known = new Set(state.sensors.map((s) => s.name));
+    const data = await api('/api/status');
+    const fresh = (data.sensors || []).find((s) => s.name.startsWith('enoceanmqtt/learn_') && !known.has(s.name));
+    if (fresh) {
+      $('as-name').value = fresh.name.replace(/^.*\/learn_/, 'learn_');
+      $('as-address').value = '0x' + Number(fresh.address).toString(16).toUpperCase().padStart(8, '0');
+      $('as-eep').value = fresh.eep || '';
+      $('as-prompt').hidden = true; $('as-success').hidden = false;
+      await api('/api/learn', { method: 'POST', body: JSON.stringify({ enabled: false }) });
+      toast('Sensor detected - please confirm the name', 'success');
+      return;
+    }
+  }
+  $('as-prompt-state').textContent = 'No telegram received.';
+  $('as-teachin-btn').hidden = false; $('as-manual-btn').hidden = false;
+});
+$('as-manual-btn')?.addEventListener('click', () => { $('as-manual-btn').hidden = true; $('as-teachin-btn').hidden = true; });
+$('as-cancel')?.addEventListener('click', () => { $('addsensor-overlay').hidden = true; asReset(); });
+$('as-save')?.addEventListener('click', async () => {
+  const name = $('as-name').value.trim();
+  const address = parseAddress($('as-address').value);
+  const eep = resolveEep($('as-eep').value);
   if (!name) return toast(t('err_no_name'), 'error');
+  if (address === null) return toast(t('err_bad_address'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
+  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address, eep, category: 'sensor', virtual: 0 }) });
+  if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
+  toast(t('sensor_added'), 'success');
+  $('addsensor-overlay').hidden = true; asReset();
+  await loadStatus();
+});
 
-  const mode = addMode;
-  const isActor = mode === 'actor';
-  const isBidir = mode === 'bidirectional';
-  let address, sender, cat;
-  if (mode === 'sensor') {
-    address = parseAddress($('f-address').value);
-    if (address === null) return toast(t('err_bad_address'), 'error');
-    cat = 'sensor';
-  } else if (mode === 'actor') {
-    address = 0xFFFFFFFF;
-    sender = parseInt($('f-sender').value, 0);
-    if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
-    cat = 'actor';
-  } else { // bidirectional
-    address = parseAddress($('f-address').value);
-    if (address === null) return toast(t('err_bad_address'), 'error');
-    sender = parseInt($('f-sender').value, 0);
-    if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
-    cat = 'bidirectional';
-  }
+/* ---- Actor modal ---- */
+$('aa-cancel')?.addEventListener('click', () => { $('addactor-overlay').hidden = true; });
+$('aa-teachin')?.addEventListener('click', async () => {
+  const name = $('aa-name').value.trim();
+  const sender = parseInt($('aa-sender').value, 0);
+  const eep = resolveEep($('aa-eep').value);
+  if (!name) return toast(t('err_no_name'), 'error');
+  if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
+  if (!eep) return toast(t('err_no_eep'), 'error');
+  // save first, then send teach-in telegram to the actor
+  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address: 0xFFFFFFFF, eep, sender, category: 'actor', virtual: 1 }) });
+  if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
+  const t2 = await api('/api/teachin', { method: 'POST', body: JSON.stringify({ name: name }) });
+  toast(t2.message || t('teachin_sent'), t2.ok ? 'success' : 'error');
+  toast(t('actor_added'), 'success');
+  $('addactor-overlay').hidden = true;
+  await loadStatus();
+});
+$('aa-save')?.addEventListener('click', async () => {
+  const name = $('aa-name').value.trim();
+  const sender = parseInt($('aa-sender').value, 0);
+  const eep = resolveEep($('aa-eep').value);
+  if (!name) return toast(t('err_no_name'), 'error');
+  if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
+  if (!eep) return toast(t('err_no_eep'), 'error');
+  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address: 0xFFFFFFFF, eep, sender, category: 'actor', virtual: 1 }) });
+  if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
+  toast(t('actor_added'), 'success');
+  $('addactor-overlay').hidden = true;
+  await loadStatus();
+});
 
-  try {
-    const res = await api('/api/sensors', {
-      method: 'POST',
-      body: JSON.stringify({ name, address, eep, sender, category: cat, virtual: (mode === 'actor' || isBidir) ? 1 : 0 })
-    });
-    toast((cat === 'sensor' ? 'Sensor' : (cat === 'actor' ? 'Actor' : 'Bidirectional')) + ' "' + name + '" added', 'success');
-    $('add-form').reset();
-    setAddMode(addMode);
-    await loadStatus();
-  } catch (err) {
-    toast(t('err_add_device') + err.message, 'error');
+/* ---- Bidirectional modal ---- */
+$('ab-cancel')?.addEventListener('click', () => { $('addbidir-overlay').hidden = true; });
+$('ab-teachin')?.addEventListener('click', async () => {
+  $('ab-teachin').disabled = true;
+  $('ab-hint').querySelector('p').textContent = 'Teach-in active - trigger the device…';
+  await enableTeachIn();
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const known = new Set(state.sensors.map((s) => s.name));
+    const data = await api('/api/status');
+    const fresh = (data.sensors || []).find((s) => s.name.startsWith('enoceanmqtt/learn_') && !known.has(s.name));
+    if (fresh) {
+      $('ab-name').value = fresh.name.replace(/^.*\/learn_/, 'learn_');
+      $('ab-address').value = '0x' + Number(fresh.address).toString(16).toUpperCase().padStart(8, '0');
+      $('ab-eep').value = fresh.eep || '';
+      $('ab-hint').querySelector('p').textContent = 'Device detected - confirm details.';
+      $('ab-teachin').disabled = false;
+      await api('/api/learn', { method: 'POST', body: JSON.stringify({ enabled: false }) });
+      toast('Bidirectional device detected', 'success');
+      return;
+    }
   }
+  $('ab-hint').querySelector('p').textContent = 'No telegram received.';
+  $('ab-teachin').disabled = false;
+});
+$('ab-save')?.addEventListener('click', async () => {
+  const name = $('ab-name').value.trim();
+  const address = parseAddress($('ab-address').value);
+  const sender = parseInt($('ab-sender').value, 0);
+  const eep = resolveEep($('ab-eep').value);
+  if (!name) return toast(t('err_no_name'), 'error');
+  if (address === null) return toast(t('err_bad_address'), 'error');
+  if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
+  if (!eep) return toast(t('err_no_eep'), 'error');
+  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address, eep, sender, category: 'bidirectional', virtual: 1, direction: 1, answer: 1 }) });
+  if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
+  toast(t('bidir_added'), 'success');
+  $('addbidir-overlay').hidden = true;
+  await loadStatus();
 });
 
 /* ---------------- themed tooltip ---------------- */
@@ -916,8 +1027,10 @@ $('theme-toggle')?.addEventListener('click', () => {
 $('btn-learn-on')?.addEventListener('click', () => setLearn(!state.learn));
 
 /* ---------------- init ---------------- */
-setAddMode('sensor');   // ensure initial field visibility (Sensor = Name/Address/EEP)
-initEepCombo('f-eep-search', 'f-eep-list', 'f-eep-drop', 'f-eep-info');
+// wire the EEP combos (add modals + edit modal)
+initEepCombo('as-eep', 'as-eep-list', 'as-eep-drop', 'as-eep-info');
+initEepCombo('aa-eep', 'aa-eep-list', 'aa-eep-drop', 'aa-eep-info');
+initEepCombo('ab-eep', 'ab-eep-list', 'ab-eep-drop', 'ab-eep-info');
 initEepCombo('e-eep-search', 'e-eep-list', 'e-eep-drop', 'e-eep-info');
 loadStatus();
 setInterval(loadStatus, 2000);

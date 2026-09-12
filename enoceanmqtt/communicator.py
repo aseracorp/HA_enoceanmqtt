@@ -394,6 +394,17 @@ class Communicator:
             hist = self._history.get(address, [])
         return {'ok': True, 'name': name, 'history': hist[-self._history_max:]}
 
+    def next_free_sender(self):
+        """the first unused virtual sender ID (base+1..base+127), or None"""
+        used = set()
+        for s in self.sensors:
+            if s.get('sender') is not None:
+                used.add(s['sender'])
+        for v in self.virtual_senders():
+            if v not in used:
+                return v
+        return None
+
     def save_config(self, payload):
         """persist updated [CONFIG] settings back to the configuration file.
 
@@ -662,7 +673,14 @@ class Communicator:
             destination = list(in_packet.sender)
         else:
             destination = None
-        sender = self.enocean_sender
+        # answer from the next free sender ID (not the base ID) so the
+        # bidirectional pairing uses an unused virtual address
+        sender = None
+        nxt = self.next_free_sender()
+        if nxt is not None:
+            sender = [(nxt >> i * 8) & 0xff for i in reversed(range(4))]
+        else:
+            sender = self.enocean_sender
         if destination is None:
             return
         try:
