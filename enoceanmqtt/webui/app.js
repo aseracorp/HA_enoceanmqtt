@@ -158,11 +158,11 @@ function renderMiniGraph(svgId, pts, key) {
     : '<circle cx="' + X(pts[0].t).toFixed(1) + '" cy="' + Y(pts[0].v).toFixed(1) + '" r="5" fill="var(--primary)"/>';
   svg.innerHTML = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>' + poly +
     // Y axis labels (start = min at bottom, end = max at top), left-aligned
-    '<text x="' + (PADL - 6) + '" y="' + (Y(max) + 4) + '" fill="var(--text-muted)" font-size="12" text-anchor="end">' + escapeHtml(fmtV(max)) + '</text>' +
-    '<text x="' + (PADL - 6) + '" y="' + (Y(min) + 4) + '" fill="var(--text-muted)" font-size="12" text-anchor="end">' + escapeHtml(fmtV(min)) + '</text>' +
+    '<text x="' + (PADL - 6) + '" y="' + (Y(max) + 4) + '" fill="var(--text)" font-size="14" font-weight="600" text-anchor="end">' + escapeHtml(fmtV(max)) + '</text>' +
+    '<text x="' + (PADL - 6) + '" y="' + (Y(min) + 4) + '" fill="var(--text)" font-size="14" font-weight="600" text-anchor="end">' + escapeHtml(fmtV(min)) + '</text>' +
     // X axis time labels (start at left, end at right)
-    '<text x="' + PADL + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="12">' + escapeHtml(fmtT(t0)) + '</text>' +
-    '<text x="' + (W - PADR) + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="12" text-anchor="end">' + escapeHtml(fmtT(t1)) + '</text>' +
+    '<text x="' + PADL + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="14" font-weight="600">' + escapeHtml(fmtT(t0)) + '</text>' +
+    '<text x="' + (W - PADR) + '" y="' + (H - 6) + '" fill="var(--text)" font-size="14" font-weight="600" text-anchor="end">' + escapeHtml(fmtT(t1)) + '</text>' +
     '<g id="mini-hover"></g>';
   // hover: nearest sample -> dot + context box (below the graph)
   const ctl = document.getElementById('mini-hoverctl');
@@ -607,7 +607,7 @@ function populateEepDatalist(listId, mode) {
 function renderEepList(ul, q) {
   if (!ul.children.length) {
     ul.innerHTML = _eepOpts.map((p) =>
-      '<li data-eep="' + escapeHtml(p.eep) + '" data-name="' + escapeHtml(p.name) + '">' +
+      '<li data-eep="' + escapeHtml(p.eep) + '" data-name="' + escapeHtml(p.name) + '" title="' + escapeHtml(translateEepName(p.name)) + '">' +
         '<span class="eep-code">' + escapeHtml(p.eep) + '</span>' +
         '<span class="eep-name">' + escapeHtml(translateEepName(p.name)) + '</span></li>').join('');
   }
