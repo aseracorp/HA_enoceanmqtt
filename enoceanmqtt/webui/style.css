@@ -130,18 +130,19 @@ html, body {
 select {
   appearance: none; -webkit-appearance: none;
   background-color: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
   color: var(--text);
-  padding: 9px 30px 9px 10px;
-  font-size: 14px; font-family: inherit;
+  padding: 8px 30px 8px 12px;
+  font-size: 14px; font-family: inherit; font-weight: 500;
   background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23888' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 10px center;
-  cursor: pointer;
+  background-repeat: no-repeat; background-position: right 12px center;
+  cursor: pointer; height: 40px; width: 100%;
 }
 select:focus { outline: none; border-color: var(--primary); }
 select option { background-color: var(--bg-elevated); color: var(--text); }
 select optgroup { background-color: var(--bg-elevated); color: var(--text-secondary); }
+:root[data-theme="dark"] select option { background-color: #232323; color: #f0f0f0; }
 
 /* collapsible card */
 .card.collapsible > .card-header { cursor: pointer; user-select: none; }
@@ -376,7 +377,11 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 }
 .eep-dropdown li:hover, .eep-dropdown li:focus { background: var(--bg-hover); }
 .eep-dropdown .eep-code { font-family: 'JetBrains Mono', monospace; color: var(--text); font-weight: 600; font-size: 13.5px; min-width: 96px; }
-.eep-dropdown .eep-name { color: var(--text); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eep-dropdown .eep-name { color: var(--text); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.eep-dropdown li:hover .eep-name { white-space: normal; overflow: visible; }
+.eep-dropdown li[title]:hover { position: relative; }
+/* custom themed tooltip for eep items via the generic ui-tooltip (data-tip) */
+
 :root[data-theme="dark"] .eep-dropdown { background: #232323; }
 :root[data-theme="dark"] .eep-dropdown .eep-code, :root[data-theme="dark"] .eep-dropdown .eep-name { color: #f0f0f0; }
 .eep-link { color: var(--primary); text-decoration: none; font-size: 13px; }
