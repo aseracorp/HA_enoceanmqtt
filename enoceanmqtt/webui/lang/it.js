@@ -49,4 +49,6 @@ window.LANG_it = {
     err_remove_device: 'Impossibile rimuovere il dispositivo: ',
     save_restart: 'Salva e riavvia',    sensor_detected: 'Sensore rilevato - conferma i dettagli qui sotto.',    actor_name: 'Nome attuatore',    device_name: 'Nome dispositivo',
 
+    actor_hint: 'Inserisci un nome, scegli l\'ID mittente e l\'EEP, poi invia il telegramma di apprendimento così il dispositivo conosce questo gateway.',    bidir_hint: 'Avvia teach-in, poi attiva il dispositivo. Alla ricezione rispondiamo con un telegramma di apprendimento dal prossimo ID mittente libero e precompiliamo i dettagli qui sotto.',
+
 };

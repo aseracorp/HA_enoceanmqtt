@@ -49,4 +49,6 @@ window.LANG_fr = {
     err_remove_device: 'Échec de la suppression : ',
     save_restart: 'Enregistrer & redémarrer',    sensor_detected: 'Capteur détecté - confirmez les détails ci-dessous.',    actor_name: 'Nom de l\'actionneur',    device_name: 'Nom de l\'appareil',
 
+    actor_hint: 'Saisissez un nom, choisissez l\'ID émetteur et l\'EEP, puis envoyez le télégramme d\'apprentissage pour que l\'appareil apprenne cette passerelle.',    bidir_hint: 'Démarrer l\'enseignement, puis déclencher l\'appareil. À la réception, nous répondons avec un télégramme d\'apprentissage depuis le prochain ID émetteur libre et pré-remplissons les détails ci-dessous.',
+
 };
