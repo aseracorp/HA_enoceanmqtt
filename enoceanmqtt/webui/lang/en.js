@@ -49,4 +49,6 @@ window.LANG_en = {
     err_remove_device: 'Failed to remove device: ',
     save_restart: 'Save & restart',    sensor_detected: 'Sensor detected - confirm the details below.',    actor_name: 'Actor name',    device_name: 'Device name',
 
+    actor_hint: 'Enter a name, pick the sender ID to transmit from and the EEP, then send the teach-in telegram so the device learns this gateway.',    bidir_hint: 'Start teach-in, then trigger the device. On receipt we answer with a teach-in telegram from the next free sender ID and pre-fill the details below.',
+
 };

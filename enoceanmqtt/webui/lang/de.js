@@ -51,4 +51,6 @@ window.LANG_de = {
     actor_name: 'Aktor-Name',
     device_name: 'Geräte-Name',
 
+    actor_hint: 'Geben Sie einen Namen ein, wählen Sie die Sender-ID und die EEP, dann senden Sie das Lerntelegramm, damit das Gerät dieses Gateway kennt.',    bidir_hint: 'Einlernen starten, dann das Gerät auslösen. Beim Empfang antworten wir mit einem Lerntelegramm von der nächsten freien Sender-ID und füllen die Details unten vor.',
+
 };

@@ -239,13 +239,13 @@
   <div class="modal modal-wide">
     <h3 data-i18n="add_actor">Add Actor</h3>
     <div class="modal-prompt" id="aa-hint">
-      <p>Enter a name, pick the sender ID to transmit from and the EEP, then send the teach-in telegram so the device learns this gateway.</p>
+      <p data-i18n="actor_hint">Enter a name, pick the sender ID to transmit from and the EEP, then send the teach-in telegram so the device learns this gateway.</p>
     </div>
     <div class="add-form add-stack">
       <div class="field"><label data-i18n="name">Name</label><input type="text" id="aa-name" placeholder="actor name" data-ph="actor_name" required></div>
       <div class="field"><label data-i18n="sender_id">Sender ID</label><select id="aa-sender"></select></div>
       <div class="field"><label data-i18n="eep_label">EEP</label>
-        <div class="eep-combo"><input type="text" id="aa-eep" data-ph="eep_placeholder" placeholder="F6-02-01, switch…" autocomplete="off" value="F6-02-01"><span class="eep-info" id="aa-eep-info" hidden>ⓘ</span><div class="eep-dropdown" id="aa-eep-drop" hidden><ul id="aa-eep-list"></ul></div></div>
+        <div class="eep-combo"><input type="text" id="aa-eep" data-ph="eep_placeholder" placeholder="F6-02-01, switch…" autocomplete="off"><span class="eep-info" id="aa-eep-info" hidden>ⓘ</span><div class="eep-dropdown" id="aa-eep-drop" hidden><ul id="aa-eep-list"></ul></div></div>
       </div>
     </div>
     <div class="modal-actions">
@@ -261,7 +261,7 @@
   <div class="modal modal-wide">
     <h3 data-i18n="add_bidir">Add Bidirectional</h3>
     <div class="modal-prompt" id="ab-hint">
-      <p>Start teach-in, then trigger the device. On receipt we answer with a teach-in telegram from the next free sender ID and pre-fill the details below.</p>
+      <p data-i18n="bidir_hint">Start teach-in, then trigger the device. On receipt we answer with a teach-in telegram from the next free sender ID and pre-fill the details below.</p>
     </div>
     <div class="add-form add-stack">
       <div class="field"><label data-i18n="name">Name</label><input type="text" id="ab-name" placeholder="device name" data-ph="device_name" required></div>
