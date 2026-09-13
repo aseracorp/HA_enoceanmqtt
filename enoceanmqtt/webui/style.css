@@ -167,7 +167,7 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 }
 .custom-select { position: relative; display: inline-block; }
 .custom-select.cs-sender-select { width: 100%; }
-.custom-select.cs-lang-select { width: auto; min-width: 52px; flex: 0 0 auto; }
+.custom-select.cs-lang-select { width: auto; flex: 0 0 auto; }
 
 /* trigger looks like the themed form selects (add-form select etc.) */
 .custom-select .cs-trigger {
