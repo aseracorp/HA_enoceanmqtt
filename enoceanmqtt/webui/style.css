@@ -246,6 +246,10 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 
 /* ---------------- form ---------------- */
 .add-form { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
+/* stacked add-modals: fields fill the available width */
+.add-form.add-stack { flex-direction: column; align-items: stretch; }
+.add-form.add-stack .field { width: 100%; min-width: 0; }
+.add-form.add-stack .field input[type="text"], .add-form.add-stack .field select { width: 100%; }
 /* [hidden] must always win - otherwise .field { display:flex } etc. would
    override the HTML hidden attribute and the field stays visible. */
 [hidden] { display: none !important; }

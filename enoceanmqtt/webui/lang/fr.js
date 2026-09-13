@@ -47,4 +47,6 @@ window.LANG_fr = {
     actor_added: 'Actionneur ajouté',    bidir_added: 'Appareil bidirectionnel ajouté',
     err_add_device: 'Échec de l\'ajout : ',    device_removed: 'Appareil supprimé',
     err_remove_device: 'Échec de la suppression : ',
+    save_restart: 'Enregistrer & redémarrer',    sensor_detected: 'Capteur détecté - confirmez les détails ci-dessous.',    actor_name: 'Nom de l\'actionneur',    device_name: 'Nom de l\'appareil',
+
 };

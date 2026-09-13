@@ -47,4 +47,6 @@ window.LANG_it = {
     actor_added: 'Attuatore aggiunto',    bidir_added: 'Dispositivo bidirezionale aggiunto',
     err_add_device: 'Impossibile aggiungere il dispositivo: ',    device_removed: 'Dispositivo rimosso',
     err_remove_device: 'Impossibile rimuovere il dispositivo: ',
+    save_restart: 'Salva e riavvia',    sensor_detected: 'Sensore rilevato - conferma i dettagli qui sotto.',    actor_name: 'Nome attuatore',    device_name: 'Nome dispositivo',
+
 };
