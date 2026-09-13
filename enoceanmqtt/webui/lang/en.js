@@ -47,4 +47,6 @@ window.LANG_en = {
     actor_added: 'Actor added',    bidir_added: 'Bidirectional added',
     err_add_device: 'Failed to add device: ',    device_removed: 'Device removed',
     err_remove_device: 'Failed to remove device: ',
+    save_restart: 'Save & restart',    sensor_detected: 'Sensor detected - confirm the details below.',    actor_name: 'Actor name',    device_name: 'Device name',
+
 };

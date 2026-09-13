@@ -490,7 +490,7 @@ function openEdit(name) {
     const selE = $('e-sender');
     if (selE) selE.value = fmtAddr(s.sender);
   }
-  populateEepDatalist('e-eep-list', addMode);
+  populateEepDatalist('e-eep-list', cat);
   updateEepInfo('e-eep-search', 'e-eep-info');
   } catch (e) {
     console.error('openEdit', name, e);
@@ -788,7 +788,7 @@ $('as-teachin-btn')?.addEventListener('click', async () => {
       $('as-address').value = fmtAddrInput(d.address);
       $('as-eep').value = d.eep || '';
       $('as-prompt').hidden = true; $('as-success').hidden = false;
-      toast('Sensor detected - please confirm the name', 'success');
+      toast(t('sensor_detected'), 'success');
       return;
     }
   }
