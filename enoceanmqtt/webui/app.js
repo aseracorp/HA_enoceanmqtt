@@ -144,7 +144,7 @@ async function showGraph(name, field) {
 function renderMiniGraph(svgId, pts, key) {
   const svg = document.getElementById(svgId);
   if (!svg || pts.length < 1) return;
-  const W = 600, H = 180, PADL = 46, PADR = 10, PADT = 10, PADB = 22, PW = W - PADL - PADR, PH = H - PADT - PADB;
+  const W = 600, H = 180, PADL = 60, PADR = 10, PADT = 14, PADB = 26, PW = W - PADL - PADR, PH = H - PADT - PADB;
   const vals = pts.map((p) => p.v);
   const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
   const span = (max - min) || 1;
@@ -158,11 +158,11 @@ function renderMiniGraph(svgId, pts, key) {
     : '<circle cx="' + X(pts[0].t).toFixed(1) + '" cy="' + Y(pts[0].v).toFixed(1) + '" r="5" fill="var(--primary)"/>';
   svg.innerHTML = '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="none"/>' + poly +
     // Y axis labels (start = min at bottom, end = max at top), left-aligned
-    '<text x="' + (PADL - 6) + '" y="' + (Y(max) + 4) + '" fill="var(--text)" font-size="14" font-weight="600" text-anchor="end">' + escapeHtml(fmtV(max)) + '</text>' +
-    '<text x="' + (PADL - 6) + '" y="' + (Y(min) + 4) + '" fill="var(--text)" font-size="14" font-weight="600" text-anchor="end">' + escapeHtml(fmtV(min)) + '</text>' +
+    '<text x="' + (PADL - 6) + '" y="' + (Y(max) + 4) + '" fill="var(--text)" font-size="18" font-weight="600" text-anchor="end">' + escapeHtml(fmtV(max)) + '</text>' +
+    '<text x="' + (PADL - 6) + '" y="' + (Y(min) + 4) + '" fill="var(--text)" font-size="18" font-weight="600" text-anchor="end">' + escapeHtml(fmtV(min)) + '</text>' +
     // X axis time labels (start at left, end at right)
-    '<text x="' + PADL + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="14" font-weight="600">' + escapeHtml(fmtT(t0)) + '</text>' +
-    '<text x="' + (W - PADR) + '" y="' + (H - 6) + '" fill="var(--text)" font-size="14" font-weight="600" text-anchor="end">' + escapeHtml(fmtT(t1)) + '</text>' +
+    '<text x="' + PADL + '" y="' + (H - 6) + '" fill="var(--text-muted)" font-size="18" font-weight="600">' + escapeHtml(fmtT(t0)) + '</text>' +
+    '<text x="' + (W - PADR) + '" y="' + (H - 6) + '" fill="var(--text)" font-size="18" font-weight="600" text-anchor="end">' + escapeHtml(fmtT(t1)) + '</text>' +
     '<g id="mini-hover"></g>';
   // hover: nearest sample -> dot + context box (below the graph)
   const ctl = document.getElementById('mini-hoverctl');
@@ -206,8 +206,8 @@ function renderBinaryGraph(svgId, pts) {
       const x = X(p.t).toFixed(1), y = Y(p.v).toFixed(1);
       return (i ? ' ' : '') + x + ',' + y;
     }).join(' ') + '"/>' +
-    '<text x="' + PAD + '" y="' + (H - 2) + '" fill="var(--text-muted)" font-size="10">0</text>' +
-    '<text x="' + PAD + '" y="' + (PAD + 8) + '" fill="var(--text-muted)" font-size="10">1</text>';
+    '<text x="' + PAD + '" y="' + (H - 2) + '" fill="var(--text-muted)" font-size="18">0</text>' +
+    '<text x="' + PAD + '" y="' + (PAD + 8) + '" fill="var(--text-muted)" font-size="18">1</text>';
 }
 $('graph-close')?.addEventListener('click', () => { $('graph-overlay').hidden = true; });
 $('graph-overlay')?.addEventListener('click', (e) => { if (e.target === $('graph-overlay')) $('graph-overlay').hidden = true; });
