@@ -16,6 +16,7 @@
   --bg-paper: rgba(30,30,30,0.65);
   --bg-hover: rgba(40,40,40,0.85);
   --bg-surface: rgba(255,255,255,0.04);   /* pills, badges, buttons */
+  --bg-strong: #232323;                    /* floating dropdowns (eep/custom) */
   --bg-elevated: #1e1e1e;                  /* dropdowns, modal */
   --bg-input: rgba(0,0,0,0.35);
   --bg-topbar: rgba(20,20,20,0.85);
@@ -44,6 +45,7 @@
   --bg-paper: rgba(255,255,255,0.85);
   --bg-hover: rgba(0,0,0,0.05);
   --bg-surface: rgba(0,0,0,0.04);
+  --bg-strong: #ffffff;
   --bg-elevated: #ffffff;
   --bg-input: rgba(255,255,255,0.8);
   --bg-topbar: rgba(255,255,255,0.85);
@@ -156,14 +158,76 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 .card.collapsible.collapsed > .card-header::after { transform: rotate(-90deg); }
 .card.collapsible.collapsed > .card-header + * { display: none; }
 
-/* language selector */
-.lang-select {
-  appearance: none; border: 1px solid var(--border-strong); cursor: pointer;
-  background: var(--bg-surface); color: var(--text-secondary);
-  padding: 5px 10px; border-radius: 20px; font-size: 12px; height: 34px;
-  width: auto; min-width: 64px; flex: 0 0 auto;
-  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%23888' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 8px center; padding-right: 22px;
+/* language selector + custom selects.
+   The native <select> is kept hidden (.cs-native) inside .custom-select;
+   the visible trigger + dropdown list are styled to mirror the EEP combobox. */
+.cs-native {
+  position: absolute; opacity: 0; pointer-events: none;
+  width: 1px; height: 1px; margin: 0; padding: 0; border: 0; font-size: 12px;
+}
+.custom-select { position: relative; display: inline-block; }
+.custom-select.cs-sender-select { width: 100%; }
+.custom-select.cs-lang-select { width: auto; min-width: 52px; flex: 0 0 auto; }
+
+/* trigger looks like the themed form selects (add-form select etc.) */
+.custom-select .cs-trigger {
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 14px; font-family: inherit; font-weight: 500;
+  text-align: left; display: block; width: 100%;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* sender dropdowns keep the chevron arrow like the EEP input / form selects */
+.custom-select.cs-sender-select .cs-trigger {
+  background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath fill='%23888' d='M1 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+  padding-right: 34px; height: 40px;
+}
+.custom-select .cs-trigger:hover { border-color: var(--primary); }
+.custom-select .cs-trigger:focus-visible { outline: none; border-color: var(--primary); }
+
+/* --- dropdown list (mirrors .eep-dropdown) --- */
+.custom-select .cs-list {
+  position: absolute; left: 0; right: auto; min-width: 100%;
+  top: calc(100% + 4px); z-index: 70;
+  background: var(--bg-strong, var(--bg-elevated));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow);
+  max-height: 280px; overflow-y: auto; list-style: none; margin: 0; padding: 4px 0;
+}
+.custom-select.cs-lang-select .cs-list { left: auto; right: 0; min-width: 72px; }
+.custom-select .cs-list li {
+  padding: 8px 12px; cursor: pointer; font-size: 14px; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+}
+.custom-select .cs-list li:hover, .custom-select .cs-list li:focus { background: var(--bg-hover); outline: none; }
+.custom-select .cs-list li.selected { background: var(--bg-hover); }
+.custom-select .cs-list li.selected::after {
+  content: '✓'; color: var(--primary); font-size: 13px; font-weight: 700;
+}
+.custom-select .cs-list li.disabled {
+  color: var(--text-muted); cursor: not-allowed; text-decoration: line-through;
+}
+.custom-select.cs-lang-select .cs-list li { text-transform: uppercase; justify-content: flex-start; }
+:root[data-theme="dark"] .custom-select .cs-list { background: #232323; }
+:root[data-theme="dark"] .custom-select .cs-list li { color: #f0f0f0; }
+
+/* language switcher: compact pill, auto width, NO arrow */
+.custom-select.cs-lang-select .cs-trigger {
+  background-image: none; padding-right: 12px;
+  border-radius: 20px; height: 34px; font-size: 12px;
+  background-color: var(--bg-surface); color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  font-weight: 600; text-align: center; width: auto; min-width: 52px;
+  text-transform: uppercase;
+}
+.custom-select.cs-lang-select .cs-trigger:hover {
+  background: var(--bg-hover); color: var(--text);
 }
 
 /* theme toggle */

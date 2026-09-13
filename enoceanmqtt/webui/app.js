@@ -647,6 +647,110 @@ function initEepCombo(searchId, listId, dropId, infoId) {
   });
 }
 
+/* ---------------- custom select (sender ID, language) ----------------
+   Native <select> is kept in the DOM (hidden) so all existing code that
+   reads/writes sel.value or re-renders sel.innerHTML keeps working. The
+   visible trigger + dropdown list mirror the native options and stay in
+   sync both ways (MutationObserver catches populateSenders() re-renders).
+   Visual language mirrors the EEP combobox (.eep-combo / .eep-dropdown). */
+function initCustomSelect(selectId) {
+  const sel = $(selectId);
+  if (!sel || sel.dataset.csInit === '1') return;
+  sel.dataset.csInit = '1';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'custom-select' + (selectId === 'lang-select' ? ' cs-lang-select' : ' cs-sender-select');
+  sel.parentNode.insertBefore(wrap, sel);
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'cs-trigger';
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  wrap.appendChild(trigger);
+
+  const list = document.createElement('ul');
+  list.className = 'cs-list';
+  list.setAttribute('role', 'listbox');
+  wrap.appendChild(list);
+
+  // hide the native select (kept for value/change + innerHTML re-renders)
+  sel.classList.add('cs-native');
+  sel.setAttribute('aria-hidden', 'true');
+  sel.tabIndex = -1;
+
+  /* update trigger text when the native value changes externally */
+  const syncTrigger = () => {
+    const o = sel.selectedOptions && sel.selectedOptions[0];
+    trigger.textContent = (o ? o.textContent : sel.value) || '—';
+  };
+
+  /* rebuild <li> list + trigger from the current <option>s */
+  const rebuild = () => {
+    const cur = sel.value;
+    const opts = Array.from(sel.querySelectorAll('option'));
+    list.innerHTML = opts.map((o) => {
+      const label = o.textContent;
+      const dis = o.disabled;
+      const cls = dis ? ' disabled' : (o.value === cur || o.selected ? ' selected' : '');
+      return '<li data-value="' + escapeHtml(o.value) + '" class="' + cls.trim() + '">' +
+        '<span>' + escapeHtml(label) + '</span></li>';
+    }).join('');
+    syncTrigger();
+  };
+  const open = () => { syncTrigger(); list.hidden = false; };
+  const close = () => { list.hidden = true; };
+  syncTrigger();
+  rebuild();
+  close();
+
+  /* re-render when populateSenders() replaces sel.innerHTML */
+  const mo = new MutationObserver(() => rebuild());
+  mo.observe(sel, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'selected'] });
+  sel.addEventListener('change', syncTrigger);
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (list.hidden) open(); else close();
+  });
+  trigger.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault(); open();
+      const first = list.querySelector('li:not(.disabled)');
+      if (first) first.focus();
+    } else if (e.key === 'Escape') {
+      close(); trigger.focus();
+    }
+  });
+  list.addEventListener('click', (e) => {
+    const li = e.target.closest('li');
+    if (!li || li.classList.contains('disabled')) return;
+    sel.value = li.dataset.value;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    rebuild();
+    close();
+    trigger.focus();
+  });
+  list.addEventListener('keydown', (e) => {
+    const items = Array.from(list.querySelectorAll('li:not(.disabled)'));
+    if (!items.length) return;
+    const i = items.indexOf(e.target);
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.target.click(); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(); trigger.focus(); }
+  });
+  // close on outside click / Esc anywhere once open
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target)) close();
+  }, true);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !list.hidden) { e.preventDefault(); close(); trigger.focus(); }
+  });
+  wrap.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { close(); trigger.focus(); }
+  });
+}
+
 function resolveEep(value) {
   const v = (value || '').trim();
   if (!v) return null;
@@ -1020,5 +1124,11 @@ initEepCombo('as-eep', 'as-eep-list', 'as-eep-drop', 'as-eep-info');
 initEepCombo('aa-eep', 'aa-eep-list', 'aa-eep-drop', 'aa-eep-info');
 initEepCombo('ab-eep', 'ab-eep-list', 'ab-eep-drop', 'ab-eep-info');
 initEepCombo('e-eep-search', 'e-eep-list', 'e-eep-drop', 'e-eep-info');
+// custom selects: themed replacement for the sender-ID dropdowns and the
+// language switcher (styling mirrors the EEP combobox).
+initCustomSelect('aa-sender');
+initCustomSelect('ab-sender');
+initCustomSelect('e-sender');
+initCustomSelect('lang-select');
 loadStatus();
 setInterval(loadStatus, 2000);
