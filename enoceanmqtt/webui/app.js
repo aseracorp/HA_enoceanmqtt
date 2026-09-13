@@ -708,11 +708,16 @@ function fmtAddrInput(v) {
 let addMode = 'sensor';
 
 function populateSenders(senders, selOrNull, selected) {
-  const sel = selOrNull || $('f-sender');
-  if (!sel) return;
-  // never trust the argument - coerce to an array
   const list = (Array.isArray(senders) ? senders
     : (Array.isArray(state && state.virtual_senders) ? state.virtual_senders : []));
+  // if no explicit target, update every sender <select> in the app
+  const targets = selOrNull
+    ? [selOrNull]
+    : ['f-sender', 'aa-sender', 'ab-sender', 'e-sender'].map((id) => $(id)).filter(Boolean);
+  targets.forEach((sel) => fillSenderSelect(sel, list, sel === selOrNull ? selected : undefined));
+}
+function fillSenderSelect(sel, list, selected) {
+  if (!sel) return;
   const used = new Set(state.sensors.filter((s) => s.sender).map((s) => s.sender));
   const opts = list.map((v) => {
     const hex = fmtAddr(v);
@@ -720,8 +725,8 @@ function populateSenders(senders, selOrNull, selected) {
     const isSel = (selected !== undefined && selected !== null && Number(selected) === v);
     return '<option value="' + hex + '"' + (isUsed && !isSel ? ' disabled' : '') + (isSel ? ' selected' : '') + '>' + hex + (isUsed && !isSel ? ' (used)' : '') + '</option>';
   });
-  sel.innerHTML = opts.length ? opts.join('') : '<option value="">(no base ID yet)</option>';
-  sel.disabled = opts.length === 0;
+  sel.innerHTML = opts.length ? opts.join('') : '<option value="">(no sender IDs available)</option>';
+  sel.disabled = false;
 }
 
 /* ---------------- Add-device modals ---------------- */
