@@ -597,7 +597,7 @@ function populateEepDatalist(listId, mode) {
   const catFilter = (p) => {
     if (!mode) return true;
     if (mode === 'sensor') return p.category === 'sensor';
-    if (mode === 'actor') return p.category === 'actor';
+    if (mode === 'actor') return p.category === 'actor' || (typeof p.eep === 'string' && p.eep.toUpperCase().startsWith('F6'));
     if (mode === 'bidirectional') return p.category === 'bidirectional';
     return true;
   };
