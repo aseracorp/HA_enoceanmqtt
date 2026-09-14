@@ -19,7 +19,7 @@ import logging
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 
 # -----------------------------------------------------------------------------
@@ -244,7 +244,7 @@ class WebInterface:
                     code = 200 if result.get('ok') else 400
                     return self._send(code, result)
                 if self.command == 'GET' and path.startswith('/api/history/'):
-                    name = path[len('/api/history/'):]
+                    name = unquote(path[len('/api/history/'):])
                     result = web.get_history(name)
                     code = 200 if result.get('ok') else 404
                     return self._send(code, result)
@@ -272,12 +272,12 @@ class WebInterface:
                     code = 200 if result.get('ok') else 200
                     return self._send(code, result)
                 if self.command == 'DELETE' and path.startswith('/api/sensors/'):
-                    name = path[len('/api/sensors/'):]
+                    name = unquote(path[len('/api/sensors/'):])
                     result = web.remove_sensor(name)
                     code = 200 if result.get('ok') else 404
                     return self._send(code, result)
                 if self.command in ('PUT', 'POST') and path.startswith('/api/sensors/'):
-                    name = path[len('/api/sensors/'):]
+                    name = unquote(path[len('/api/sensors/'):])
                     result = web.update_sensor(name, self._read_body())
                     code = 200 if result.get('ok') else 400
                     return self._send(code, result)

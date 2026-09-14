@@ -1027,3 +1027,74 @@ def test_add_edit_validation():
         # valid update still works (incl. a '/'-grouped name - '/' is allowed)
         assert com.update_sensor('editable', {'name': 'room/editable'})['ok']
         assert com.update_sensor('room/editable', {'name': 'renamed', 'eep': 'A5-08-01'})['ok']
+
+
+def test_delete_update_sensor_with_slash_in_name():
+    """devices whose name contains '/' (e.g. 'lights/livingroom') must be
+    deletable and editable via the web API.
+
+    The frontend sends the name URL-encoded (encodeURIComponent turns '/' into
+    '%2F'); the webinterface previously used the raw path segment, so it
+    looked up 'lights%2Flivingroom' and failed with 404 Sensor not found.
+    Regression: name must be URL-decoded before lookup.
+    """
+    import urllib.request
+    import socket
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+        web = WebInterface(com)
+        import socket as _sock
+        s = _sock.socket(); s.bind(('127.0.0.1', 0)); port = s.getsockname()[1]; s.close()
+        web.start(host='127.0.0.1', port=port); time.sleep(0.3)
+        base = f'http://127.0.0.1:{port}'
+
+        def req(method, url, data=None):
+            r = urllib.request.Request(url, method=method,
+                                       data=(json.dumps(data).encode() if data is not None else None),
+                                       headers={'Content-Type': 'application/json'})
+            try:
+                with urllib.request.urlopen(r) as resp:
+                    return resp.status, json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                try:
+                    return e.code, json.loads(e.read())
+                except Exception:
+                    return e.code, None
+
+        try:
+            name = 'lights/livingroom'
+            st, b = req('POST', base + '/api/sensors',
+                        {'name': name, 'address': 0x123, 'eep': 'A5-02-05'})
+            assert st == 200 and b.get('ok'), b
+
+            st, b = req('GET', base + '/api/status')
+            assert name in [s['name'] for s in b['sensors']]
+
+            # delete via the URL-encoded name, exactly like the frontend
+            enc = urllib.request.quote(name, safe='')
+            assert enc == 'lights%2Flivingroom'
+            st, b = req('DELETE', base + '/api/sensors/' + enc)
+            assert st == 200 and b.get('ok'), b
+
+            st, b = req('GET', base + '/api/status')
+            assert name not in [s['name'] for s in b['sensors']]
+
+            # rename a '/'-name via encoded PUT
+            req('POST', base + '/api/sensors', {'name': 'a/b', 'address': 0x124, 'eep': 'A5-02-05'})
+            st, b = req('PUT', base + '/api/sensors/' + urllib.request.quote('a/b', safe=''),
+                        {'name': 'a/c'})
+            assert st == 200 and b.get('ok'), b
+            st, b = req('GET', base + '/api/status')
+            assert 'a/c' in [s['name'] for s in b['sensors']]
+            assert 'a/b' not in [s['name'] for s in b['sensors']]
+        finally:
+            web.stop()
