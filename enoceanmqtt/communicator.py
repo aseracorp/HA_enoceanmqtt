@@ -453,6 +453,22 @@ class Communicator:
             logging.error("save_config failed: %s", exc)
             return {'ok': False, 'error': str(exc)}
 
+    def _display_name(self, sensor):
+        """the name shown in the web UI / used by row buttons.
+
+        Mirrors the exact transformation the frontend sees so lookups by
+        display name (e.g. teach-in) can round-trip correctly:
+        - mqtt_prefix is stripped
+        - model-based sensors hide an internal trailing "/XX" rorg suffix
+        """
+        prefix = self.conf.get('mqtt_prefix', 'enocean/')
+        display_name = sensor['name']
+        if display_name.startswith(prefix):
+            display_name = display_name[len(prefix):]
+        if sensor.get('model') and len(display_name) > 3 and display_name[-3] == '/':
+            display_name = display_name[:-3]
+        return display_name
+
     def describe_sensor(self, sensor):
         """build a JSON-friendly status description of a sensor"""
         address = sensor.get('address')
@@ -510,13 +526,7 @@ class Communicator:
             if not last_seen_iso.endswith('Z') and '+' not in last_seen_iso:
                 last_seen_iso += 'Z'
 
-        prefix = self.conf.get('mqtt_prefix', 'enocean/')
-        display_name = sensor['name']
-        if display_name.startswith(prefix):
-            display_name = display_name[len(prefix):]
-        # model-based sensors get an internal "/XX" rorg suffix - hide it
-        if sensor.get('model') and len(display_name) > 3 and display_name[-3] == '/':
-            display_name = display_name[:-3]
+        display_name = self._display_name(sensor)
 
         latest = self._latest_value.get(address)
         field_meta = self._field_meta.get(address, {})
@@ -1453,8 +1463,12 @@ class Communicator:
         packet). Returns (ok, message).
         """
         sensor = None
+        prefix = self.conf.get('mqtt_prefix', 'enocean/')
         for s in self.sensors:
-            if s.get('name') == name or s.get('name') == self.conf.get('mqtt_prefix', 'enocean/') + name:
+            # Match the name exactly (stored form) or as the web UI presents it
+            # (bare display name - prefix stripped, model "/XX" suffix hidden).
+            if (s.get('name') == name or s.get('name') == prefix + name
+                    or self._display_name(s) == name):
                 sensor = s
                 break
         if sensor is None:

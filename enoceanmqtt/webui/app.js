@@ -515,8 +515,9 @@ $('edit-ok')?.addEventListener('click', async () => {
   // actor/bidirectional: sender + settings
   const cat = deviceCategory(state.sensors.find((x) => x.name === editingDevice) || {});
   if (cat !== 'sensor') {
-    const sv = parseInt($('e-sender').value, 0);
-    if (!isNaN(sv)) body.sender = sv;
+    const sv = parseSender($('e-sender').value);
+    // empty sender field must be skipped, not sent as null (isNaN(null) is false)
+    if (sv !== null && sv !== undefined && !isNaN(sv)) body.sender = sv;
   }
   if (cat === 'bidirectional') {
     if ($('e-direction').value.trim() !== '') body.direction = parseInt($('e-direction').value, 10);
@@ -797,6 +798,21 @@ function parseAddress(val) {
   if (s.length < 1 || s.length > 8 || !/^[0-9a-fA-F]+$/.test(s)) return null;
   return parseInt(s, 16);
 }
+function parseSender(val) {
+  // sender IDs are colon-formatted (e.g. '89:AB:CD:EF'); reuse the address
+  // parser so the full 32-bit value is kept (parseInt would truncate at ':')
+  return parseAddress(val);
+}
+function defaultActorName(sender) {
+  // Auto-generate a stable, unique name when the user left the name empty so
+  // saving + teach-in still work (the backend requires a non-empty name).
+  // Use the sender ID when available (readable, stable), else a timestamp hex.
+  if (sender !== null && sender !== undefined && !isNaN(sender)
+      && Number(sender) >= 0 && Number(sender) <= 0xFFFFFFFF) {
+    return 'actor_' + (Number(sender) >>> 0).toString(16).padStart(8, '0');
+  }
+  return 'actor_' + Date.now().toString(16);
+}
 function fmtAddr(v) {
   if (v === undefined || v === null) return '—';
   const n = Number(v);
@@ -815,14 +831,23 @@ function fmtAddrInput(v) {
 
 let addMode = 'sensor';
 
-function populateSenders(senders, selOrNull, selected) {
-  const list = (Array.isArray(senders) ? senders
-    : (Array.isArray(state && state.virtual_senders) ? state.virtual_senders : []));
-  // if no explicit target, update every sender <select> in the app
-  const targets = selOrNull
-    ? [selOrNull]
+function populateSenders(selectOrList, listOrSelect, selected) {
+  // Normalise the argument order: callers pass either (select, senders) or
+  // (senders) -> fill every select. Both shapes must work; the original code
+  // only handled the reverse order, leaving the modal dropdowns empty.
+  let list, target;
+  if (Array.isArray(selectOrList)) {
+    list = selectOrList;                       // (senders, ...)
+    target = (listOrSelect && listOrSelect.tagName === 'SELECT') ? listOrSelect : null;
+  } else {
+    target = (selectOrList && selectOrList.tagName === 'SELECT') ? selectOrList : null; // (select, senders)
+    list = Array.isArray(listOrSelect) ? listOrSelect
+      : (Array.isArray(state && state.virtual_senders) ? state.virtual_senders : []);
+  }
+  const targets = target
+    ? [target]
     : ['f-sender', 'aa-sender', 'ab-sender', 'e-sender'].map((id) => $(id)).filter(Boolean);
-  targets.forEach((sel) => fillSenderSelect(sel, list, sel === selOrNull ? selected : undefined));
+  targets.forEach((t) => fillSenderSelect(t, list, t === target ? selected : undefined));
 }
 function fillSenderSelect(sel, list, selected) {
   if (!sel) return;
@@ -922,10 +947,10 @@ $('as-save')?.addEventListener('click', async () => {
 /* ---- Actor modal ---- */
 $('aa-cancel')?.addEventListener('click', () => { $('addactor-overlay').hidden = true; });
 $('aa-teachin')?.addEventListener('click', async () => {
-  const name = $('aa-name').value.trim();
-  const sender = parseInt($('aa-sender').value, 0);
+  let name = $('aa-name').value.trim();
+  const sender = parseSender($('aa-sender').value);
   const eep = resolveEep($('aa-eep').value);
-  if (!name) return toast(t('err_no_name'), 'error');
+  if (!name) name = defaultActorName(sender); // empty name must not block sending
   if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
   // save first, then send teach-in telegram to the actor
@@ -943,10 +968,10 @@ $('aa-teachin')?.addEventListener('click', async () => {
   await loadStatus();
 });
 $('aa-save')?.addEventListener('click', async () => {
-  const name = $('aa-name').value.trim();
-  const sender = parseInt($('aa-sender').value, 0);
+  let name = $('aa-name').value.trim();
+  const sender = parseSender($('aa-sender').value);
   const eep = resolveEep($('aa-eep').value);
-  if (!name) return toast(t('err_no_name'), 'error');
+  if (!name) name = defaultActorName(sender);
   if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
   const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address: 0xFFFFFFFF, eep, sender, category: 'actor', virtual: 1 }) });
@@ -982,11 +1007,11 @@ $('ab-teachin')?.addEventListener('click', async () => {
   $('ab-teachin').disabled = false;
 });
 $('ab-save')?.addEventListener('click', async () => {
-  const name = $('ab-name').value.trim();
+  let name = $('ab-name').value.trim();
   const address = parseAddress($('ab-address').value);
-  const sender = parseInt($('ab-sender').value, 0);
+  const sender = parseSender($('ab-sender').value);
   const eep = resolveEep($('ab-eep').value);
-  if (!name) return toast(t('err_no_name'), 'error');
+  if (!name) name = defaultActorName(sender);
   if (address === null) return toast(t('err_bad_address'), 'error');
   if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
