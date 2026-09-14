@@ -412,10 +412,10 @@ def test_send_teachin_matches_stripped_model_display_name():
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
-        # model-based actor: stored name carries a hidden '/02' rorg suffix.
-        # A real web-added actor is virtual (address 0xFFFFFFFF, sender set),
-        # which describe_sensor classifies as 'actor'.
-        assert com.add_sensor({'name': 'Dimmer/02', 'address': 0xFFFFFFFF,
+        # model-based actor: stored name may carry a hidden '/02' rorg suffix
+        # (applied by the model/HA overlay, not by the user). Add with a clean
+        # user-entered name, then inject the model suffix as the overlay would.
+        assert com.add_sensor({'name': 'Dimmer', 'address': 0xFFFFFFFF,
                                'eep': 'A5-38-08', 'category': 'actor',
                                'model': 'dimmer', 'sender': 0x89ABCDEF,
                                'virtual': 1})['ok']
@@ -423,6 +423,9 @@ def test_send_teachin_matches_stripped_model_display_name():
         stored['model'] = 'dimmer'  # describe_sensor strips the suffix
         assert com.describe_sensor(stored)['category'] == 'actor',             'virtual actor must be classified as actor (teachable)'
 
+        # make it a model-based actor with a hidden '/02' suffix to mirror the
+        # original scenario (the overlay appends '/<rorg>' to the stored name)
+        stored['name'] = stored['name'].replace('enoceanmqtt/Dimmer', 'enoceanmqtt/Dimmer/02') if 'enoceanmqtt/Dimmer' in stored['name'] else 'enoceanmqtt/Dimmer/02'
         display = com.describe_sensor(stored)
         assert display['name'] == 'Dimmer', display['name']
         assert display != stored['name']
@@ -966,3 +969,54 @@ def test_send_teachin_existing_virtual_actor_without_stored_category():
         ok, msg = com._send_teachin('ExistingAct')
         assert ok, msg
         assert len(com.enocean.sent) >= 1
+
+
+def test_add_edit_validation():
+    """add + edit reject invalid names, addresses and unknown EEPs."""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        def add(**kw):
+            base = {'name': 'dev', 'address': 0x123, 'eep': 'A5-02-05'}
+            base.update(kw)
+            return com.add_sensor(base)
+
+        # valid sensor accepted
+        assert add(name='liv_room')['ok']
+
+        # invalid names rejected
+        assert not add(name='bad/name')['ok']
+        assert not add(name='')['ok']
+        assert not add(name='   ')['ok']
+        assert not add(name='x' * 65)['ok']
+
+        # unknown EEP rejected
+        assert not add(eep='A5-99-99')['ok']
+        assert not add(eep='bogus')['ok']
+
+        # invalid address rejected
+        assert not add(address='zzz')['ok']
+        assert not add(address=-1)['ok']
+
+        # invalid sender rejected
+        assert not add(name='act', address=0xFFFFFFFF, eep='F6-02-01',
+                       sender='zzz', category='actor', virtual=1)['ok']
+
+        # update to unknown EEP rejected; update name with slash rejected
+        assert com.add_sensor({'name': 'editable', 'address': 0x123,
+                               'eep': 'A5-02-05'})['ok']
+        assert not com.update_sensor('editable', {'eep': 'D2-99-99'})['ok']
+        assert not com.update_sensor('editable', {'name': 'a/b'})['ok']
+        assert not com.update_sensor('editable', {'name': ''})['ok']
+
+        # valid update still works
+        assert com.update_sensor('editable', {'name': 'renamed', 'eep': 'A5-08-01'})['ok']

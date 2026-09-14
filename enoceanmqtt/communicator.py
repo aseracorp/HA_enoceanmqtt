@@ -263,8 +263,8 @@ class Communicator:
             eep = str(payload.get('eep', '')).strip()
             sender = payload.get('sender')
 
-            if not name:
-                return {'ok': False, 'error': 'A sensor name is required'}
+            if not self._is_valid_name(name):
+                return {'ok': False, 'error': 'A sensor name is required (no "/", max 64 chars)'}
             pa = _parse_int(address)
             if pa is None:
                 return {'ok': False, 'error': 'Invalid sensor address'}
@@ -281,6 +281,8 @@ class Communicator:
                 type_ = int(parts[2], 16)
             except ValueError:
                 return {'ok': False, 'error': 'Invalid EEP'}
+            if not self._is_valid_eep(rorg, func, type_):
+                return {'ok': False, 'error': 'EEP is not in the known profile catalog'}
 
             prefix = self.conf.get('mqtt_prefix', 'enocean/')
             full_name = prefix + name
@@ -335,8 +337,8 @@ class Communicator:
         new_name = payload.get('name')
         if new_name is not None:
             new_name = str(new_name).strip()
-            if not new_name:
-                return {'ok': False, 'error': 'A sensor name is required'}
+            if not self._is_valid_name(new_name):
+                return {'ok': False, 'error': 'A sensor name is required (no "/", max 64 chars)'}
             prefix = self.conf.get('mqtt_prefix', 'enocean/')
             if new_name != name and any(
                     s.get('name') == prefix + new_name for s in self.sensors):
@@ -367,6 +369,8 @@ class Communicator:
                 changes['type'] = int(parts[2], 16)
             except ValueError:
                 return {'ok': False, 'error': 'Invalid EEP'}
+            if not self._is_valid_eep(changes['rorg'], changes['func'], changes['type']):
+                return {'ok': False, 'error': 'EEP is not in the known profile catalog'}
 
         if not changes:
             return {'ok': False, 'error': 'Nothing to update'}
@@ -481,6 +485,23 @@ class Communicator:
         if sensor.get('sender') is not None and is_virtual:
             return 'actor'
         return 'sensor'
+
+    @staticmethod
+    def _is_valid_name(name):
+        """Valid device names are non-empty, contain no '/' (MQTT topic
+        clash / model-suffix conflict) and are at most 64 characters."""
+        n = str(name or '').strip()
+        return bool(n) and '/' not in n and len(n) <= 64
+
+    def _is_valid_eep(self, rorg, func, type_):
+        """True when the (rorg, func, type) triplet is a known EEP profile.
+
+        Only known equipment profiles may be added/edited - a free-form
+        'A5-99-99' is not a valid EnOcean profile and must be rejected.
+        """
+        if type_ is None or func is None:
+            return False
+        return self._eep_registry.get(rorg, func, type_) is not None
 
     def _display_name(self, sensor):
         """the name shown in the web UI / used by row buttons.

@@ -42,7 +42,7 @@ window.LANG_en = {
     err_update_device: 'Failed to update device: ',    teachin_sent: 'Teach-in sent',    teachin_failed: 'Teach-in failed',
     err_send_teachin: 'Failed to send teach-in: ',    teachin_enabled: 'Teach-in enabled - press the button on your device',
     teachin_disabled: 'Teach-in disabled',    err_teachin: 'Failed to change teach-in: ',
-    err_no_name: 'Please enter a name',    err_no_eep: 'Please select an EEP from the list',
+    err_no_name: 'Please enter a name',    err_bad_name: 'Please enter a valid name (no "/", max 64 characters)',    err_no_eep: 'Please select an EEP from the list',
     err_no_sender: 'Please select a sender ID',    sensor_added: 'Sensor added',
     actor_added: 'Actor added',    bidir_added: 'Bidirectional added',
     err_add_device: 'Failed to add device: ',    device_removed: 'Device removed',

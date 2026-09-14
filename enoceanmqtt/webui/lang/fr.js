@@ -42,7 +42,7 @@ window.LANG_fr = {
     err_update_device: 'Échec de la mise à jour : ',    teachin_sent: 'Enseignement envoyé',    teachin_failed: 'Échec de l\'enseignement',
     err_send_teachin: 'Échec de l\'envoi : ',    teachin_enabled: 'Enseignement activé - appuyez sur le bouton',
     teachin_disabled: 'Enseignement désactivé',    err_teachin: 'Échec du changement d\'enseignement : ',
-    err_no_name: 'Veuillez saisir un nom',    err_no_eep: 'Veuillez choisir un EEP dans la liste',
+    err_no_name: 'Veuillez saisir un nom',    err_bad_name: 'Veuillez saisir un nom valide (pas de "/", 64 caractères max)',    err_no_eep: 'Veuillez choisir un EEP dans la liste',
     err_no_sender: 'Veuillez choisir un ID émetteur',    sensor_added: 'Capteur ajouté',
     actor_added: 'Actionneur ajouté',    bidir_added: 'Appareil bidirectionnel ajouté',
     err_add_device: 'Échec de l\'ajout : ',    device_removed: 'Appareil supprimé',

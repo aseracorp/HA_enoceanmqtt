@@ -513,18 +513,33 @@ $('edit-overlay')?.addEventListener('click', (e) => {
 $('edit-ok')?.addEventListener('click', async () => {
   if (!editingDevice) return;
   const name = $('e-name').value.trim();
-  const eep = $('e-eep-search').value.trim();
+  const eepInput = $('e-eep-search').value.trim();
+  const eep = resolveEep(eepInput);
+  if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
+  if (!eep) return toast(t('err_no_eep'), 'error');
   const body = { name: name, eep: eep };
   const addrVal = $('e-address').value.trim();
-  const address = addrVal ? parseAddress(addrVal) : null;
-  if (addrVal && address === null) return toast(t('err_bad_address'), 'error');
-  if (address !== null) body.address = address;
-  // actor/bidirectional: sender + settings
+  const address = parseAddress(addrVal);
   const cat = deviceCategory(state.sensors.find((x) => x.name === editingDevice) || {});
+  if (cat === 'sensor') {
+    // sensors must keep a valid (non-broadcast) device address
+    if (address === null || address === 0xFFFFFFFF) return toast(t('err_bad_address'), 'error');
+    body.address = address;
+  } else if (addrVal) {
+    // actor/bidirectional: address optional; if given it must parse
+    if (address === null) return toast(t('err_bad_address'), 'error');
+    body.address = address;
+  }
+  // actor/bidirectional: sender + settings
   if (cat !== 'sensor') {
     const sv = parseSender($('e-sender').value);
-    // empty sender field must be skipped, not sent as null (isNaN(null) is false)
-    if (sv !== null && sv !== undefined && !isNaN(sv)) body.sender = sv;
+    // for actors a sender is required; for bidirectional it is optional
+    if (cat === 'actor') {
+      if (sv === null || sv === undefined || isNaN(sv)) return toast(t('err_no_sender'), 'error');
+      body.sender = sv;
+    } else if (sv !== null && sv !== undefined && !isNaN(sv)) {
+      body.sender = sv;
+    }
   }
   if (cat === 'bidirectional') {
     if ($('e-direction').value.trim() !== '') body.direction = parseInt($('e-direction').value, 10);
@@ -764,13 +779,26 @@ function initCustomSelect(selectId) {
 }
 
 function resolveEep(value) {
+  // Only accept an EEP from the catalog - a free-form 'XX-YY-ZZ' that is not
+  // in state.eep is NOT a valid equipment profile and must be rejected.
   const v = (value || '').trim();
   if (!v) return null;
   const hit = (state.eep || []).find((p) =>
     p.eep.toLowerCase() === v.toLowerCase() ||
     p.eep.replace(/[-:]/g, '').toLowerCase() === v.replace(/[-:]/g, '').toLowerCase() ||
     p.name.toLowerCase() === v.toLowerCase());
-  return hit ? hit.eep : (v.toUpperCase().includes('-') ? v.toUpperCase() : null);
+  return hit ? hit.eep : null;
+}
+
+// A device name may not contain '/' (it would clash with MQTT topic /
+// model-suffix handling), must be non-empty after trimming, and reasonably
+// short so MQTT topics stay readable.
+function isValidName(name) {
+  const n = String(name || '').trim();
+  if (!n) return false;
+  if (n.indexOf('/') !== -1) return false;
+  if (n.length > 64) return false;
+  return true;
 }
 
 function eepViewerUrl(eep) {
@@ -969,7 +997,7 @@ $('as-save')?.addEventListener('click', async () => {
   const name = $('as-name').value.trim();
   const address = parseAddress($('as-address').value);
   const eep = resolveEep($('as-eep').value);
-  if (!name) return toast(t('err_no_name'), 'error');
+  if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
   if (address === null) return toast(t('err_bad_address'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
   const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address, eep, category: 'sensor', virtual: 0 }) });
@@ -997,9 +1025,10 @@ $('aa-save')?.addEventListener('click', async () => {
   let name = $('aa-name').value.trim();
   const sender = parseSender($('aa-sender').value);
   const eep = resolveEep($('aa-eep').value);
-  if (!name) name = defaultActorName(sender);
-  if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
+  if (sender === null || isNaN(sender)) return toast(t('err_no_sender'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
+  if (!name) name = defaultActorName(sender);
+  if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
   const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address: 0xFFFFFFFF, eep, sender, category: 'actor', virtual: 1 }) });
   if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
   toast(t('actor_added'), 'success');
@@ -1058,10 +1087,11 @@ $('ab-save')?.addEventListener('click', async () => {
   const address = parseAddress($('ab-address').value);
   const sender = parseSender($('ab-sender').value);
   const eep = resolveEep($('ab-eep').value);
-  if (!name) name = defaultActorName(sender);
   if (address === null) return toast(t('err_bad_address'), 'error');
-  if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
+  if (sender === null || isNaN(sender)) return toast(t('err_no_sender'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
+  if (!name) name = defaultActorName(sender);
+  if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
   const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address, eep, sender, category: 'bidirectional', virtual: 1, direction: 1, answer: 1 }) });
   if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
   toast(t('bidir_added'), 'success');
