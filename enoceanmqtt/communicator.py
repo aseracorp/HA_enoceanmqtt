@@ -459,6 +459,29 @@ class Communicator:
             logging.error("save_config failed: %s", exc)
             return {'ok': False, 'error': str(exc)}
 
+    def _classify_category(self, sensor):
+        """the device category the web UI shows (mirrors describe_sensor).
+
+        - bidirectional devices (stored flag or resolved from the EEP
+          registry) are always 'bidirectional'
+        - virtual one-way actors (sender set + virtual/0xFFFFFFFF address) are
+          'actor'
+        - everything else is 'sensor'
+        """
+        address = sensor.get('address')
+        is_virtual = bool(sensor.get('virtual')) or address == 0xFFFFFFFF
+        # resolve the bidirectional flag exactly like describe_sensor does
+        bidirectional = sensor.get('bidirectional')
+        if bidirectional is None and sensor.get('func') is not None and sensor.get('type') is not None:
+            profile = self._eep_registry.get(sensor.get('rorg'), sensor.get('func'), sensor.get('type'))
+            if profile:
+                bidirectional = bool(profile.get('bidirectional'))
+        if bidirectional:
+            return 'bidirectional'
+        if sensor.get('sender') is not None and is_virtual:
+            return 'actor'
+        return 'sensor'
+
     def _display_name(self, sensor):
         """the name shown in the web UI / used by row buttons.
 
@@ -1485,7 +1508,8 @@ class Communicator:
             sender_hex=sensor.get('sender'),
             rorg=sensor.get('rorg'), func=sensor.get('func'), type_=sensor.get('type'),
             address=sensor.get('address'),
-            category=sensor.get('category'), bidirectional=sensor.get('bidirectional'))
+            category=self._classify_category(sensor),
+            bidirectional=bool(sensor.get('bidirectional')))
 
     def _send_teachin_payload(self, name, sender_hex, rorg, func, type_,
                               address=None, category=None, bidirectional=None):
@@ -1512,7 +1536,9 @@ class Communicator:
             if profile:
                 category = profile.get('category', 'sensor') if category is None else category
                 bidirectional = profile.get('bidirectional', False) if bidirectional is None else bidirectional
-        is_actor = category == 'actor' or bidirectional
+        # A device can be taught-in when the UI treats it as an actor or
+        # bidirectional (the web UI shows the teach-in button for both).
+        is_actor = category in ('actor', 'bidirectional') or bidirectional
         if not is_actor:
             return False, 'Teach-in telegram is only supported for actors / bidirectional devices'
 
