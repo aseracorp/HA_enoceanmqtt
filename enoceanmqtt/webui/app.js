@@ -365,14 +365,6 @@ function deviceCategory(s) {
   return 'sensor';
 }
 
-// Teach-in telegrams only matter for 4BS (A5) and VLD (D2) actors — rocker
-// switches (F6) and other transmit-only devices cannot be taught in.
-function isTeachableActor(s) {
-  if (deviceCategory(s) !== 'actor') return false;
-  const rorg = String(s.eep || '').split('-')[0].toUpperCase();
-  return rorg === 'A5' || rorg === 'D2';
-}
-
 function renderSensors() {
   const tbody = $('sensor-body');
   const cats = activeDeviceCat;
@@ -423,7 +415,7 @@ function renderSensors() {
       <td class="mono" data-tip="${escapeHtml(fmtLastSeenFull(s.last_seen))}">${escapeHtml(fmtLastSeen(s.last_seen))}</td>
       <td class="mono latest-val">${fmtLatest(s)}</td>
       <td><div class="row-actions">
-        ${isActor && isTeachableActor(s) ? '<button class="icon-btn teachin-btn" title="Send teach-in telegram to this actor" data-teachin="' + escapeHtml(s.name) + '">⤓</button>' : ''}
+        ${isActor ? '<button class="icon-btn teachin-btn" title="Send teach-in telegram to this actor" data-teachin="' + escapeHtml(s.name) + '">⤓</button>' : ''}
         <button class="icon-btn" title="${t('edit_device')}" data-edit="${escapeHtml(s.name)}">✎</button>
         <button class="icon-btn" title="${t('remove_device')}" data-del="${escapeHtml(s.name)}">✕</button>
       </div></td>

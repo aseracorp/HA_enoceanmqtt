@@ -484,13 +484,15 @@ def test_send_teachin_by_sender_eep_via_webinterface():
         r2 = web.send_teachin('', payload={'sender': 0x89ABCDEF, 'eep': 'XX-YY-ZZ'})
         assert not r2['ok'] and 'EEP' in r2.get('message', ''), r2
 
-        # F6 rocker -> clear message (frontend surfaces it instead of
-        # a bare 'Request failed (400)')
+        # F6 rocker: no teach-in telegram exists, so a regular telegram is
+        # sent instead - the "Send teach-in" option always works
+        n1 = len(com.enocean.sent)
         r3 = web.send_teachin('', payload={
             'sender': 0x89ABCDEF, 'eep': 'F6-02-01',
             'address': 0x00000001, 'category': 'actor'})
-        assert not r3['ok']
-        assert '4BS and VLD' in r3.get('message', ''), r3
+        assert r3['ok'], r3
+        assert len(com.enocean.sent) == n1 + 1, 'a regular telegram must be sent'
+        assert 'Telegram sent' in r3.get('message', ''), r3
 
 
 def test_update_sensor():

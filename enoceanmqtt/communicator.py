@@ -1504,9 +1504,6 @@ class Communicator:
         else:
             sender = self.enocean_sender
 
-        if rorg not in (RORG.BS4, RORG.VLD):
-            return False, 'Teach-in telegram only supported for 4BS and VLD actors'
-
         # teach-in makes sense for actors and bi-directional devices (they can
         # receive and register the gateway). Plain one-way sensors cannot.
         # Resolve the category from the EEP registry if not provided.
@@ -1520,6 +1517,11 @@ class Communicator:
             return False, 'Teach-in telegram is only supported for actors / bidirectional devices'
 
         destination = [(address >> i * 8) & 0xff for i in reversed(range(4))] if address is not None else None
+
+        # 4BS and VLD have a real teach-in telegram (LRN bit / UTE request).
+        # Other RORGs (F6/RPS rockers, BS1) have no teach-in - send a regular
+        # data/control telegram instead so the action can still reach the actor.
+        is_teachable = rorg in (RORG.BS4, RORG.VLD)
 
         try:
             if rorg == RORG.VLD:
@@ -1540,7 +1542,7 @@ class Communicator:
                 packet = UTETeachInPacket(PACKET.RADIO_ERP1,
                                           data=data, optional=optional)
                 self.enocean.send(packet)
-            else:
+            elif rorg == RORG.BS4:
                 # 4BS teach-in: set the LRN bit in DB0 (data[1] bit 3)
                 packet = RadioPacket.create(RORG.BS4, func, type_,
                                             sender=sender,
@@ -1551,11 +1553,22 @@ class Communicator:
                     packet.data[1] |= 0x08
                     packet.parse_eep(func, type_)
                 self.enocean.send(packet)
+            else:
+                # No teach-in telegram exists for this RORG (F6/RPS, BS1, ...).
+                # Send a regular control telegram instead so the "Send teach-in"
+                # option always works; RadioPacket.create fills in the EEP's
+                # default value (e.g. a rocker press for F6-02-01).
+                packet = RadioPacket.create(rorg, func, type_,
+                                            sender=sender,
+                                            destination=destination,
+                                            learn=False)
+                packet.parse_eep(func, type_)
+                self.enocean.send(packet)
             logging.info("Teach-in telegram sent to %s (%s)", name,
                          enocean.utils.to_hex_string(destination) if destination else 'broadcast')
-            return True, 'Teach-in telegram sent'
+            return True, 'Teach-in telegram sent' if is_teachable else 'Telegram sent'
         except Exception as exc:   # pylint: disable=broad-except
-            logging.error("Failed to send teach-in to %s: %s", sensor['name'], exc)
+            logging.error("Failed to send teach-in to %s: %s", name, exc)
             return False, str(exc)
 
     def _process_radio_packet(self, packet):
