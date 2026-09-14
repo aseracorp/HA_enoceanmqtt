@@ -51,6 +51,6 @@ window.LANG_de = {
     actor_name: 'Aktor-Name',
     device_name: 'Geräte-Name',
 
-    actor_hint: 'Geben Sie einen Namen ein, wählen Sie die Sender-ID und die EEP, dann senden Sie das Lerntelegramm, damit das Gerät dieses Gateway kennt. (der Akteur muss zuerst im Anlern-Modus sein) (der Empfänger muss zuerst im Anlern-Modus sein) Einlernen starten, dann das gewünschte Gerät auslösen: dessen Anlern-Taste drücken (oder einfach einen normalen Schalter verwenden, z.B. einen F6-Rocker - der benötigt keine Anlern-Taste). Das Gerät wird automatisch hinzugefügt. Geräte mit 4BS- oder UTE-Lerntelegramm werden mit ihrer EEP erkannt; bidirektionale Geräte werden bestätigt.',    bidir_hint: 'Einlernen starten, dann das Gerät auslösen. Beim Empfang antworten wir mit einem Lerntelegramm von der nächsten freien Sender-ID und füllen die Details unten vor.',
+    actor_hint: 'Geben Sie einen Namen ein, wählen Sie die Sender-ID und die EEP, dann senden Sie das Lerntelegramm, damit das Gerät dieses Gateway kennt. (der Akteur muss zuerst im Anlern-Modus sein)',    bidir_hint: 'Einlernen starten, dann das Gerät auslösen. Beim Empfang antworten wir mit einem Lerntelegramm von der nächsten freien Sender-ID und füllen die Details unten vor.',
 
 };
