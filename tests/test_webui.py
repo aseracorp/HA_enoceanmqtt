@@ -993,11 +993,16 @@ def test_add_edit_validation():
         # valid sensor accepted
         assert add(name='liv_room')['ok']
 
+        # allowed: letters, digits, _ - /  (spaces/special chars rejected)
+        assert add(name='lights/livingroom')['ok']
+        assert add(name='my-sensor')['ok']
+        assert add(name='my_sensor')['ok']
         # invalid names rejected
-        assert not add(name='bad/name')['ok']
+        assert not add(name='bad name')['ok']
+        assert not add(name='bad@name')['ok']
         assert not add(name='')['ok']
         assert not add(name='   ')['ok']
-        assert not add(name='x' * 65)['ok']
+        assert not add(name='bad!name')['ok']
 
         # unknown EEP rejected
         assert not add(eep='A5-99-99')['ok']
@@ -1015,8 +1020,10 @@ def test_add_edit_validation():
         assert com.add_sensor({'name': 'editable', 'address': 0x123,
                                'eep': 'A5-02-05'})['ok']
         assert not com.update_sensor('editable', {'eep': 'D2-99-99'})['ok']
-        assert not com.update_sensor('editable', {'name': 'a/b'})['ok']
+        assert not com.update_sensor('editable', {'name': 'a b'})['ok']
         assert not com.update_sensor('editable', {'name': ''})['ok']
+        assert not com.update_sensor('editable', {'eep': 'D2-99-99'})['ok']
 
-        # valid update still works
-        assert com.update_sensor('editable', {'name': 'renamed', 'eep': 'A5-08-01'})['ok']
+        # valid update still works (incl. a '/'-grouped name - '/' is allowed)
+        assert com.update_sensor('editable', {'name': 'room/editable'})['ok']
+        assert com.update_sensor('room/editable', {'name': 'renamed', 'eep': 'A5-08-01'})['ok']

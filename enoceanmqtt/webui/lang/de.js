@@ -42,7 +42,7 @@ window.LANG_de = {
     err_update_device: 'Gerät konnte nicht aktualisiert werden: ',    teachin_sent: 'Einlernen gesendet',    teachin_failed: 'Einlernen fehlgeschlagen',
     err_send_teachin: 'Einlernen konnte nicht gesendet werden: ',    teachin_enabled: 'Einlernen aktiviert - Taste am Gerät drücken',
     teachin_disabled: 'Einlernen deaktiviert',    err_teachin: 'Einlernen konnte nicht geändert werden: ',
-    err_no_name: 'Bitte einen Namen eingeben',    err_bad_name: 'Bitte einen gültigen Namen eingeben (kein "/", max. 64 Zeichen)',    err_no_eep: 'Bitte eine EEP aus der Liste wählen',
+    err_no_name: 'Bitte einen Namen eingeben',    err_bad_name: 'Name darf keine Leerzeichen oder Sonderzeichen enthalten (nur Buchstaben, Ziffern, _ - /)',    err_no_eep: 'Bitte eine EEP aus der Liste wählen',
     err_no_sender: 'Bitte eine Sender-ID wählen',    sensor_added: 'Sensor hinzugefügt',
     actor_added: 'Aktor hinzugefügt',    bidir_added: 'Bidirektionales Gerät hinzugefügt',
     err_add_device: 'Gerät konnte nicht hinzugefügt werden: ',    device_removed: 'Gerät entfernt',
