@@ -430,6 +430,71 @@ def test_send_teachin_matches_stripped_model_display_name():
 
 
 
+def test_send_teachin_by_sender_eep_creates_no_device():
+    """sending a teach-in from the add-actor popup (sender + EEP) must NOT
+    create a device - it only transmits the telegram."""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        n0 = len(com.sensors)
+        ok, msg = com._send_teachin_payload(
+            name='', sender_hex=0x89ABCDEF, rorg=0xA5, func=0x38, type_=0x08,
+            address=0xFFFFFFFF, category='actor')
+        assert ok, msg
+        assert len(com.enocean.sent) >= 1
+        # no sensor was created by sending the telegram
+        assert len(com.sensors) == n0
+
+
+def test_send_teachin_by_sender_eep_via_webinterface():
+    """webinterface /api/teachin accepts sender + eep (popup) as an
+    alternative to name, without creating a device, and returns the real
+    message on failure (F6 rocker) instead of an opaque error."""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+        web = WebInterface(com)
+
+        n0 = len(com.sensors)
+        r = web.send_teachin('', payload={
+            'sender': 0x89ABCDEF, 'eep': 'A5-38-08',
+            'address': 0xFFFFFFFF, 'category': 'actor'})
+        assert r['ok'], r
+        assert len(com.enocean.sent) >= 1
+        assert len(com.sensors) == n0, 'popup teach-in must not create a device'
+
+        # invalid EEP -> clear message, no device
+        r2 = web.send_teachin('', payload={'sender': 0x89ABCDEF, 'eep': 'XX-YY-ZZ'})
+        assert not r2['ok'] and 'EEP' in r2.get('message', ''), r2
+
+        # F6 rocker: no teach-in telegram exists, so a regular telegram is
+        # sent instead - the "Send teach-in" option always works
+        n1 = len(com.enocean.sent)
+        r3 = web.send_teachin('', payload={
+            'sender': 0x89ABCDEF, 'eep': 'F6-02-01',
+            'address': 0x00000001, 'category': 'actor'})
+        assert r3['ok'], r3
+        assert len(com.enocean.sent) == n1 + 1, 'a regular telegram must be sent'
+        assert 'Telegram sent' in r3.get('message', ''), r3
+
+
 def test_update_sensor():
     """editing a web-added sensor updates name and EEP (backend)"""
     with tempfile.TemporaryDirectory() as tmp:
