@@ -120,9 +120,38 @@ class WebInterface:
     def add_sensor(self, payload):
         return self.communicator.add_sensor(payload)
 
-    def send_teachin(self, name):
-        """send a teach-in telegram to an actor"""
-        ok, message = self.communicator._send_teachin(name)
+    def send_teachin(self, name, payload=None):
+        """send a teach-in telegram to an actor.
+
+        Existing device: pass only ``name``.
+        Not-yet-saved device (add-actor popup): pass ``sender`` + ``eep`` (+
+        optional ``address`` / ``category``) so the telegram can be sent
+        without first creating a sensor.
+        """
+        payload = payload or {}
+        if name:
+            ok, message = self.communicator._send_teachin(name)
+            return {'ok': ok, 'message': message}
+        sender = payload.get('sender')
+        eep = str(payload.get('eep', '')).strip()
+        parts = [p for p in eep.replace('0x', '').split('-') if p] if eep else []
+        if len(parts) != 3:
+            return {'ok': False, 'message': 'Invalid EEP, expected e.g. A5-02-05'}
+        try:
+            rorg = int(parts[0], 16)
+            func = int(parts[1], 16)
+            type_ = int(parts[2], 16)
+        except ValueError:
+            return {'ok': False, 'message': 'Invalid EEP'}
+        sender_int = self.communicator._parse_int(sender)
+        if sender_int is None:
+            return {'ok': False, 'message': 'Invalid sender address'}
+        address = self.communicator._parse_int(payload.get('address'))
+        ok, message = self.communicator._send_teachin_payload(
+            name=payload.get('name') or '',
+            sender_hex=sender_int, rorg=rorg, func=func, type_=type_,
+            address=address,
+            category=payload.get('category'), bidirectional=payload.get('bidirectional'))
         return {'ok': ok, 'message': message}
 
     def start_capture(self):
@@ -228,7 +257,8 @@ class WebInterface:
                     code = 200 if result.get('ok') else 400
                     return self._send(code, result)
                 if self.command == 'POST' and path == '/api/teachin':
-                    result = web.send_teachin(str(self._read_body().get('name', '')))
+                    body = self._read_body()
+                    result = web.send_teachin(str(body.get('name', '')), payload=body)
                     code = 200 if result.get('ok') else 400
                     return self._send(code, result)
                 if self.command == 'POST' and path == '/api/teachin/capture':

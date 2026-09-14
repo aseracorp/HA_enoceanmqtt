@@ -31,7 +31,14 @@ async function api(path, opts = {}) {
     ...opts
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+  if (!res.ok) {
+    // surface the backend reason (data.error/data.message) so e.g. a teach-in
+    // rejection shows *why* instead of a bare 'Request failed (400)'
+    const reason = data.error || data.message || ('Request failed (' + res.status + ')');
+    const err = new Error(reason);
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 
@@ -358,6 +365,14 @@ function deviceCategory(s) {
   return 'sensor';
 }
 
+// Teach-in telegrams only matter for 4BS (A5) and VLD (D2) actors — rocker
+// switches (F6) and other transmit-only devices cannot be taught in.
+function isTeachableActor(s) {
+  if (deviceCategory(s) !== 'actor') return false;
+  const rorg = String(s.eep || '').split('-')[0].toUpperCase();
+  return rorg === 'A5' || rorg === 'D2';
+}
+
 function renderSensors() {
   const tbody = $('sensor-body');
   const cats = activeDeviceCat;
@@ -408,7 +423,7 @@ function renderSensors() {
       <td class="mono" data-tip="${escapeHtml(fmtLastSeenFull(s.last_seen))}">${escapeHtml(fmtLastSeen(s.last_seen))}</td>
       <td class="mono latest-val">${fmtLatest(s)}</td>
       <td><div class="row-actions">
-        ${isActor ? '<button class="icon-btn teachin-btn" title="Send teach-in telegram to this actor" data-teachin="' + escapeHtml(s.name) + '">⤓</button>' : ''}
+        ${isActor && isTeachableActor(s) ? '<button class="icon-btn teachin-btn" title="Send teach-in telegram to this actor" data-teachin="' + escapeHtml(s.name) + '">⤓</button>' : ''}
         <button class="icon-btn" title="${t('edit_device')}" data-edit="${escapeHtml(s.name)}">✎</button>
         <button class="icon-btn" title="${t('remove_device')}" data-del="${escapeHtml(s.name)}">✕</button>
       </div></td>
@@ -947,25 +962,16 @@ $('as-save')?.addEventListener('click', async () => {
 /* ---- Actor modal ---- */
 $('aa-cancel')?.addEventListener('click', () => { $('addactor-overlay').hidden = true; });
 $('aa-teachin')?.addEventListener('click', async () => {
-  let name = $('aa-name').value.trim();
   const sender = parseSender($('aa-sender').value);
   const eep = resolveEep($('aa-eep').value);
-  if (!name) name = defaultActorName(sender); // empty name must not block sending
-  if (isNaN(sender)) return toast(t('err_no_sender'), 'error');
+  if (sender === null || isNaN(sender)) return toast(t('err_no_sender'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
-  // save first, then send teach-in telegram to the actor
-  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address: 0xFFFFFFFF, eep, sender, category: 'actor', virtual: 1 }) });
-  if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
-  const t2 = await api('/api/teachin', { method: 'POST', body: JSON.stringify({ name: name }) });
-  if (t2.ok) {
-    toast(t('teachin_sent'), 'success');
-  } else {
-    toast(t('err_send_teachin') + (t2.message || t('teachin_failed')), 'error');
-    return;
-  }
-  toast(t('actor_added'), 'success');
-  $('addactor-overlay').hidden = true;
-  await loadStatus();
+  // "Send teach-in" must NOT create a device - only transmit the telegram.
+  // The actor learns the gateway from a 4BS/U TE teach-in sent on the chosen
+  // virtual sender; it can be added later via "Save".
+  const res = await api('/api/teachin', { method: 'POST', body: JSON.stringify({ sender, eep, address: 0xFFFFFFFF, category: 'actor' }) });
+  if (!res.ok) return toast(t('err_send_teachin') + (res.message || t('teachin_failed')), 'error');
+  toast(t('teachin_sent'), 'success');
 });
 $('aa-save')?.addEventListener('click', async () => {
   let name = $('aa-name').value.trim();
