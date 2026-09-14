@@ -49,6 +49,6 @@ window.LANG_it = {
     err_remove_device: 'Impossibile rimuovere il dispositivo: ',
     save_restart: 'Salva e riavvia',    sensor_detected: 'Sensore rilevato - conferma i dettagli qui sotto.',    actor_name: 'Nome attuatore',    device_name: 'Nome dispositivo',
 
-    actor_hint: 'Inserisci un nome, scegli l\'ID mittente e l\'EEP, poi invia il telegramma di apprendimento così il dispositivo conosce questo gateway.',    bidir_hint: 'Avvia teach-in, poi attiva il dispositivo. Alla ricezione rispondiamo con un telegramma di apprendimento dal prossimo ID mittente libero e precompiliamo i dettagli qui sotto.',
+    actor_hint: 'Inserisci un nome, scegli l\'ID mittente e l\'EEP, poi invia il telegramma di apprendimento così il dispositivo conosce questo gateway. (l\'attuatore deve essere prima in modalità teach-in) (il ricevitore deve essere prima in modalità teach-in) Avvia teach-in, poi attiva il dispositivo da aggiungere: premi il suo pulsante teach-in (o usa semplicemente un interruttore normale, es. un rocker F6 - non serve un pulsante teach-in). Il dispositivo viene aggiunto automaticamente. I dispositivi che usano un telegramma di apprendimento 4BS o UTE vengono riconosciuti con la loro EEP; i dispositivi bidirezionali vengono confermati.',    bidir_hint: 'Avvia teach-in, poi attiva il dispositivo. Alla ricezione rispondiamo con un telegramma di apprendimento dal prossimo ID mittente libero e precompiliamo i dettagli qui sotto.',
 
 };
