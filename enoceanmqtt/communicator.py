@@ -264,7 +264,7 @@ class Communicator:
             sender = payload.get('sender')
 
             if not self._is_valid_name(name):
-                return {'ok': False, 'error': 'A sensor name is required (no "/", max 64 chars)'}
+                return {'ok': False, 'error': 'A sensor name is required (letters, digits, _ - / only)'}
             pa = _parse_int(address)
             if pa is None:
                 return {'ok': False, 'error': 'Invalid sensor address'}
@@ -338,7 +338,7 @@ class Communicator:
         if new_name is not None:
             new_name = str(new_name).strip()
             if not self._is_valid_name(new_name):
-                return {'ok': False, 'error': 'A sensor name is required (no "/", max 64 chars)'}
+                return {'ok': False, 'error': 'A sensor name is required (letters, digits, _ - / only)'}
             prefix = self.conf.get('mqtt_prefix', 'enocean/')
             if new_name != name and any(
                     s.get('name') == prefix + new_name for s in self.sensors):
@@ -488,10 +488,14 @@ class Communicator:
 
     @staticmethod
     def _is_valid_name(name):
-        """Valid device names are non-empty, contain no '/' (MQTT topic
-        clash / model-suffix conflict) and are at most 64 characters."""
+        """Valid device names contain no spaces or special characters, with
+        the exception of '_', '-' and '/'. '/' is explicitly allowed (it is
+        used to group devices and becomes '_' in Home Assistant)."""
+        import re as _re
         n = str(name or '').strip()
-        return bool(n) and '/' not in n and len(n) <= 64
+        if not n:
+            return False
+        return _re.fullmatch(r'[A-Za-z0-9_\-\/]+', n) is not None
 
     def _is_valid_eep(self, rorg, func, type_):
         """True when the (rorg, func, type) triplet is a known EEP profile.

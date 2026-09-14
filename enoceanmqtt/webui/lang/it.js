@@ -42,7 +42,7 @@ window.LANG_it = {
     err_update_device: 'Impossibile aggiornare il dispositivo: ',    teachin_sent: 'Teach-in inviato',    teachin_failed: 'Teach-in non riuscito',
     err_send_teachin: 'Impossibile inviare teach-in: ',    teachin_enabled: 'Teach-in attivato - premi il pulsante',
     teachin_disabled: 'Teach-in disattivato',    err_teachin: 'Impossibile modificare teach-in: ',
-    err_no_name: 'Inserisci un nome',    err_bad_name: 'Inserisci un nome valido (no "/", max 64 caratteri)',    err_no_eep: 'Seleziona una EEP dalla lista',
+    err_no_name: 'Inserisci un nome',    err_bad_name: 'Il nome non deve contenere spazi o caratteri speciali (solo lettere, cifre, _ - /)',    err_no_eep: 'Seleziona una EEP dalla lista',
     err_no_sender: 'Seleziona un ID mittente',    sensor_added: 'Sensore aggiunto',
     actor_added: 'Attuatore aggiunto',    bidir_added: 'Dispositivo bidirezionale aggiunto',
     err_add_device: 'Impossibile aggiungere il dispositivo: ',    device_removed: 'Dispositivo rimosso',

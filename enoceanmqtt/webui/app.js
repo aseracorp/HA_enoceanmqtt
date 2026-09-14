@@ -790,14 +790,14 @@ function resolveEep(value) {
   return hit ? hit.eep : null;
 }
 
-// A device name may not contain '/' (it would clash with MQTT topic /
-// model-suffix handling), must be non-empty after trimming, and reasonably
-// short so MQTT topics stay readable.
+// Device names may only contain letters, digits and _ - / (like MQTT topic
+// segments). Spaces and other special characters are not allowed. The '/'
+// is explicitly allowed and is used to group devices (it becomes '_' in the
+// Home Assistant device name). No leading/trailing whitespace either.
 function isValidName(name) {
   const n = String(name || '').trim();
   if (!n) return false;
-  if (n.indexOf('/') !== -1) return false;
-  if (n.length > 64) return false;
+  if (!/^[A-Za-z0-9_\-\/]+$/.test(n)) return false;
   return true;
 }
 
