@@ -392,6 +392,43 @@ def test_send_teachin_to_actor():
         assert ok4
 
 
+def test_send_teachin_matches_stripped_model_display_name():
+    """teaching-in by the web UI display name works for model-based sensors.
+
+    describe_sensor hides a trailing '/XX' rorg suffix for model-based
+    devices, so the row button sends the stripped name. _send_teachin must
+    still resolve it against the stored full name (regression: this used to
+    fail with 'Device not found' -> HTTP 400).
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.enocean = FakeEnocean()
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        # model-based actor: stored name carries a hidden '/02' rorg suffix
+        assert com.add_sensor({'name': 'Dimmer/02', 'address': 0x0A0B0C0D,
+                               'eep': 'A5-38-08', 'category': 'actor',
+                               'model': 'dimmer', 'sender': 0x89ABCDEF})['ok']
+        stored = com.sensors[0]
+        stored['model'] = 'dimmer'  # describe_sensor strips the suffix
+
+        display = com.describe_sensor(stored)
+        assert display['name'] == 'Dimmer', display['name']
+        assert display != stored['name']
+
+        # the row button sends the *display* name - must resolve
+        ok, msg = com._send_teachin(display['name'])
+        assert ok, msg
+        assert len(com.enocean.sent) >= 1
+
+
 
 def test_update_sensor():
     """editing a web-added sensor updates name and EEP (backend)"""
