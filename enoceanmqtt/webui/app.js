@@ -909,32 +909,60 @@ document.querySelectorAll('.add-option').forEach((el) => {
 function asReset() {
   $('as-name').value = ''; $('as-address').value = ''; $('as-eep').value = '';
   $('as-prompt').hidden = true; $('as-success').hidden = true; $('as-teachin-btn').hidden = false;
+  if (asTeachInActive) {
+    asStopTeachIn('');
+    $('as-prompt').hidden = true;
+  }
 }
 async function enableTeachIn() {
   await api('/api/learn', { method: 'POST', body: JSON.stringify({ enabled: true }) });
 }
+let asTeachInActive = false;
+function asStopTeachIn(message) {
+  asTeachInActive = false;
+  api('/api/teachin/capture/stop', { method: 'POST', body: JSON.stringify({}) }).catch(() => {});
+  const btn = $('as-teachin-btn');
+  if (btn) {
+    btn.classList.remove('stopping');
+    btn.textContent = t('start_teachin');
+    btn.setAttribute('data-i18n', 'start_teachin');
+  }
+  if (message) $('as-prompt-state').textContent = message;
+}
 $('as-teachin-btn')?.addEventListener('click', async () => {
-  $('as-teachin-btn').hidden = true;
+  if (asTeachInActive) {
+    // already capturing -> cancel
+    asStopTeachIn('Teach-in cancelled.');
+    $('as-prompt').hidden = true;
+    return;
+  }
+  asTeachInActive = true;
+  const btn = $('as-teachin-btn');
+  if (btn) {
+    btn.classList.add('stopping');
+    btn.textContent = t('stop_teachin');
+    btn.setAttribute('data-i18n', 'stop_teachin');
+  }
   $('as-prompt').hidden = false;
   $('as-prompt-state').textContent = t('teachin_active');
   // capture-only teach-in: fills the dialog, does NOT add the device yet
   await api('/api/teachin/capture', { method: 'POST', body: JSON.stringify({}) });
   for (let i = 0; i < 90; i++) {
     await new Promise((r) => setTimeout(r, 1000));
+    if (!asTeachInActive) return; // cancelled during wait
     const cap = await api('/api/teachin/captured');
     if (cap && cap.ok && cap.device) {
       const d = cap.device;
       $('as-name').value = 'learn_' + Number(d.address).toString(16).toLowerCase();
       $('as-address').value = fmtAddrInput(d.address);
       $('as-eep').value = d.eep || '';
+      asStopTeachIn('');
       $('as-prompt').hidden = true; $('as-success').hidden = false;
       toast(t('sensor_detected'), 'success');
       return;
     }
   }
-  await api('/api/teachin/capture/stop', { method: 'POST', body: JSON.stringify({}) });
-  $('as-prompt-state').textContent = 'No telegram received.';
-  $('as-teachin-btn').hidden = false;
+  asStopTeachIn('No telegram received.');
 });
 $('as-cancel')?.addEventListener('click', () => { $('addsensor-overlay').hidden = true; asReset(); });
 $('as-save')?.addEventListener('click', async () => {
@@ -981,12 +1009,36 @@ $('aa-save')?.addEventListener('click', async () => {
 
 /* ---- Bidirectional modal ---- */
 $('ab-cancel')?.addEventListener('click', () => { $('addbidir-overlay').hidden = true; });
+let abTeachInActive = false;
+function abStopTeachIn(message) {
+  abTeachInActive = false;
+  api('/api/learn', { method: 'POST', body: JSON.stringify({ enabled: false }) }).catch(() => {});
+  const btn = $('ab-teachin');
+  if (btn) {
+    btn.classList.remove('stopping');
+    btn.textContent = t('start_teachin');
+    btn.setAttribute('data-i18n', 'start_teachin');
+  }
+  if (message) $('ab-hint').querySelector('p').textContent = message;
+}
 $('ab-teachin')?.addEventListener('click', async () => {
-  $('ab-teachin').disabled = true;
+  if (abTeachInActive) {
+    // already in teach-in mode -> cancel
+    abStopTeachIn('Teach-in cancelled.');
+    return;
+  }
+  abTeachInActive = true;
+  const btn = $('ab-teachin');
+  if (btn) {
+    btn.classList.add('stopping');
+    btn.textContent = t('stop_teachin');
+    btn.setAttribute('data-i18n', 'stop_teachin');
+  }
   $('ab-hint').querySelector('p').textContent = t('teachin_active');
   await enableTeachIn();
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 1000));
+    if (!abTeachInActive) return; // cancelled during wait
     const known = new Set(state.sensors.map((s) => s.name));
     const data = await api('/api/status');
     const fresh = (data.sensors || []).find((s) => s.name.startsWith('enoceanmqtt/learn_') && !known.has(s.name));
@@ -994,15 +1046,12 @@ $('ab-teachin')?.addEventListener('click', async () => {
       $('ab-name').value = fresh.name.replace(/^.*\/learn_/, 'learn_');
       $('ab-address').value = fmtAddrInput(fresh.address);
       $('ab-eep').value = fresh.eep || '';
-      $('ab-hint').querySelector('p').textContent = 'Device detected - confirm details.';
-      $('ab-teachin').disabled = false;
-      await api('/api/learn', { method: 'POST', body: JSON.stringify({ enabled: false }) });
+      abStopTeachIn('Device detected - confirm details.');
       toast('Bidirectional device detected', 'success');
       return;
     }
   }
-  $('ab-hint').querySelector('p').textContent = 'No telegram received.';
-  $('ab-teachin').disabled = false;
+  abStopTeachIn('No telegram received.');
 });
 $('ab-save')?.addEventListener('click', async () => {
   let name = $('ab-name').value.trim();

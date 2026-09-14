@@ -314,6 +314,8 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 .btn-primary:hover { filter: brightness(1.15); background-image: var(--gradient); }
 .btn-danger { background-image: linear-gradient(135deg, #ff4d4f, #d9363e); border: none; color: #fff; }
 .btn-danger:hover { filter: brightness(1.15); background-image: linear-gradient(135deg, #ff4d4f, #d9363e); }
+.btn.stopping { background-image: linear-gradient(135deg, #ff4d4f, #d9363e); border: none; color: #fff; }
+.btn.stopping:hover { filter: brightness(1.15); background-image: linear-gradient(135deg, #ff4d4f, #d9363e); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ---------------- form ---------------- */
