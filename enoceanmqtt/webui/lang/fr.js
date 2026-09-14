@@ -39,7 +39,7 @@ window.LANG_fr = {
     err_load_status: 'Échec du chargement de l\'état : ',    err_load_config: 'Échec du chargement de la configuration : ',
     config_saved: 'Configuration enregistrée - redémarrage requis',    err_save_config: 'Échec de l\'enregistrement : ',
     err_bad_address: 'Veuillez saisir une adresse valide (ex. 0x003DD63B)',    device_updated: 'Appareil mis à jour',
-    err_update_device: 'Échec de la mise à jour : ',    teachin_sent: 'Enseignement envoyé',
+    err_update_device: 'Échec de la mise à jour : ',    teachin_sent: 'Enseignement envoyé',    teachin_failed: 'Échec de l\'enseignement',
     err_send_teachin: 'Échec de l\'envoi : ',    teachin_enabled: 'Enseignement activé - appuyez sur le bouton',
     teachin_disabled: 'Enseignement désactivé',    err_teachin: 'Échec du changement d\'enseignement : ',
     err_no_name: 'Veuillez saisir un nom',    err_no_eep: 'Veuillez choisir un EEP dans la liste',

@@ -542,7 +542,11 @@ $('edit-ok')?.addEventListener('click', async () => {
 async function sendTeachIn(name) {
   try {
     const res = await api('/api/teachin', { method: 'POST', body: JSON.stringify({ name: name }) });
-    toast(res.message || t('teachin_sent'), res.ok ? 'success' : 'error');
+    if (res.ok) {
+      toast(t('teachin_sent'), 'success');
+    } else {
+      toast(t('err_send_teachin') + (res.message || t('teachin_failed')), 'error');
+    }
   } catch (err) {
     toast(t('err_send_teachin') + err.message, 'error');
   }
@@ -928,7 +932,12 @@ $('aa-teachin')?.addEventListener('click', async () => {
   const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address: 0xFFFFFFFF, eep, sender, category: 'actor', virtual: 1 }) });
   if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
   const t2 = await api('/api/teachin', { method: 'POST', body: JSON.stringify({ name: name }) });
-  toast(t2.message || t('teachin_sent'), t2.ok ? 'success' : 'error');
+  if (t2.ok) {
+    toast(t('teachin_sent'), 'success');
+  } else {
+    toast(t('err_send_teachin') + (t2.message || t('teachin_failed')), 'error');
+    return;
+  }
   toast(t('actor_added'), 'success');
   $('addactor-overlay').hidden = true;
   await loadStatus();

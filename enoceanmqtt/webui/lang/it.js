@@ -39,7 +39,7 @@ window.LANG_it = {
     err_load_status: 'Impossibile caricare lo stato: ',    err_load_config: 'Impossibile caricare la configurazione: ',
     config_saved: 'Configurazione salvata - riavvio richiesto',    err_save_config: 'Impossibile salvare la configurazione: ',
     err_bad_address: 'Inserisci un indirizzo valido (es. 0x003DD63B)',    device_updated: 'Dispositivo aggiornato',
-    err_update_device: 'Impossibile aggiornare il dispositivo: ',    teachin_sent: 'Teach-in inviato',
+    err_update_device: 'Impossibile aggiornare il dispositivo: ',    teachin_sent: 'Teach-in inviato',    teachin_failed: 'Teach-in non riuscito',
     err_send_teachin: 'Impossibile inviare teach-in: ',    teachin_enabled: 'Teach-in attivato - premi il pulsante',
     teachin_disabled: 'Teach-in disattivato',    err_teachin: 'Impossibile modificare teach-in: ',
     err_no_name: 'Inserisci un nome',    err_no_eep: 'Seleziona una EEP dalla lista',
