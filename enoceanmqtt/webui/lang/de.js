@@ -39,7 +39,7 @@ window.LANG_de = {
     err_load_status: 'Status konnte nicht geladen werden: ',    err_load_config: 'Konfiguration konnte nicht geladen werden: ',
     config_saved: 'Konfiguration gespeichert - Neustart erforderlich',    err_save_config: 'Konfiguration konnte nicht gespeichert werden: ',
     err_bad_address: 'Bitte eine gültige Adresse eingeben (z.B. 0x003DD63B)',    device_updated: 'Gerät aktualisiert',
-    err_update_device: 'Gerät konnte nicht aktualisiert werden: ',    teachin_sent: 'Einlernen gesendet',
+    err_update_device: 'Gerät konnte nicht aktualisiert werden: ',    teachin_sent: 'Einlernen gesendet',    teachin_failed: 'Einlernen fehlgeschlagen',
     err_send_teachin: 'Einlernen konnte nicht gesendet werden: ',    teachin_enabled: 'Einlernen aktiviert - Taste am Gerät drücken',
     teachin_disabled: 'Einlernen deaktiviert',    err_teachin: 'Einlernen konnte nicht geändert werden: ',
     err_no_name: 'Bitte einen Namen eingeben',    err_no_eep: 'Bitte eine EEP aus der Liste wählen',

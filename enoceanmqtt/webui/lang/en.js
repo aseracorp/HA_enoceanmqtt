@@ -39,7 +39,7 @@ window.LANG_en = {
     err_load_status: 'Failed to load status: ',    err_load_config: 'Failed to load configuration: ',
     config_saved: 'Configuration saved - restart required',    err_save_config: 'Failed to save configuration: ',
     err_bad_address: 'Please enter a valid address (e.g. 0x003DD63B)',    device_updated: 'Device updated',
-    err_update_device: 'Failed to update device: ',    teachin_sent: 'Teach-in sent',
+    err_update_device: 'Failed to update device: ',    teachin_sent: 'Teach-in sent',    teachin_failed: 'Teach-in failed',
     err_send_teachin: 'Failed to send teach-in: ',    teachin_enabled: 'Teach-in enabled - press the button on your device',
     teachin_disabled: 'Teach-in disabled',    err_teachin: 'Failed to change teach-in: ',
     err_no_name: 'Please enter a name',    err_no_eep: 'Please select an EEP from the list',
