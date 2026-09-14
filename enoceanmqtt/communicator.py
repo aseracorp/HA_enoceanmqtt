@@ -1485,11 +1485,22 @@ class Communicator:
 
         try:
             if rorg == RORG.VLD:
-                # VLD teach-in: build a UTE-style packet targeting the actor
-                packet = RadioPacket.create(RORG.VLD, func, type_,
-                                            sender=self.enocean_sender,
-                                            destination=destination,
-                                            learn=True)
+                # VLD teach-in: send a UTE (0xD4) teach-in REQUEST to the actor.
+                # VLD devices learn their controller through a Universal
+                # Teach-In telegram, not a regular VLD data telegram (the
+                # latter also fails to build without a command/CMD value).
+                # UTE data layout (see UTETeachInPacket.parse()):
+                #   [0]=0xD4, [1]=request type (0x00 = TEACH_IN),
+                #   [2]=channel (0), [3..4]=manufacturer id (0 = none),
+                #   [5]=type, [6]=func, [7]=rorg of EEP (0xD2),
+                #   [8..11]=sender, [12]=status
+                payload = [RORG.UTE, UTETeachInPacket.TEACH_IN, 0,
+                           0, 0, type_ or 0, func or 0, RORG.VLD]
+                data = payload + list(self.enocean_sender) + [0]
+                optional = ([0x03] + destination + [0xFF, 0]
+                            if destination is not None else None)
+                packet = UTETeachInPacket(PACKET.RADIO_ERP1,
+                                          data=data, optional=optional)
                 self.enocean.send(packet)
             else:
                 # 4BS teach-in: set the LRN bit in DB0 (data[1] bit 3)

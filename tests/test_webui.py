@@ -373,6 +373,24 @@ def test_send_teachin_to_actor():
         ok3, _ = com._send_teachin('nope')
         assert ok3 is False
 
+        # VLD actor (D2-01-12) -> must send a UTE (0xD4) teach-in request,
+        # not a VLD data telegram (which fails to build without a CMD/command)
+        com.enocean.sent = []
+        assert com.add_sensor({'name': 'vld_actor', 'address': 0x0A0B0C0D,
+                               'eep': 'D2-01-12', 'category': 'actor'})['ok']
+        okv, msgv = com._send_teachin('vld_actor')
+        assert okv, msgv
+        assert len(com.enocean.sent) == 1
+        last_v = com.enocean.sent[-1]
+        assert last_v.rorg == 0xD4, 'expected UTE teach-in request for VLD'
+        assert getattr(last_v, 'rorg_of_eep', None) == 0xD2
+        assert getattr(last_v, 'teach_in', False) is True
+        assert getattr(last_v, 'learn', False) is not False
+
+        # name lookup works both with and without the mqtt prefix
+        ok4, _ = com._send_teachin(com.conf['mqtt_prefix'] + 'my_actor')
+        assert ok4
+
 
 
 def test_update_sensor():
