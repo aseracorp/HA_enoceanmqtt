@@ -75,12 +75,12 @@ function renderGateway() {
     const gwAddr = gw.base_id || '—';
     gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + escapeHtml(String(gwAddr));
     mqttEl.className = 'pill ' + (gw.mqtt ? 'ok' : 'bad');
-    const mqttAddr = (state.config && state.config.mqtt_host) ? state.config.mqtt_host + (state.config.mqtt_port ? ':' + state.config.mqtt_port : '') : '—';
-    mqttEl.innerHTML = '<span class="dot"></span>MQTT ' + escapeHtml(String(mqttAddr));
+    // just the connection state - the details go into the tooltip
+    mqttEl.innerHTML = '<span class="dot"></span>' + t('mqtt') + ' ' + (gw.mqtt ? t('connected') : t('disconnected'));
     // hover tooltips with configured settings
     const cfg = state.config || {};
     if (cfg.enocean_port) gwEl.setAttribute('data-tip', 'Port: ' + cfg.enocean_port + (cfg.log_packets !== undefined ? '\nLog packets: ' + cfg.log_packets : ''));
-    if (cfg.mqtt_host) mqttEl.setAttribute('data-tip', 'Host: ' + cfg.mqtt_host + (cfg.mqtt_port ? ':' + cfg.mqtt_port : ''));
+    if (cfg.mqtt_host) mqttEl.setAttribute('data-tip', 'mqtt://' + cfg.mqtt_host + (cfg.mqtt_port ? ':' + cfg.mqtt_port : ''));
   }
 }
 
