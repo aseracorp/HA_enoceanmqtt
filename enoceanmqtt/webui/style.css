@@ -521,6 +521,21 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
   max-width: 320px; white-space: pre-line;
 }
 
+/* help (i) icon next to modal/config labels */
+.help-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; margin-left: 6px;
+  border-radius: 50%;
+  font-size: 10.5px; font-weight: 600; line-height: 1;
+  cursor: help;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-strong);
+  user-select: none;
+}
+.help-icon:hover { color: var(--text); background: var(--bg-elevated); }
+.field > label .help-icon, .config-bool label .help-icon { vertical-align: middle; }
+
 /* ---------------- footer ---------------- */
 .footer {
   display: flex; justify-content: space-between; gap: 12px;

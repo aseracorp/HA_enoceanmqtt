@@ -300,15 +300,23 @@ function openConfigEdit() {
   grid.innerHTML = keys.map((k) => {
     const label = configLabel(k);
     const raw = conf[k];
+    const helpKey = 'help_config_' + k;
+    const helpIcon = '<span class="help-icon" data-help="' + escapeHtml(helpKey) + '">ⓘ</span>';
     if (isBoolConf(k, raw)) {
       const checked = ['1', 'true', 'yes', 'on'].includes(String(raw == null ? '' : raw).trim().toLowerCase());
-      return '<div class="field config-bool"><label for="cfg-' + escapeHtml(k) + '">' + escapeHtml(label) + '</label>' +
+      return '<div class="field config-bool"><label for="cfg-' + escapeHtml(k) + '">' + escapeHtml(label) + helpIcon + '</label>' +
         '<input type="checkbox" id="cfg-' + escapeHtml(k) + '" data-cfgkey="' + escapeHtml(k) + '"' + (checked ? ' checked' : '') + '>' +
         '<input type="hidden" data-cfgkey="' + escapeHtml(k) + '" data-boolhidden="' + escapeHtml(k) + '" value="' + (checked ? '1' : '0') + '"></div>';
     }
-    return '<div class="field"><label for="cfg-' + escapeHtml(k) + '">' + escapeHtml(label) + '</label>' +
+    return '<div class="field"><label for="cfg-' + escapeHtml(k) + '">' + escapeHtml(label) + helpIcon + '</label>' +
       '<input type="text" id="cfg-' + escapeHtml(k) + '" data-cfgkey="' + escapeHtml(k) + '" value="' + escapeHtml(String(raw)) + '"></div>';
   }).join('');
+  // fill the help tooltips for the freshly generated config fields
+  grid.querySelectorAll('[data-help]').forEach((el) => {
+    const key = el.getAttribute('data-help');
+    const tip = t(key);
+    if (tip && tip !== key) el.setAttribute('data-tip', tip);
+  });
   // bind checkbox change -> set hidden value (so configPayloadFromGrid reads it)
   grid.querySelectorAll('input[type=checkbox][data-cfgkey]').forEach((cb) => {
     cb.addEventListener('change', () => {
@@ -1183,7 +1191,20 @@ function applyTranslations() {
     // elements set dynamically must never be overwritten by translations
     if (el.id === 'graph-body' || el.id === 'modal-title' || el.id === 'modal-body') return;
     const key = el.getAttribute('data-i18n');
-    if (key && t(key)) el.textContent = t(key);
+    if (key && t(key)) {
+      // Preserve any .help-icon child (it carries the field description) -
+      // setting textContent directly would wipe it out.
+      const helpIcons = Array.from(el.querySelectorAll('.help-icon'))
+        .map((h) => ({ help: h.getAttribute('data-help'), tip: h.getAttribute('data-tip'), cls: h.className, ch: h.textContent }));
+      el.textContent = t(key);
+      helpIcons.forEach((hi) => {
+        const span = document.createElement('span');
+        span.className = hi.cls; span.setAttribute('data-help', hi.help);
+        if (hi.tip) span.setAttribute('data-tip', hi.tip);
+        span.textContent = hi.ch;
+        el.appendChild(span);
+      });
+    }
   });
   document.querySelectorAll('[data-ph]').forEach((el) => {
     const key = el.getAttribute('data-ph');
@@ -1191,6 +1212,13 @@ function applyTranslations() {
   });
   document.querySelectorAll('.eep-info').forEach((el) => {
     el.title = t('eep_viewer');
+  });
+  // help icons: data-help holds a translation key; the tooltip (data-tip) is
+  // filled with the translated description.
+  document.querySelectorAll('[data-help]').forEach((el) => {
+    const key = el.getAttribute('data-help');
+    const tip = t(key);
+    if (tip && tip !== key) el.setAttribute('data-tip', tip);
   });
 }
 $('lang-select')?.addEventListener('change', (e) => setLang(e.target.value));
@@ -1207,6 +1235,8 @@ document.querySelectorAll('.card.collapsible > .card-header').forEach((h) => {
     const sel = $('lang-select');
     if (sel) sel.value = currentLang;
   } catch (e) { /* ignore */ }
+  // translate immediately so field help icons get their tooltips on first paint
+  applyTranslations();
 })();
 
 /* ---------------- theme ---------------- */
