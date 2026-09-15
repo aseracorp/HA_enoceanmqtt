@@ -32,7 +32,7 @@ window.LANG_de = {
     st_never: 'Nie gesehen',    actor: 'Aktor',
     sensor: 'Sensor',    bidirectional: 'Bidirektional',
     no_actors: 'Keine Aktoren konfiguriert.',    no_sensors: 'Keine Sensoren konfiguriert.',
-    no_devices: 'Noch keine Geräte konfiguriert.',    connected: 'verbunden',
+    no_devices: 'Noch keine Geräte konfiguriert.',    connected: 'verbunden',    disconnected: 'nicht verbunden',
     offline: 'offline',    base_id: 'Basis-ID',
     eep_placeholder: 'A5-20-01, Temperatur, Schalter…',    device_count: 'Geräte',
     eep_viewer: 'Im EEP-Viewer öffnen',    send_label: 'Senden',

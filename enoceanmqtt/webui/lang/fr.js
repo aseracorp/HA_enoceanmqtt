@@ -32,7 +32,7 @@ window.LANG_fr = {
     st_never: 'Jamais vu',    actor: 'Actionneur',
     sensor: 'Capteur',    bidirectional: 'Bidirectionnel',
     no_actors: 'Aucun actionneur configuré.',    no_sensors: 'Aucun capteur configuré.',
-    no_devices: 'Aucun appareil configuré.',    connected: 'connecté',
+    no_devices: 'Aucun appareil configuré.',    connected: 'connecté',    disconnected: 'déconnecté',
     offline: 'hors ligne',    base_id: 'ID de base',
     eep_placeholder: 'A5-20-01, température, interrupteur…',    device_count: 'appareils',
     eep_viewer: 'Ouvrir dans la visionneuse EEP',    send_label: 'envoyer',
