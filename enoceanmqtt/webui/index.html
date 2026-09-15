@@ -156,31 +156,31 @@
   <div class="modal">
     <h3 data-i18n="edit_device">Edit device</h3>
     <div class="field">
-      <label for="e-name" data-i18n="name">Name</label>
+      <label for="e-name" data-i18n="name">Name<span class="help-icon" data-help="help_name">ⓘ</span></label>
       <input type="text" id="e-name" placeholder="device name">
     </div>
     <div class="field" id="e-addr-field">
-      <label for="e-address" data-i18n="address">Address</label>
+      <label for="e-address" data-i18n="address">Address<span class="help-icon" data-help="help_address">ⓘ</span></label>
       <input type="text" id="e-address" placeholder="0x003DD63B">
     </div>
     <div class="field" id="e-sender-field" hidden>
-      <label for="e-sender" data-i18n="sender_id">Sender ID</label>
+      <label for="e-sender" data-i18n="sender_id">Sender ID<span class="help-icon" data-help="help_sender">ⓘ</span></label>
       <select id="e-sender"></select>
     </div>
     <div class="field" id="e-dir-field" hidden>
-      <label for="e-direction">Direction</label>
+      <label for="e-direction">Direction<span class="help-icon" data-help="help_direction">ⓘ</span></label>
       <input type="text" id="e-direction" placeholder="1">
     </div>
     <div class="field" id="e-answer-field" hidden>
-      <label for="e-answer">Answer</label>
+      <label for="e-answer">Answer<span class="help-icon" data-help="help_answer">ⓘ</span></label>
       <input type="text" id="e-answer" placeholder="1">
     </div>
     <div class="field" id="e-default-field" hidden>
-      <label for="e-default_data">Default data</label>
+      <label for="e-default_data">Default data<span class="help-icon" data-help="help_default_data">ⓘ</span></label>
       <input type="text" id="e-default_data" placeholder="0x32790008">
     </div>
     <div class="field">
-      <label for="e-eep-search" data-i18n="eep_label">EEP (Equipment Profile)</label>
+      <label for="e-eep-search" data-i18n="eep_label">EEP (Equipment Profile)<span class="help-icon" data-help="help_eep">ⓘ</span></label>
       <div class="eep-combo">
         <input type="text" id="e-eep-search" data-ph="eep_placeholder" placeholder="A5-20-01, temperature, switch…" autocomplete="off">
         <span class="eep-info" id="e-eep-info" title="Open in EEP viewer" hidden>ⓘ</span>
@@ -220,9 +220,9 @@
       <p class="success-text" data-i18n="sensor_detected">✔ Sensor detected - confirm the details below.</p>
     </div>
     <div class="add-form add-stack">
-      <div class="field"><label data-i18n="name">Name</label><input type="text" id="as-name" placeholder="sensor name" data-ph="sensor_name" required></div>
-      <div class="field"><label data-i18n="address">Address</label><input type="text" id="as-address" placeholder="0x003DD63B"></div>
-      <div class="field"><label data-i18n="eep_label">EEP</label>
+      <div class="field"><label data-i18n="name">Name<span class="help-icon" data-help="help_name">ⓘ</span></label><input type="text" id="as-name" placeholder="sensor name" data-ph="sensor_name" required></div>
+      <div class="field"><label data-i18n="address">Address<span class="help-icon" data-help="help_address">ⓘ</span></label><input type="text" id="as-address" placeholder="0x003DD63B"></div>
+      <div class="field"><label data-i18n="eep_label">EEP<span class="help-icon" data-help="help_eep">ⓘ</span></label>
         <div class="eep-combo"><input type="text" id="as-eep" data-ph="eep_placeholder" placeholder="A5-20-01, temperature…" autocomplete="off"><span class="eep-info" id="as-eep-info" hidden>ⓘ</span><div class="eep-dropdown" id="as-eep-drop" hidden><ul id="as-eep-list"></ul></div></div>
       </div>
     </div>
@@ -241,9 +241,9 @@
       <p data-i18n="actor_hint">Enter a name, pick the sender ID to transmit from and the EEP, then send the teach-in telegram so the device learns this gateway.</p>
     </div>
     <div class="add-form add-stack">
-      <div class="field"><label data-i18n="name">Name</label><input type="text" id="aa-name" placeholder="actor name" data-ph="actor_name" required></div>
-      <div class="field"><label data-i18n="sender_id">Sender ID</label><select id="aa-sender"></select></div>
-      <div class="field"><label data-i18n="eep_label">EEP</label>
+      <div class="field"><label data-i18n="name">Name<span class="help-icon" data-help="help_name">ⓘ</span></label><input type="text" id="aa-name" placeholder="actor name" data-ph="actor_name" required></div>
+      <div class="field"><label data-i18n="sender_id">Sender ID<span class="help-icon" data-help="help_sender">ⓘ</span></label><select id="aa-sender"></select></div>
+      <div class="field"><label data-i18n="eep_label">EEP<span class="help-icon" data-help="help_eep">ⓘ</span></label>
         <div class="eep-combo"><input type="text" id="aa-eep" data-ph="eep_placeholder" placeholder="F6-02-01, switch…" autocomplete="off"><span class="eep-info" id="aa-eep-info" hidden>ⓘ</span><div class="eep-dropdown" id="aa-eep-drop" hidden><ul id="aa-eep-list"></ul></div></div>
       </div>
     </div>
@@ -263,10 +263,10 @@
       <p data-i18n="bidir_hint">Start teach-in, then trigger the device. On receipt we answer with a teach-in telegram from the next free sender ID and pre-fill the details below.</p>
     </div>
     <div class="add-form add-stack">
-      <div class="field"><label data-i18n="name">Name</label><input type="text" id="ab-name" placeholder="device name" data-ph="device_name" required></div>
-      <div class="field"><label data-i18n="address">Address</label><input type="text" id="ab-address" placeholder="0x003DD63B"></div>
-      <div class="field"><label data-i18n="sender_id">Answer Sender ID</label><select id="ab-sender"></select></div>
-      <div class="field"><label data-i18n="eep_label">EEP</label>
+      <div class="field"><label data-i18n="name">Name<span class="help-icon" data-help="help_name">ⓘ</span></label><input type="text" id="ab-name" placeholder="device name" data-ph="device_name" required></div>
+      <div class="field"><label data-i18n="address">Address<span class="help-icon" data-help="help_address">ⓘ</span></label><input type="text" id="ab-address" placeholder="0x003DD63B"></div>
+      <div class="field"><label data-i18n="sender_id">Answer Sender ID<span class="help-icon" data-help="help_sender">ⓘ</span></label><select id="ab-sender"></select></div>
+      <div class="field"><label data-i18n="eep_label">EEP<span class="help-icon" data-help="help_eep">ⓘ</span></label>
         <div class="eep-combo"><input type="text" id="ab-eep" data-ph="eep_placeholder" placeholder="A5-20-01…" autocomplete="off"><span class="eep-info" id="ab-eep-info" hidden>ⓘ</span><div class="eep-dropdown" id="ab-eep-drop" hidden><ul id="ab-eep-list"></ul></div></div>
       </div>
     </div>
