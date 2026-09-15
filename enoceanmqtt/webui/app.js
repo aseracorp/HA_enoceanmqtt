@@ -70,9 +70,10 @@ function renderGateway() {
 
   if (gw) {
     gwEl.className = 'pill ' + (gw.connected ? 'ok' : 'bad');
-    const gwAddr = (state.config && state.config.enocean_port) ? state.config.enocean_port : (gw.base_id || '—');
-    gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + escapeHtml(String(gwAddr)) +
-      (gw.base_id ? ' (' + escapeHtml(String(gw.base_id)) + ')' : '');
+    // show the gateway base ID only - stable and unambiguous. The port is
+    // available in the hover tooltip.
+    const gwAddr = gw.base_id || '—';
+    gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + escapeHtml(String(gwAddr));
     mqttEl.className = 'pill ' + (gw.mqtt ? 'ok' : 'bad');
     const mqttAddr = (state.config && state.config.mqtt_host) ? state.config.mqtt_host + (state.config.mqtt_port ? ':' + state.config.mqtt_port : '') : '—';
     mqttEl.innerHTML = '<span class="dot"></span>MQTT ' + escapeHtml(String(mqttAddr));
