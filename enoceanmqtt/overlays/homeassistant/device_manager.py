@@ -6,7 +6,7 @@ import logging
 import os
 import shutil
 import time
-from tinydb import TinyDB, Query, JSONStorage
+from tinydb import TinyDB, Query
 
 class DeviceManager():
     '''Device Manager class, providing database methods'''
@@ -67,32 +67,10 @@ class DeviceManager():
         dev = Query()
         return self._db.contains(dev.address == address)
 
-    def db_search_device_by_name(self, name):
-        '''Search device in the database using the device name'''
-        dev = Query()
-        return self._db.contains(dev.name == name)
-
-    def db_search_device_by_field(self, field_name, field):
-        '''Search device in the database using a device field'''
-        dev = Query()
-        if type(field) is list:
-            return self._db.contains(dev[field_name].all([field]))
-        return self._db.contains(dev[field_name] == field)
-
-    def db_get_device_by_address(self, address):
-        '''Get device from the database using the device address'''
-        dev = Query()
-        return self._db.get(dev.address == address)
-
-    def db_get_device_by_name(self, name):
-        '''Get device from the database using the device name'''
-        dev = Query()
-        return self._db.get(dev.name == name)
-
     def db_get_device_by_field(self, field_name, field):
         '''Get device from the database using a device field'''
         dev = Query()
-        if type(field) is list:
+        if isinstance(field, list):
             return self._db.get(dev[field_name].all([field]))
         return self._db.get(dev[field_name] == field)
 
@@ -123,18 +101,6 @@ class DeviceManager():
             return True
         return False
 
-    def db_update_device(self, sensor, uid, attr_name = None, attr = None):
-        '''Update device on the database'''
-        if self.db_search_device_by_field('uid', sensor['uid']):
-            sensor_db = {}
-            sensor_db['name'] = sensor['name']
-            if attr is not None:
-                sensor_db[attr_name] = attr
-            dev = Query()
-            self._db.update(sensor_db, dev.uid == uid)
-            return True
-        return False
-
     def db_upsert_device(self, sensor, uid, attr_name = None, attr = None):
         '''Update or add device to the database'''
         sensor_db = {}
@@ -155,29 +121,20 @@ class DeviceManager():
         dev = Query()
         self._db.upsert(sensor_db, dev.uid == uid)
 
-    def db_remove_device_by_address(self, address):
-        '''Remove device from the database using device address'''
-        if self.db_search_device_by_address(address):
-            dev = Query()
-            self._db.remove(dev.address == address)
-            return True
-        return False
-
     def db_remove_device_by_field(self, field_name, field):
         '''Remove device from the database using a device field'''
         sensor = self.db_get_device_by_field(field_name, field)
         if sensor:
             dev = Query()
             # Remove the sensor from the database
-            if type(field) is list:
+            if isinstance(field, list):
                 ids = self._db.remove(dev[field_name].all([field]))
             else:
                 ids = self._db.remove(dev[field_name] == field)
 
             if ids:
-                logging.debug("Delete request for sensor %s (UID %s): DONE",sensor['name'],sensor['uid'])
+                logging.debug("Delete request for sensor %s (UID %s): DONE", sensor['name'], sensor['uid'])
                 return True
-            else:
-                logging.debug("Delete request for sensor %s (UID %s): ERROR",sensor['name'],sensor['uid'])
-                return False
+            logging.debug("Delete request for sensor %s (UID %s): ERROR", sensor['name'], sensor['uid'])
+            return False
         return False
