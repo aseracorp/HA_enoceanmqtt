@@ -25,11 +25,7 @@ def parse_args():
     parser.add_argument('--debug', help='enable console debugging', action='store_true')
     parser.add_argument('--logfile', help='set log file location')
     parser.add_argument('config', help='specify config file[s]', nargs='*')
-    # parser.add_argument('--version', help='show application version',
-    #     action='version', version='%(prog)s ' + VERSION)
-    args = vars(parser.parse_args())
-    # logging.info('Read arguments: ' + str(args))
-    return args
+    return vars(parser.parse_args())
 
 
 def load_config_file(config_files):
@@ -100,8 +96,6 @@ def setup_logging(log_filename='', log_level=logging.INFO):
 
 def main():
     """entry point if called as an executable"""
-    # logging.getLogger().setLevel(logging.DEBUG)
-    # Parse command line arguments
     conf.update(parse_args())
 
     # setup logger

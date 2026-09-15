@@ -485,15 +485,6 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 .modal-success { background: rgba(84,214,44,0.12); border: 1px solid rgba(84,214,44,0.4); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px; }
 .success-text { color: var(--success); font-weight: 600; margin: 0; }
 
-/* ---------------- config table ---------------- */
-.config-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.config-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
-.config-table td.k { color: var(--text-secondary); width: 35%; }
-.config-table td.mono { font-family: 'JetBrains Mono', monospace; }
-.config-4col { table-layout: fixed; }
-.config-4col td:nth-child(odd) { color: var(--text-secondary); width: 17%; }
-.config-4col td:nth-child(even) { width: 33%; }
-
 /* ---------------- config editor ---------------- */
 .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .config-two-col { grid-template-columns: repeat(2, 1fr); }

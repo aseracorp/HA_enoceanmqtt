@@ -21,6 +21,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, unquote
 
+from enoceanmqtt.communicator import parse_eep, parse_int
+
 
 # -----------------------------------------------------------------------------
 # static assets (kept as python strings so the package stays self-contained)
@@ -133,20 +135,14 @@ class WebInterface:
             ok, message = self.communicator._send_teachin(name)
             return {'ok': ok, 'message': message}
         sender = payload.get('sender')
-        eep = str(payload.get('eep', '')).strip()
-        parts = [p for p in eep.replace('0x', '').split('-') if p] if eep else []
-        if len(parts) != 3:
+        eep_parts = parse_eep(str(payload.get('eep', '')).strip())
+        if eep_parts is None:
             return {'ok': False, 'message': 'Invalid EEP, expected e.g. A5-02-05'}
-        try:
-            rorg = int(parts[0], 16)
-            func = int(parts[1], 16)
-            type_ = int(parts[2], 16)
-        except ValueError:
-            return {'ok': False, 'message': 'Invalid EEP'}
-        sender_int = self.communicator._parse_int(sender)
+        rorg, func, type_ = eep_parts
+        sender_int = parse_int(sender)
         if sender_int is None:
             return {'ok': False, 'message': 'Invalid sender address'}
-        address = self.communicator._parse_int(payload.get('address'))
+        address = parse_int(payload.get('address'))
         ok, message = self.communicator._send_teachin_payload(
             name=payload.get('name') or '',
             sender_hex=sender_int, rorg=rorg, func=func, type_=type_,
@@ -268,9 +264,7 @@ class WebInterface:
                     result = web.stop_capture()
                     return self._send(200, result)
                 if self.command == 'GET' and path == '/api/teachin/captured':
-                    result = web.get_captured()
-                    code = 200 if result.get('ok') else 200
-                    return self._send(code, result)
+                    return self._send(200, web.get_captured())
                 if self.command == 'DELETE' and path.startswith('/api/sensors/'):
                     name = unquote(path[len('/api/sensors/'):])
                     result = web.remove_sensor(name)

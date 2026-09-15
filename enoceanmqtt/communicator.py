@@ -5,8 +5,8 @@ import logging
 import queue
 import numbers
 import json
-import platform
 import os
+import re
 import datetime
 
 from enocean.communicators.serialcommunicator import SerialCommunicator
@@ -20,10 +20,12 @@ from enoceanmqtt.sensor_store import SensorStore
 from enoceanmqtt.eep_registry import get_registry
 
 
+#: accepted EnOcean address formats: int, '0x...', 'FF:80:00:00', 'A5-02-05'
+_HEX_STRIP_RE = re.compile(r'[^0-9a-fA-F]')
 
 
-def _parse_int(value):
-    """parse an integer that may be given as int, '0x...', 'FF:80:00:00' or plain hex"""
+def parse_int(value):
+    """parse an int that may be given as int, '0x...', 'FF:80:00:00' or plain hex"""
     if isinstance(value, int):
         return value
     s = str(value).strip()
@@ -31,12 +33,42 @@ def _parse_int(value):
         return None
     s = s.replace('0x', '').replace('0X', '')
     if ':' in s or '-' in s or ' ' in s:
-        s = ''.join(ch for ch in s if ch in '0123456789abcdefABCDEF')
+        s = _HEX_STRIP_RE.sub('', s)
     try:
         return int(s, 16) if s else None
     except ValueError:
         return None
 
+
+def parse_eep(eep):
+    """parse an EEP string like 'A5-02-05' / '0xA5-0x02-0x05' into ints.
+
+    Returns (rorg, func, type) or None when the string is not a valid 3-part EEP.
+    """
+    if not eep:
+        return None
+    parts = [p for p in eep.replace('0x', '').split('-') if p]
+    if len(parts) != 3:
+        return None
+    try:
+        return tuple(int(p, 16) for p in parts)
+    except ValueError:
+        return None
+
+
+def eep_dash(rorg, func=None, type_=None):
+    """format an EEP as 'A5-02-05' (uppercase), or 'A5' when func/type are unknown"""
+    return f'{rorg:02X}-{func:02X}-{type_:02X}' if func is not None and type_ is not None \
+        else f'{rorg:02X}'
+
+
+def sender_bytes(sender_int):
+    """split a 32-bit int into the big-endian 4-byte list the enocean library uses"""
+    return [(sender_int >> i * 8) & 0xff for i in reversed(range(4))]
+
+
+#: legacy alias kept for backwards compatibility
+_parse_int = parse_int
 
 
 class Communicator:
@@ -44,23 +76,18 @@ class Communicator:
     mqtt = None
     enocean = None
 
-    @staticmethod
-    def _parse_int(value):
-        """parse an int that may be given as int, '0x...', 'FF:80:00:00' or plain hex"""
-        return _parse_int(value)
-
-
     #: a sensor is considered "online" if it has been seen within this window
     ONLINE_TIMEOUT_SECONDS = 10 * 60
+    #: MQTT CONNACK return-code descriptions (indexed by the code)
+    CONNECTION_RETURN_CODE = {
 
-    CONNECTION_RETURN_CODE = [
-        "connection successful",
-        "incorrect protocol version",
-        "invalid client identifier",
-        "server unavailable",
-        "bad username or password",
-        "not authorised",
-    ]
+    0: "connection successful",
+        1: "incorrect protocol version",
+        2: "invalid client identifier",
+        3: "server unavailable",
+        4: "bad username or password",
+        5: "not authorised",
+    }
 
     def __init__(self, config, sensors):
         self.conf = config
@@ -100,7 +127,6 @@ class Communicator:
         self.mqtt.on_connect = self._on_connect
         self.mqtt.on_disconnect = self._on_disconnect
         self.mqtt.on_message = self._on_mqtt_message
-        self.mqtt.on_publish = self._on_mqtt_publish
         if 'mqtt_user' in self.conf:
             logging.info("Authenticating: %s", self.conf['mqtt_user'])
             self.mqtt.username_pw_set(self.conf['mqtt_user'], self.conf['mqtt_pwd'])
@@ -179,18 +205,16 @@ class Communicator:
             if i > 0:
                 current += "/"
             current += part
-            if current in self._sensors_by_name:
-                # Check if it matches name + "/" as in original code
-                if topic.startswith(current + "/"):
-                    matched.extend(self._sensors_by_name[current])
-        # Sort matched sensors by their original order to maintain behavior
+            if current in self._sensors_by_name and topic.startswith(current + "/"):
+                matched.extend(self._sensors_by_name[current])
+        # keep the configured sensor order
         if len(matched) > 1:
             matched.sort(key=lambda s: self._sensor_to_index.get(id(s), 0))
         return matched
 
-    #=============================================================================================
+    # ------------------------------------------------------------------
     # SENSOR STORE / WEB-ADDED SENSORS
-    #=============================================================================================
+    # ------------------------------------------------------------------
     def _resolve_sensor_store_path(self):
         """determine where sensors added through the web UI are persisted"""
         path = self.conf.get('webui_sensor_store')
@@ -265,22 +289,16 @@ class Communicator:
 
             if not self._is_valid_name(name):
                 return {'ok': False, 'error': 'A sensor name is required (letters, digits, _ - / only)'}
-            pa = _parse_int(address)
-            if pa is None:
+            address = parse_int(address)
+            if address is None:
                 return {'ok': False, 'error': 'Invalid sensor address'}
-            address = pa
             if not (0 <= address <= 0xFFFFFFFF):
                 return {'ok': False, 'error': 'Sensor address out of range'}
 
-            parts = [p for p in eep.replace('0x', '').split('-') if p] if eep else []
-            if len(parts) != 3:
+            eep_parts = parse_eep(eep)
+            if eep_parts is None:
                 return {'ok': False, 'error': 'Invalid EEP, expected e.g. A5-02-05'}
-            try:
-                rorg = int(parts[0], 16)
-                func = int(parts[1], 16)
-                type_ = int(parts[2], 16)
-            except ValueError:
-                return {'ok': False, 'error': 'Invalid EEP'}
+            rorg, func, type_ = eep_parts
             if not self._is_valid_eep(rorg, func, type_):
                 return {'ok': False, 'error': 'EEP is not in the known profile catalog'}
 
@@ -292,7 +310,7 @@ class Communicator:
             stored = {'name': name, 'address': address,
                       'rorg': rorg, 'func': func, 'type': type_}
             if sender:
-                sp = _parse_int(sender)
+                sp = parse_int(sender)
                 if sp is None:
                     return {'ok': False, 'error': 'Invalid sender address'}
                 stored['sender'] = sp
@@ -348,10 +366,9 @@ class Communicator:
         # optional address change
         address = payload.get('address')
         if address is not None:
-            pa = _parse_int(address)
-            if pa is None:
+            address = parse_int(address)
+            if address is None:
                 return {'ok': False, 'error': 'Invalid sensor address'}
-            address = pa
             if not (0 <= address <= 0xFFFFFFFF):
                 return {'ok': False, 'error': 'Sensor address out of range'}
             changes['address'] = address
@@ -359,16 +376,10 @@ class Communicator:
         # optional EEP change
         eep = payload.get('eep')
         if eep is not None:
-            eep = str(eep).strip()
-            parts = [p for p in eep.replace('0x', '').split('-') if p] if eep else []
-            if len(parts) != 3:
+            eep_parts = parse_eep(str(eep).strip())
+            if eep_parts is None:
                 return {'ok': False, 'error': 'Invalid EEP, expected e.g. A5-08-01'}
-            try:
-                changes['rorg'] = int(parts[0], 16)
-                changes['func'] = int(parts[1], 16)
-                changes['type'] = int(parts[2], 16)
-            except ValueError:
-                return {'ok': False, 'error': 'Invalid EEP'}
+            changes['rorg'], changes['func'], changes['type'] = eep_parts
             if not self._is_valid_eep(changes['rorg'], changes['func'], changes['type']):
                 return {'ok': False, 'error': 'EEP is not in the known profile catalog'}
 
@@ -488,14 +499,12 @@ class Communicator:
 
     @staticmethod
     def _is_valid_name(name):
-        """Valid device names contain no spaces or special characters, with
-        the exception of '_', '-' and '/'. '/' is explicitly allowed (it is
-        used to group devices and becomes '_' in Home Assistant)."""
-        import re as _re
+        """true for names containing only letters, digits, '_', '-' and '/'.
+
+        '/' groups devices and becomes '_' in the Home Assistant device name.
+        """
         n = str(name or '').strip()
-        if not n:
-            return False
-        return _re.fullmatch(r'[A-Za-z0-9_\-\/]+', n) is not None
+        return bool(n) and re.fullmatch(r'[A-Za-z0-9_\-\/]+', n) is not None
 
     def _is_valid_eep(self, rorg, func, type_):
         """True when the (rorg, func, type) triplet is a known EEP profile.
@@ -524,7 +533,7 @@ class Communicator:
         return display_name
 
     def describe_sensor(self, sensor):
-        """build a JSON-friendly status description of a sensor"""
+        """build a JSON-friendly status description of a device"""
         address = sensor.get('address')
         last_seen = self._last_seen.get(address)
         status = 'never'
@@ -543,8 +552,7 @@ class Communicator:
         smartack = False
         profile = None
         if rorg is not None:
-            eep = f'{rorg:02X}-{func:02X}-{type_:02X}' if func is not None and type_ is not None \
-                  else f'{rorg:02X}'
+            eep = eep_dash(rorg, func, type_)
             profile = self._eep_registry.get(rorg, func, type_)
             if profile:
                 eep_name = profile['name']
@@ -643,9 +651,9 @@ class Communicator:
         # base+1 .. base+127 (the base ID itself is not usable as a sender)
         return [base_int + i for i in range(1, 128)]
 
-    #=============================================================================================
+    # ------------------------------------------------------------------
     # UNIVERSAL TEACH-IN (UTE)
-    #=============================================================================================
+    # ------------------------------------------------------------------
     def set_learn_mode(self, enabled):
         """enable or disable UTE teach-in mode (one-shot)"""
         self.learn_mode = bool(enabled)
@@ -712,6 +720,7 @@ class Communicator:
                 if default:
                     stored['func'] = default['func']
                     stored['type'] = default['type']
+        eep = eep_dash(rorg, stored.get('func'), stored.get('type'))
         if self.learn_capture:
             # capture-only: expose the detected device for the web dialog to
             # pre-fill, but do NOT add it to the configuration yet (the user
@@ -719,8 +728,7 @@ class Communicator:
             self.captured_device = {
                 'name': name, 'address': address, 'rorg': rorg,
                 'func': stored.get('func'), 'type': stored.get('type'),
-                'eep': '%02X-%02X-%02X' % (rorg, stored['func'], stored['type'])
-                       if stored.get('func') is not None else '%02X' % rorg,
+                'eep': eep,
             }
             self.learn_capture = False
             self.learn_mode = False
@@ -730,9 +738,7 @@ class Communicator:
         if new_sensor is not None:
             self._on_sensors_changed(new_sensor)
         logging.info("Teach-in: captured device %s (RORG %s, EEP %s)",
-                     address_hex, hex(rorg),
-                     stored.get('func') is not None and
-                     '%02X-%02X-%02X' % (rorg, stored['func'], stored['type']) or 'unknown')
+                     address_hex, hex(rorg), eep)
 
         # teach-in is one-shot: disable it after a device was captured
         self.learn_mode = False
@@ -783,7 +789,7 @@ class Communicator:
         sender = None
         nxt = self.next_free_sender()
         if nxt is not None:
-            sender = [(nxt >> i * 8) & 0xff for i in reversed(range(4))]
+            sender = sender_bytes(nxt)
         else:
             sender = self.enocean_sender
         if destination is None:
@@ -863,6 +869,9 @@ class Communicator:
             logging.debug("UTE telegram from %s ignored (teach-in disabled)", address_hex)
             return
 
+        # UTE responses are handled by this class, keep the library from auto-answering
+        self.enocean.teach_in = False
+
         existing = self._sensors_by_address.get(address)
         rorg = packet.rorg_of_eep
         func = packet.rorg_func
@@ -877,8 +886,8 @@ class Communicator:
                 return
             profile = self._eep_registry.get(rorg, func, type_)
             if profile is None:
-                logging.warning("UTE telegram from %s carries unsupported EEP "
-                                "%02X-%02X-%02X", address_hex, rorg, func, type_)
+                logging.warning("UTE telegram from %s carries unsupported EEP %s",
+                                address_hex, eep_dash(rorg, func, type_))
             # generate a stable, unique name from the device address
             name = 'ute_' + format(address, '08x')
             self._store.add({'name': name, 'address': address,
@@ -904,21 +913,19 @@ class Communicator:
         # teach-in is one-shot: disable it after a device was received
         self.learn_mode = False
 
-    #=============================================================================================
+    # ------------------------------------------------------------------
     # MQTT CLIENT
-    #=============================================================================================
+    # ------------------------------------------------------------------
     def _on_connect(self, mqtt_client, _userdata, _flags, return_code):
         '''callback for when the client receives a CONNACK response from the MQTT server.'''
         if return_code == 0:
             logging.info("Succesfully connected to MQTT broker.")
             # listen to enocean send requests
             for cur_sensor in self.sensors:
-                # logging.debug("MQTT subscribing: %s", cur_sensor['name']+'/req/#')
-                mqtt_client.subscribe(cur_sensor['name']+'/req/#')
+                mqtt_client.subscribe(cur_sensor['name'] + '/req/#')
         else:
             logging.error("Error connecting to MQTT broker: %s",
-                          self.CONNECTION_RETURN_CODE[return_code]
-                          if return_code < len(self.CONNECTION_RETURN_CODE) else return_code)
+                          self.CONNECTION_RETURN_CODE.get(return_code, return_code))
 
     def _on_disconnect(self, _mqtt_client, _userdata, return_code):
         '''callback for when the client disconnects from the MQTT server.'''
@@ -926,8 +933,7 @@ class Communicator:
             logging.warning("Successfully disconnected from MQTT broker")
         else:
             logging.warning("Unexpectedly disconnected from MQTT broker: %s",
-                            self.CONNECTION_RETURN_CODE[return_code]
-                            if return_code < len(self.CONNECTION_RETURN_CODE) else return_code)
+                            self.CONNECTION_RETURN_CODE.get(return_code, return_code))
 
     def _on_mqtt_message(self, _mqtt_client, _userdata, msg):
         '''the callback for when a PUBLISH message is received from the MQTT server.'''
@@ -935,10 +941,10 @@ class Communicator:
         found_topic = False
         logging.debug("Got MQTT message: %s", msg.topic)
 
-        # Get how to handle MQTT message
+        # try to decode JSON payloads; plain byte payloads are handled as-is
         try:
             mqtt_payload = json.loads(msg.payload)
-        except:
+        except (ValueError, TypeError, UnicodeDecodeError):
             mqtt_payload = msg.payload
 
         if isinstance(mqtt_payload, dict):
@@ -949,14 +955,9 @@ class Communicator:
         if not found_topic:
             logging.warning("Unexpected or erroneous MQTT message: %s: %s", msg.topic, msg.payload)
 
-    def _on_mqtt_publish(self, _mqtt_client, _userdata, _mid):
-        '''the callback for when a PUBLISH message is successfully sent to the MQTT server.'''
-        #logging.debug("Published MQTT message "+str(mid))
-
-
-    #=============================================================================================
+    # ------------------------------------------------------------------
     # MQTT TO ENOCEAN
-    #=============================================================================================
+    # ------------------------------------------------------------------
     def _mqtt_message_normal(self, msg):
         '''Handle received PUBLISH message from the MQTT server as a normal payload.'''
         found_topic = False
@@ -1056,7 +1057,7 @@ class Communicator:
                 cur_sensor['data'].update(mqtt_json_payload)
 
                 # Finally, send the message
-                if send == True:
+                if send:
                     self._send_message(cur_sensor, clear)
 
             # The targeted sensor has been found and the MQTT message has been handled
@@ -1067,19 +1068,16 @@ class Communicator:
     def _send_message(self, sensor, clear):
         '''Send received MQTT message (Property-based) to EnOcean.'''
         logging.debug("Trigger message to: %s", sensor['name'])
-        destination = [(sensor['address'] >> i*8) &
-                       0xff for i in reversed(range(4))]
+        destination = sender_bytes(sensor['address'])
 
         # Retrieve command from MQTT message and pass it to _send_packet()
         command = None
         command_shortcut = sensor.get('command')
 
         if command_shortcut:
-            # Check MQTT message sets the command field
-            #if 'data' not in sensor or command_shortcut not in sensor['data'] or sensor['data'][command_shortcut] is None:
+            # the MQTT message must have set the command field
             if not sensor.get('data') or not sensor.get('data').get(command_shortcut):
-                logging.warning(
-                    'Command field %s must be set in MQTT message!', command_shortcut)
+                logging.warning('Command field %s must be set in MQTT message!', command_shortcut)
                 return
             # Retrieve command id from MQTT message
             command = sensor['data'][command_shortcut]
@@ -1089,7 +1087,7 @@ class Communicator:
         self._send_packet(sensor, destination, command)
 
         # Clear sent data, if requested by the sent message
-        if clear == True:
+        if clear:
             logging.debug('Clearing data buffer.')
             del sensor['data']
 
@@ -1101,9 +1099,9 @@ class Communicator:
         if 'raw_data' in sensor:
             del sensor['raw_data']
 
-    #=============================================================================================
+    # ------------------------------------------------------------------
     # ENOCEAN TO MQTT
-    #=============================================================================================
+    # ------------------------------------------------------------------
     def _get_command_id(self, packet, sensor):
         '''interpret packet to retrieve command id from VLD packets'''
         # Retrieve the first defined EEP profile matching sensor RORG-FUNC-TYPE
@@ -1127,20 +1125,15 @@ class Communicator:
 
     def _publish_mqtt(self, sensor, mqtt_json):
         '''Publish decoded packet content to MQTT'''
-        # Publish using JSON format ?
         mqtt_publish_json = str(sensor.get('publish_json')) in ("True", "true", "1")
-
-        # Publish RSSI ?
         mqtt_publish_rssi = str(sensor.get('publish_rssi')) in ("True", "true", "1")
-
-        # Retain the to-be-published message ?
         retain = str(sensor.get('persistent')) in ("True", "true", "1")
 
-        # Is grouping enabled on this sensor
+        # optional grouping: split "channel" on '/' -> publish to channel topics
         channel_id = sensor.get('channel')
         channel_id = channel_id.split('/') if channel_id not in (None, '') else []
 
-        # Handling Auxiliary data RSSI
+        # Auxiliary data RSSI
         aux_data = {}
         if mqtt_publish_rssi:
             if mqtt_publish_json:
@@ -1153,9 +1146,8 @@ class Communicator:
         if channel_id or not mqtt_publish_json or not mqtt_publish_rssi:
             del mqtt_json['_RSSI_']
 
-        # Handling Auxiliary data _DATE_
+        # Auxiliary data _DATE_
         if str(sensor.get('publish_date')) in ("True", "true", "1"):
-            # Publish _DATE_ both at device and group levels
             if channel_id:
                 if mqtt_publish_json:
                     aux_data.update({"_DATE_": mqtt_json['_DATE_']})
@@ -1193,21 +1185,14 @@ class Communicator:
     def _read_packet(self, packet, sensor):
         '''interpret packet, read properties and publish to MQTT'''
         mqtt_json = {}
-        
-        # Shall the packet be published to MQTT ?
-        if not packet.learn or str(sensor.get('log_learn')) in ("True", "true", "1"):
-            # Store RSSI
-            # Use underscore so that it is unique and doesn't
-            # match a potential future EnOcean EEP field.
-            mqtt_json['_RSSI_'] = packet.dBm
 
-            # Store receive date
-            # Use underscore so that it is unique and doesn't
-            # match a potential future EnOcean EEP field.
+        # learn telegrams are published only when log_learn is enabled
+        if not packet.learn or str(sensor.get('log_learn')) in ("True", "true", "1"):
+            # underscore names can never collide with a real EEP field
+            mqtt_json['_RSSI_'] = packet.dBm
             mqtt_json['_DATE_'] = packet.received.isoformat()
 
-            # Handling received data packet
-            found_property = self._handle_data_packet( packet, sensor, mqtt_json)
+            found_property = self._handle_data_packet(packet, sensor, mqtt_json)
             if not found_property:
                 logging.warning("message not interpretable: %s", sensor['name'])
             else:
@@ -1276,9 +1261,9 @@ class Communicator:
 
         return found_property
 
-    #=============================================================================================
+    # ------------------------------------------------------------------
     # LOW LEVEL FUNCTIONS
-    #=============================================================================================
+    # ------------------------------------------------------------------
     def _reply_packet(self, in_packet, sensor):
         '''send enocean message as a reply to an incoming message'''
         # prepare addresses
@@ -1287,9 +1272,9 @@ class Communicator:
         self._send_packet(sensor, destination, None, True,
                           in_packet.data if in_packet.learn else None)
 
-    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------
     # Bi-directional / smartACK support
-    # ------------------------------------------------------------------------
+    # ------------------------------------------------------------------
     def _needs_bidirectional_reply(self, packet, sensor):
         '''decide whether an incoming telegram expects a reply from us'''
         # explicit per-sensor configuration wins
@@ -1317,7 +1302,7 @@ class Communicator:
 
         # sender of the reply is our own base id
         if 'sender' in sensor:
-            sender = [(sensor['sender'] >> i * 8) & 0xff for i in reversed(range(4))]
+            sender = sender_bytes(sensor['sender'])
         else:
             sender = self.enocean_sender
 
@@ -1353,7 +1338,7 @@ class Communicator:
         if in_packet.rorg != RORG.VLD:
             return None
         if 'sender' in sensor:
-            sender = [(sensor['sender'] >> i * 8) & 0xff for i in reversed(range(4))]
+            sender = sender_bytes(sensor['sender'])
         else:
             sender = self.enocean_sender
 
@@ -1421,7 +1406,7 @@ class Communicator:
         # in sensor configuration using added 'sender' field.
         # So use specified sender address if any
         if 'sender' in sensor:
-            sender = [(sensor['sender'] >> i*8) & 0xff for i in reversed(range(4))]
+            sender = sender_bytes(sensor['sender'])
         else:
             sender = self.enocean_sender
 
@@ -1473,9 +1458,8 @@ class Communicator:
                     try:
                         # Default data is raw data
                         default_data = int(sensor['default_data'], 0)
-                        packet.data[1:5] = [(default_data >> i*8) &
-                                        0xff for i in reversed(range(4))]
-                    except:
+                        packet.data[1:5] = sender_bytes(default_data)
+                    except (ValueError, TypeError):
                         # Default data is property-based
                         logging.debug("sensor default data: %s", sensor['default_data'])
                         # Set packet data payload
@@ -1549,7 +1533,7 @@ class Communicator:
         # virtual sender (chosen in the add-actor popup) takes priority, else
         # the transceiver base id (matches how smartACK replies are sourced)
         if sender_hex:
-            sender = [(sender_hex >> i * 8) & 0xff for i in reversed(range(4))]
+            sender = sender_bytes(sender_hex)
         else:
             sender = self.enocean_sender
 
@@ -1567,7 +1551,7 @@ class Communicator:
         if not is_actor:
             return False, 'Teach-in telegram is only supported for actors / bidirectional devices'
 
-        destination = [(address >> i * 8) & 0xff for i in reversed(range(4))] if address is not None else None
+        destination = sender_bytes(address) if address is not None else None
 
         # 4BS and VLD have a real teach-in telegram (LRN bit / UTE request).
         # Other RORGs (F6/RPS rockers, BS1) have no teach-in - send a regular
@@ -1650,20 +1634,14 @@ class Communicator:
             logging.info("received: %s", packet)
 
         # teach-in: if learn mode is active and the device is unknown, capture it.
-        # Only a genuine teach-in is added - the user must have pressed the
-        # teach-in button, which is visible as the learn bit in the telegram.
+        # Only a genuine teach-in is added (the user pressed the teach-in button):
         #  - UTE (0xD4) is always a teach-in telegram.
-        #  - 4BS (0xA5) / 1BS (0xD5) carry the learn bit (LRN) in DB0 bit 3;
-        #    we only add them when it is set.
-        #  - RPS (0xF6) has no learn bit - the teach-in is the (repeated)
-        #    button/data telegram itself, so a device is captured when it
-        #    sends any telegram while learn mode is on.
-        #  - VLD (0xD2) devices use UTE (0xD4) as their teach-in mechanism -
-        #    a regular VLD data telegram is NOT a teach-in and must NOT be
-        #    auto-captured (only UTE or a manual add registers them).
-        #  - Anything else (e.g. a 4BS/1BS data telegram without the learn
-        #    bit, a VLD data telegram) is NOT added - the teach-in button was
-        #    not pressed.
+        #  - 4BS (0xA5) / 1BS (0xD5) carry the learn bit (LRN) in DB0 bit 3.
+        #  - RPS (0xF6) has no learn bit - the (repeated) button/data telegram
+        #    itself is the teach-in, so capture any telegram in learn mode.
+        #  - VLD (0xD2) uses UTE for teach-in - a regular VLD data telegram is
+        #    NOT a teach-in and is never auto-captured.
+        #  - Anything else (data telegrams without the learn bit) is NOT added.
         replied_teachin = False
         if not found_sensor and self.learn_mode:
             if self._is_4bs_learn_telegram(packet):
@@ -1689,19 +1667,18 @@ class Communicator:
 
         # abort loop if sensor not found
         if not found_sensor:
-            logging.info("unknown sensor: %s (RORG = %s)", enocean.utils.to_hex_string(packet.sender), hex(packet.rorg))
+            logging.info("unknown sensor: %s (RORG = %s)",
+                         enocean.utils.to_hex_string(packet.sender), hex(packet.rorg))
             return
 
         # track last-seen for the web interface
         self._last_seen[address] = datetime.datetime.utcnow()
 
-        # Handling EnOcean library decision to set learn to True by default.
-        # Only 1BS and 4BS are correctly handled by the EnOcean library.
-        # -> VLD EnOcean devices use UTE as learn mechanism
+        # the enocean library sets learn=True by default; only 1BS/4BS handle
+        # the learn flag correctly. VLD devices use UTE for teach-in and RPS
+        # devices only send data telegrams, so clear the flag for both.
         if found_sensor['rorg'] == RORG.VLD and packet.rorg != RORG.UTE:
             packet.learn = False
-        # -> RPS EnOcean devices only send normal data telegrams.
-        # Hence learn can always be set to false
         elif found_sensor['rorg'] == RORG.RPS:
             packet.learn = False
 
@@ -1722,9 +1699,9 @@ class Communicator:
             self._send_bidirectional_reply(packet, found_sensor)
 
 
-    #=============================================================================================
+    # ------------------------------------------------------------------
     # RUN LOOP
-    #=============================================================================================
+    # ------------------------------------------------------------------
     def request_restart(self):
         """set a flag so the run loop exits cleanly; the process supervisor
         (docker/systemd) restarts the gateway."""

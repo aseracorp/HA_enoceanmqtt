@@ -12,12 +12,35 @@ import enocean.utils
 from enoceanmqtt.communicator import Communicator
 from enoceanmqtt.overlays.homeassistant.device_manager import DeviceManager
 
+
+def _sender_hex(sensor):
+    """sender id of a sensor as 8 hex digits, or 'NONE' when unset"""
+    try:
+        return format(sensor.get('sender'), '08X')
+    except (TypeError, ValueError):
+        return 'NONE'
+
 class HACommunicator(Communicator):
     '''Home Assistant-oriented Communicator subclass for enoceanmqtt'''
     _mqtt_discovery_prefix = None
     _devmgr = None
     _first_mqtt_connect = True
     _system_status_topic = {}
+
+    @staticmethod
+    def _device_uid(sensor):
+        """the stable HA device UID for a sensor.
+
+        EEP-based: '{EEP:06X}_{address:08X}_{sender}'.
+        Model-based: '{manufacturer}_{model}_{address:08X}_{sender}'.
+        """
+        sender = _sender_hex(sensor)
+        address = format(sensor['address'], '08X')
+        if sensor.get('model'):
+            reference = sensor.get('manufacturer', '') + "_" + sensor.get('model', '')
+            return reference + "_" + address + "_" + sender
+        eep = format((sensor['rorg'] << 16) + (sensor['func'] << 8) + sensor['type'], '06X')
+        return eep + "_" + address + "_" + sender
 
     def __init__(self, config, sensors):
         # Read mapping file
@@ -130,9 +153,9 @@ class HACommunicator(Communicator):
         return sensor
 
 
-    #=============================================================================================
+    # ------------------------------------------------------------------
     # WEB INTERFACE / UTE TEACH-IN HOOKS
-    #=============================================================================================
+    # ------------------------------------------------------------------
     def set_learn_mode(self, enabled):
         '''enable/disable UTE teach-in and publish the state to Home Assistant'''
         super().set_learn_mode(enabled)
@@ -162,20 +185,7 @@ class HACommunicator(Communicator):
     def _on_sensor_removed(self, sensor):
         '''remove HA discovery entities when a web-added sensor is deleted'''
         try:
-            if sensor.get('model'):
-                reference = sensor.get('manufacturer', '') + "_" + sensor.get('model', '')
-                try:
-                    sender = format(sensor.get('sender'), '08X')
-                except Exception:   # pylint: disable=broad-except
-                    sender = 'NONE'
-                dev_uid = reference + "_" + format(sensor['address'], '08X') + "_" + sender
-            else:
-                eep = format((sensor['rorg'] << 16) + (sensor['func'] << 8) + sensor['type'], '06X')
-                try:
-                    sender = format(sensor.get('sender'), '08X')
-                except Exception:   # pylint: disable=broad-except
-                    sender = 'NONE'
-                dev_uid = eep + "_" + format(sensor['address'], '08X') + "_" + sender
+            dev_uid = self._device_uid(sensor)
             sensor_db = self._devmgr.db_get_device_by_field('uid', dev_uid)
             if sensor_db:
                 for cfgtopic in sensor_db.get('cfgtopics', []):
@@ -186,74 +196,49 @@ class HACommunicator(Communicator):
             logging.error("Failed to remove HA entities for %s: %s", sensor['name'], exc)
 
 
-    #=============================================================================================
+    # ------------------------------------------------------------------
     # MQTT CLIENT
-    #=============================================================================================
+    # ------------------------------------------------------------------
     def _on_connect(self, mqtt_client, _userdata, _flags, return_code):
         '''callback for when the client receives a CONNACK response from the MQTT server.'''
         if return_code == 0:
             logging.info("Succesfully connected to MQTT broker.")
             # listen to enocean send requests
             for cur_sensor in self.sensors:
-                mqtt_client.subscribe(cur_sensor['name']+'/req/#')
+                mqtt_client.subscribe(cur_sensor['name'] + '/req/#')
 
             # MQTT operations at startup only
             if self._first_mqtt_connect:
-                # Get all device UIDs in DB
+                # discover/update every configured device; track which UIDs
+                # were present so stale entries can be removed afterwards
                 known_uids = self._devmgr.db_list_from_fields('uid')
-
-                # This will discover new added sensors in HA while updating existing sensors
-                # configuration when sensor mapping has changed
                 for cur_sensor in self.sensors:
-                    if str(cur_sensor.get('ignore')) not in ("True", "true", "1"):
-                        if not cur_sensor.get('model'):
-                            # Create sensor UID
-                            eep = format((cur_sensor['rorg']<<16)+(cur_sensor['func']<<8)+cur_sensor['type'], '06X')
-                            try:
-                                sender = format(cur_sensor.get('sender'),'08X')
-                            except:
-                                sender = 'NONE'
-                            dev_uid = eep+"_"+format(cur_sensor['address'],'08X')+"_"+sender
-                            # Get sensor from DB if it exists
-                            sensor_db = self._devmgr.db_get_device_by_field('name', cur_sensor['name'])
-                            # Sensor discovery/update
-                            cfgtopics = sensor_db.get('cfgtopics', None) if sensor_db else None
-                            self._mqtt_discovery_eep(cur_sensor, cfgtopics)
-                            # Remove device from the UID list
-                            try:
-                                known_uids.remove(dev_uid)
-                            except ValueError:
-                                pass
-                        else:
-                            # Create sensor UID
-                            try:
-                                sender = format(cur_sensor.get('sender'),'08X')
-                            except:
-                                sender = 'NONE'
-                            dev_uid = cur_sensor['manufacturer']+"_"+cur_sensor['model']+"_"+format(cur_sensor['address'],'08X')+"_"+sender
-                            # Retrieve device name from sensor name by removing "/RORG" at the end
-                            name = cur_sensor['name'][:-3]
-                            # Get sensor from DB if it exists
-                            sensor_db = self._devmgr.db_get_device_by_field('name', name)
-                            # Sensor discovery/update
-                            cfgtopics = sensor_db.get('cfgtopics', None) if sensor_db else None
-                            self._mqtt_discovery_model(cur_sensor, cfgtopics)
-                            # Remove device from the UID list
-                            try:
-                                known_uids.remove(dev_uid)
-                            except ValueError:
-                                pass
+                    if str(cur_sensor.get('ignore')) in ("True", "true", "1"):
+                        continue
+                    if cur_sensor.get('model'):
+                        # model-based sensor: the DB stores the name without
+                        # the trailing "/RORG" suffix
+                        db_name = cur_sensor['name'][:-3]
+                        sensor_db = self._devmgr.db_get_device_by_field('name', db_name)
+                        cfgtopics = sensor_db.get('cfgtopics') if sensor_db else None
+                        self._mqtt_discovery_model(cur_sensor, cfgtopics)
+                    else:
+                        sensor_db = self._devmgr.db_get_device_by_field('name', cur_sensor['name'])
+                        cfgtopics = sensor_db.get('cfgtopics') if sensor_db else None
+                        self._mqtt_discovery_eep(cur_sensor, cfgtopics)
+                    try:
+                        known_uids.remove(self._device_uid(cur_sensor))
+                    except ValueError:
+                        pass
 
-                # Delete devices that are no more listed in config file
-                logging.debug("List of remaining UIDS: %s", str(known_uids))
+                # delete devices that are no longer listed in the config
+                logging.debug("List of remaining UIDS: %s", known_uids)
                 for dev_uid in known_uids:
                     sensor_db = self._devmgr.db_get_device_by_field('uid', dev_uid)
-                    # Remove all device's entities
                     if sensor_db:
                         for cfgtopic in sensor_db.get('cfgtopics', []):
                             self.mqtt.publish(f"{self._mqtt_discovery_prefix}{cfgtopic}",
-                                               "", retain=True)
-                    # Remove the device from the database
+                                              "", retain=True)
                     self._devmgr.db_remove_device_by_field('uid', dev_uid)
 
                 # Add LEARN button in HA
@@ -268,8 +253,7 @@ class HACommunicator(Communicator):
                 self._first_mqtt_connect = False
         else:
             logging.error("Error connecting to MQTT broker: %s",
-                          self.CONNECTION_RETURN_CODE[return_code]
-                          if return_code < len(self.CONNECTION_RETURN_CODE) else return_code)
+                          self.CONNECTION_RETURN_CODE.get(return_code, return_code))
 
     def _on_mqtt_message(self, _mqtt_client, _userdata, msg):
         '''the callback for when a PUBLISH message is received from the MQTT server.'''
@@ -285,9 +269,9 @@ class HACommunicator(Communicator):
             super()._on_mqtt_message(_mqtt_client, _userdata, msg)
 
 
-    #=============================================================================================
+    # ------------------------------------------------------------------
     # SYSTEM
-    #=============================================================================================
+    # ------------------------------------------------------------------
     def _mqtt_discovery_system(self, attr):
         '''Publish MQTT discovery system entities configuration to Home Assistant'''
         device_map = copy.deepcopy(self._ha_mapping['system'][attr])
@@ -345,11 +329,11 @@ class HACommunicator(Communicator):
         '''Publish MQTT discovery EEP entities configuration to Home Assistant'''
         if prev_sensor_cfgtopics is None:
             prev_sensor_cfgtopics = []
-        update = prev_sensor_cfgtopics != []
+        update = bool(prev_sensor_cfgtopics)
         rorg = sensor['rorg']
         func = sensor['func']
         type_ = sensor['type']
-        eep_dash = f'{rorg:02X}'+'-'+f'{func:02X}'+'-'+f'{type_:02X}'
+        eep_dash = f'{rorg:02X}-{func:02X}-{type_:02X}'
         is_virtual = str(sensor.get('virtual')) == '1'
 
         # If the device is supported, retrieve the device mapping
@@ -374,17 +358,10 @@ class HACommunicator(Communicator):
             # Add DATE sensor in HA
             device_map += copy.deepcopy(self._ha_mapping['common']['date'])
 
-        ## Add Per device delete button in HA
-        #device_map += copy.deepcopy(self._ha_mapping['system']['delete'])
-
-        eep = format((rorg<<16)+(func<<8)+type_, '06X')
-        address = format(sensor['address'],'08X')
-        try:
-            sender = format(sensor.get('sender'),'08X')
-        except:
-            sender = 'NONE'
-        dev_uid = eep+"_"+address+"_"+sender
-        dev_name = "e2m_"+sensor['name'].replace(self.conf['mqtt_prefix'], "").replace("/", "_")
+        address = format(sensor['address'], '08X')
+        sender = _sender_hex(sensor)
+        dev_uid = self._device_uid(sensor)
+        dev_name = "e2m_" + sensor['name'].replace(self.conf['mqtt_prefix'], "").replace("/", "_")
         sensor_cfgtopics = []
 
         # Delete previous entities that are no more used in loaded mapping
@@ -464,7 +441,7 @@ class HACommunicator(Communicator):
         '''Publish MQTT discovery model entities configuration to Home Assistant'''
         if prev_sensor_cfgtopics is None:
             prev_sensor_cfgtopics = []
-        update = prev_sensor_cfgtopics != []
+        update = bool(prev_sensor_cfgtopics)
         model = sensor['model']
         manufacturer = sensor['manufacturer']
         reference = manufacturer+"_"+model
@@ -493,13 +470,10 @@ class HACommunicator(Communicator):
             # Add DATE sensor in HA
             device_map += copy.deepcopy(self._ha_mapping['common']['date'])
 
-        address = format(sensor['address'],'08X')
-        try:
-            sender = format(sensor.get('sender'),'08X')
-        except:
-            sender = 'NONE'
-        dev_uid = reference+"_"+address+"_"+sender
-        dev_name = "e2m_"+name.replace(self.conf['mqtt_prefix'], "").replace("/", "_")
+        address = format(sensor['address'], '08X')
+        sender = _sender_hex(sensor)
+        dev_uid = self._device_uid(sensor)
+        dev_name = "e2m_" + name.replace(self.conf['mqtt_prefix'], "").replace("/", "_")
         sensor_cfgtopics = []
 
         # Delete previous entities that are no more used in loaded mapping
@@ -596,14 +570,6 @@ class HACommunicator(Communicator):
                 if prop == "/learn/req":
                     self.set_learn_mode(msg.payload.decode('UTF-8') == 'ON')
 
-    #=============================================================================================
+    # ------------------------------------------------------------------
     # ENOCEAN TO MQTT
-    #=============================================================================================
-    def _publish_mqtt(self, sensor, mqtt_json):
-        '''Publish decoded packet content to MQTT'''
-        ## Present the device to HA if it is the first time it is seen
-        #if not self._devmgr.db_search_device_by_address(sensor['address']):
-            #self._mqtt_discovery_sensor(sensor)
-
-        # Publish the packet
-        super()._publish_mqtt(sensor, mqtt_json)
+    # ------------------------------------------------------------------

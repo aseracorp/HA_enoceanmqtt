@@ -243,38 +243,13 @@ function configLabel(key) {
 }
 
 async function loadConfig() {
+  // the config settings are used for the tooltips and the edit popup
   try {
     const data = await api('/api/config');
     state.config = data || {};
-    populateConfig(state.config);
   } catch (e) {
     toast(t('err_load_config') + e.message, 'error');
   }
-}
-
-function configViewHtml(conf, keys) {
-  // 2 columns of name|value pairs -> 4 cells per row
-  const rows = [];
-  for (let i = 0; i < keys.length; i += 2) {
-    const cells = [];
-    for (let j = 0; j < 2; j++) {
-      const k = keys[i + j];
-      if (!k) { cells.push('<td></td><td></td>'); continue; }
-      const label = configLabel(k);
-      const val = conf[k] === undefined || conf[k] === null ? '' : String(conf[k]);
-      cells.push('<td class="k">' + escapeHtml(label) + '</td><td class="mono">' + escapeHtml(val) + '</td>');
-    }
-    rows.push('<tr>' + cells.join('') + '</tr>');
-  }
-  return '<table class="config-table config-4col">' + rows.join('') + '</table>';
-}
-
-function populateConfig(conf) {
-  const view = $('config-view');
-  if (!view) return;
-  const keys = Object.keys(conf || {}).filter((k) => !CONFIG_HIDDEN.has(k));
-  if (!keys.length) { view.innerHTML = '<span class="card-sub">Configuration not available.</span>'; return; }
-  view.innerHTML = configViewHtml(conf, keys);
 }
 
 // Edit popup: fill the grid with inputs
@@ -326,7 +301,6 @@ function openConfigEdit() {
   });
   $('configedit-overlay').hidden = false;
 }
-$('btn-config-edit')?.addEventListener('click', openConfigEdit);
 $('btn-top-config')?.addEventListener('click', openConfigEdit);
 $('configedit-cancel')?.addEventListener('click', () => { $('configedit-overlay').hidden = true; });
 
@@ -345,9 +319,8 @@ async function saveConfigPayload(payload, andRestart) {
     toast(t('config_saved'), 'success');
     $('configedit-overlay').hidden = true;
     state.config = Object.assign({}, state.config, payload);
-    populateConfig(state.config);
     if (andRestart) {
-      // tell the backend to restart (added config flag)
+      // ask the gateway process supervisor to restart us
       try {
         await fetch('/api/restart', { method: 'POST' });
       } catch (e) { /* ignore */ }
@@ -400,7 +373,6 @@ function renderSensors() {
     const isActor = deviceCategory(s) === 'actor';
     // Address column: for sensors show the device address; for actors show the
     // (virtual) sender id; for bidirectional devices show both.
-    // fmtAddr defined globally (colon format)
     let addrHtml;
     if (isActor) {
       addrHtml = fmtAddr(s.sender);
@@ -485,22 +457,13 @@ function openEdit(name) {
   try {
   $('e-name').value = s.name;
   $('e-address').value = (s.address !== undefined && s.address !== null && s.address !== 0xFFFFFFFF)
-    ? fmtAddrInput(s.address) : '';
-  $('e-direction').value = s.direction || '';
-  $('e-answer').value = s.answer || '';
-  $('e-default_data').value = (s.default_data !== undefined && s.default_data !== null)
-    ? fmtAddrInput(s.default_data) : '';
+    ? fmtAddr(s.address, true) : '';
   $('e-eep-search').value = s.eep || '';
-  // fields per device type: sensor=Name/Address/EEP; actor=Name/Sender/EEP;
-  // bidirectional=Name/Address/Sender/EEP (direction/answer/default_data are
-  // filled automatically from the stored values, not shown for editing).
+  // sensor=Name/Address/EEP; actor=Name/Sender/EEP; bidirectional=Name/Address/Sender/EEP
   const showAddr = cat !== 'actor';
   const showSender = cat !== 'sensor';
   $('e-addr-field').hidden = !showAddr;
   $('e-sender-field').hidden = !showSender;
-  $('e-dir-field').hidden = true;
-  $('e-answer-field').hidden = true;
-  $('e-default-field').hidden = true;
   populateSenders($('e-sender'), state.virtual_senders, s.sender);
   if (s.sender !== undefined && s.sender !== null) {
     const selE = $('e-sender');
@@ -549,12 +512,6 @@ $('edit-ok')?.addEventListener('click', async () => {
     } else if (sv !== null && sv !== undefined && !isNaN(sv)) {
       body.sender = sv;
     }
-  }
-  if (cat === 'bidirectional') {
-    if ($('e-direction').value.trim() !== '') body.direction = parseInt($('e-direction').value, 10);
-    if ($('e-answer').value.trim() !== '') body.answer = parseInt($('e-answer').value, 10);
-    const dd = $('e-default_data').value.trim();
-    if (dd) body.default_data = parseInt(dd, 0);
   }
   try {
     const res = await api('/api/sensors/' + encodeURIComponent(editingDevice), {
@@ -857,16 +814,8 @@ function defaultActorName(sender) {
   }
   return 'actor_' + Date.now().toString(16);
 }
-function fmtAddr(v) {
-  if (v === undefined || v === null) return '—';
-  const n = Number(v);
-  if (isNaN(n)) return String(v);
-  const b = [(n >> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
-  return b.map((x) => x.toString(16).toUpperCase().padStart(2, '0')).join(':');
-}
-function fmtAddrInput(v) {
-  // input-friendly colon format (lowercase ok)
-  if (v === undefined || v === null) return '';
+function fmtAddr(v, emptyForNull = false) {
+  if (v === undefined || v === null) return emptyForNull ? '' : '—';
   const n = Number(v);
   if (isNaN(n)) return String(v);
   const b = [(n >> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
@@ -876,15 +825,14 @@ function fmtAddrInput(v) {
 let addMode = 'sensor';
 
 function populateSenders(selectOrList, listOrSelect, selected) {
-  // Normalise the argument order: callers pass either (select, senders) or
-  // (senders) -> fill every select. Both shapes must work; the original code
-  // only handled the reverse order, leaving the modal dropdowns empty.
+  // accepts either (select, senders) or (senders) - the latter refreshes all
+  // sender dropdowns; selected (optional) preselects an option in |target|
   let list, target;
   if (Array.isArray(selectOrList)) {
-    list = selectOrList;                       // (senders, ...)
+    list = selectOrList;
     target = (listOrSelect && listOrSelect.tagName === 'SELECT') ? listOrSelect : null;
   } else {
-    target = (selectOrList && selectOrList.tagName === 'SELECT') ? selectOrList : null; // (select, senders)
+    target = (selectOrList && selectOrList.tagName === 'SELECT') ? selectOrList : null;
     list = Array.isArray(listOrSelect) ? listOrSelect
       : (Array.isArray(state && state.virtual_senders) ? state.virtual_senders : []);
   }
@@ -991,7 +939,7 @@ $('as-teachin-btn')?.addEventListener('click', async () => {
     if (cap && cap.ok && cap.device) {
       const d = cap.device;
       $('as-name').value = 'learn_' + Number(d.address).toString(16).toLowerCase();
-      $('as-address').value = fmtAddrInput(d.address);
+      $('as-address').value = fmtAddr(d.address, true);
       $('as-eep').value = d.eep || '';
       asStopTeachIn('');
       $('as-prompt').hidden = true; $('as-success').hidden = false;
@@ -1082,7 +1030,7 @@ $('ab-teachin')?.addEventListener('click', async () => {
     const fresh = (data.sensors || []).find((s) => s.name.startsWith('enoceanmqtt/learn_') && !known.has(s.name));
     if (fresh) {
       $('ab-name').value = fresh.name.replace(/^.*\/learn_/, 'learn_');
-      $('ab-address').value = fmtAddrInput(fresh.address);
+      $('ab-address').value = fmtAddr(fresh.address, true);
       $('ab-eep').value = fresh.eep || '';
       abStopTeachIn('Device detected - confirm details.');
       toast('Bidirectional device detected', 'success');
