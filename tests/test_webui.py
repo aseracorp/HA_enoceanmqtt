@@ -35,6 +35,20 @@ def make_ute_packet():
     return packet
 
 
+
+def _mk_com(conf):
+    """build a Communicator but stop its auto-started transceiver thread,
+    returning (com) with a FakeEnocean installed - keeps tests hermetic."""
+    com = Communicator(conf, [])
+    try:
+        com.enocean.stop()
+        com.enocean.join(timeout=2)
+    except Exception:   # pylint: disable=broad-except
+        pass
+    com.enocean = FakeEnocean()
+    return com
+
+
 class FakeEnocean:
     def __init__(self):
         self.sent = []
@@ -112,8 +126,7 @@ def test_ute_teachin():
             'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
 
         packet = make_ute_packet()
@@ -156,8 +169,7 @@ def test_web_interface():
             'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
 
         web = WebInterface(com)
@@ -224,8 +236,7 @@ def test_bidirectional_and_smartack_reply():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -290,8 +301,7 @@ def test_teachin_captures_non_ute_devices():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -350,8 +360,7 @@ def test_send_teachin_to_actor():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -407,8 +416,7 @@ def test_send_teachin_matches_stripped_model_display_name():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -447,8 +455,7 @@ def test_send_teachin_by_sender_eep_creates_no_device():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -473,8 +480,7 @@ def test_send_teachin_by_sender_eep_via_webinterface():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
         web = WebInterface(com)
@@ -511,8 +517,7 @@ def test_update_sensor():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -552,8 +557,7 @@ def test_4bs_teachin_bidirectional_reply():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -605,8 +609,7 @@ def test_f6_eep_recognition():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -661,8 +664,7 @@ def test_vld_data_telegram_not_taught_in():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -692,8 +694,7 @@ def test_actor_sensor_categorization():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -738,8 +739,7 @@ def test_virtual_senders_range():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
         senders = com.virtual_senders()
@@ -761,8 +761,7 @@ def test_teachin_capture_no_autoadd():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
         # 4BS learn telegram A5-08-01
@@ -790,8 +789,7 @@ def test_next_free_sender():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
         # no devices -> first free is base+1
@@ -824,8 +822,7 @@ def test_request_restart():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         r = com.request_restart()
         assert r['ok'] is True
@@ -846,8 +843,7 @@ def test_config_save_and_history():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -879,8 +875,7 @@ def test_update_sensor_address():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
         com.add_sensor({'name': 't', 'address': 0xDEADBEEF, 'eep': 'A5-02-05'})
@@ -901,8 +896,7 @@ def test_latest_value_with_meta():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
         com.add_sensor({'name': 't', 'address': 0x12345678, 'eep': 'A5-08-01'})
@@ -954,8 +948,7 @@ def test_send_teachin_existing_virtual_actor_without_stored_category():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -984,8 +977,7 @@ def test_add_edit_validation():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
 
@@ -1051,8 +1043,7 @@ def test_delete_update_sensor_with_slash_in_name():
             'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
             'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
         }
-        com = Communicator(conf, [])
-        com.enocean = FakeEnocean()
+        com = _mk_com(conf)
         com.mqtt = FakeMQTT()
         com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
         web = WebInterface(com)
@@ -1223,3 +1214,57 @@ def test_device_discovery_serial_no_ports():
     from enoceanmqtt.device_discovery import discover_serial
     ports = discover_serial()
     assert isinstance(ports, list)
+
+
+def test_tcp_communicator_backoff_reconnect():
+    """TCPClientCommunicator retries connect with backoff instead of dying.
+
+    Simulates: remote down at start (connect raises), then becomes
+    reachable; the communicator must keep retrying and finally connect.
+    """
+    import threading
+    import socket
+    import time
+    from enoceanmqtt.tcpclientcommunicator import TCPClientCommunicator
+
+    calls = {'n': 0}
+    orig = socket.socket
+
+    class FakeSock:
+        def __init__(self, *a, **k):
+            calls['n'] += 1
+            if calls['n'] <= 2:
+                raise OSError('connection refused')
+            self.data = b''
+        def settimeout(self, t): pass
+        def connect(self, addr):
+            calls['connected'] = True
+        def recv(self, n): 
+            raise socket.timeout()  # no data -> timeout path
+        def send(self, b): return len(b)
+        def close(self): pass
+
+    socket.socket = FakeSock
+    try:
+        tcp = TCPClientCommunicator('127.0.0.1', 9999)
+        tcp._stop_flag.clear() if hasattr(tcp._stop_flag,'clear') else None
+        # shrink backoff so the test is fast
+        tcp.RECONNECT_MIN_DELAY = 0.05
+        tcp.RECONNECT_MAX_DELAY = 0.1
+        # monkeypatch time.sleep to avoid real waiting
+        real_sleep = time.sleep
+        time.sleep = lambda s: None
+        try:
+            t = threading.Thread(target=tcp.run, daemon=True)
+            t.start()
+            time.sleep(0.5)
+            tcp.stop()
+            t.join(timeout=5)
+        finally:
+            time.sleep = real_sleep
+        assert not t.is_alive(), 'communicator thread should stop on stop()'
+        # it retried (>=2 connect attempts) and eventually connected
+        assert calls['n'] >= 2, calls
+        assert calls.get('connected'), 'never reached connected state'
+    finally:
+        socket.socket = orig
