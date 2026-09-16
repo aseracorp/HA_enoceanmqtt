@@ -20,6 +20,9 @@ import paho.mqtt.client as mqtt
 
 from enoceanmqtt.sensor_store import SensorStore
 from enoceanmqtt.eep_registry import get_registry
+from enoceanmqtt.diagnostics import (CO_RD_VERSION, CO_RD_REPEATER, CO_RD_DUTYCYCLE_LIMIT,
+                                     EV_DUTYCYCLE_LIMIT, EV_TRANSMIT_FAILED,
+                                     parse_version, parse_repeater, parse_duty_cycle)
 
 
 #: accepted EnOcean address formats: int, '0x...', 'FF:80:00:00', 'A5-02-05'
@@ -114,6 +117,13 @@ class Communicator:
         # EEP catalog + persistent store for web-added sensors
         self._eep_registry = get_registry()
         self._store = SensorStore(self._resolve_sensor_store_path())
+
+        # transceiver diagnostics (chip id, repeater, duty-cycle, TX failures)
+        self._diag = {
+            'chip_id': None, 'app_version': None, 'api_version': None,
+            'repeater_level': None, 'duty_cycle_available': None,
+            'transmit_failures': 0,
+        }
         self._dynamic_names = set()
         self._load_dynamic_sensors()
 
@@ -629,6 +639,11 @@ class Communicator:
                  'bidirectional': bool(p.get('bidirectional')),
                  'smartack': bool(p.get('smartack'))}
                 for p in self._eep_registry.profiles]
+
+    @property
+    def diagnostics(self):
+        """transceiver diagnostics (chip id, repeater, duty-cycle, TX fails)."""
+        return dict(self._diag)
 
     @property
     def enocean_sender_hex(self):
@@ -1749,6 +1764,69 @@ class Communicator:
         self._restart_requested = True
         return {'ok': True, 'message': 'Restart scheduled'}
 
+    def _query_diagnostics(self):
+        """send ESP3 common commands to read transceiver diagnostics."""
+        if not self.enocean:
+            return
+        try:
+            for code in (CO_RD_VERSION, CO_RD_REPEATER, CO_RD_DUTYCYCLE_LIMIT):
+                self.enocean.send(Packet(PACKET.COMMON_COMMAND, data=[code]))
+        except Exception:   # pylint: disable=broad-except
+            logging.exception("failed to send diagnostics query")
+
+    def _publish_diagnostics(self):
+        """publish the current diagnostics as a retained JSON diagnostic topic."""
+        try:
+            if self.mqtt and self.mqtt.is_connected():
+                topic = self.conf.get('mqtt_prefix', 'enocean/') + '__system/diagnostics'
+                self.mqtt.publish(topic, json.dumps(self.diagnostics), retain=True)
+        except Exception:   # pylint: disable=broad-except
+            pass
+
+    def _handle_response(self, packet):
+        """parse a COMMON_COMMAND RESPONSE packet into the diagnostics state.
+
+        The RESPONSE packet carries ``response`` (return code) and
+        ``response_data``. Because the stick does not echo the requested
+        command code, each response is recognised by its fixed ESP3 length:
+          CO_RD_VERSION        -> 16+ bytes (app/api/chip_id/chip_ver/...)
+          CO_RD_REPEATER       -> 2 bytes  (REP_ENABLE, REP_LEVEL)
+          CO_RD_DUTYCYCLE_LIMIT-> 1 byte   (available %)
+        """
+        response_code = getattr(packet, 'response', None)
+        if response_code != RETURN_CODE.OK:
+            logging.debug("diagnostics response not OK: %s", response_code)
+            return
+        rd = list(getattr(packet, 'response_data', []) or [])
+        if len(rd) >= 16:
+            app, api, chip = parse_version(rd)
+            if chip:
+                self._diag['app_version'] = app
+                self._diag['api_version'] = api
+                self._diag['chip_id'] = chip
+                logging.info("EnOcean transceiver: app %s, API %s, chip %s",
+                             app, api, chip)
+        elif len(rd) == 2:
+            level = parse_repeater(rd)
+            self._diag['repeater_level'] = level
+            logging.info("EnOcean repeater: %s",
+                         "off" if not level else "level %d" % level)
+        elif len(rd) == 1:
+            self._diag['duty_cycle_available'] = parse_duty_cycle(rd)
+            logging.info("EnOcean TX duty-cycle available: %s%%",
+                         self._diag['duty_cycle_available'])
+
+    def _handle_event(self, packet):
+        """react to ESP3 EVENT packets (duty-cycle limit, transmit failed)."""
+        ev = getattr(packet, 'event', None)
+        if ev == EV_DUTYCYCLE_LIMIT:
+            self._diag['duty_cycle_available'] = 0
+            logging.warning("EnOcean TX duty-cycle limit reached; transmits throttled")
+        elif ev == EV_TRANSMIT_FAILED:
+            self._diag['transmit_failures'] = self._diag.get('transmit_failures', 0) + 1
+            logging.warning("EnOcean transmit failed (%d total)",
+                            self._diag['transmit_failures'])
+
     def run(self):
         """the main loop with blocking enocean packet receive handler"""
         # start endless loop for listening
@@ -1756,6 +1834,8 @@ class Communicator:
             # Request transmitter ID, if needed
             if self.enocean_sender is None:
                 self.enocean_sender = self.enocean.base_id
+                # now that we know the base id, query transceiver diagnostics
+                self._query_diagnostics()
 
             # Loop to empty the queue...
             try:
@@ -1766,12 +1846,21 @@ class Communicator:
                 if packet.packet_type == PACKET.RADIO:
                     self._process_radio_packet(packet)
                 elif packet.packet_type == PACKET.RESPONSE:
-                    response_code = RETURN_CODE(packet.data[0])
-                    logging.info("got response packet: %s", response_code.name)
+                    response_code = RETURN_CODE(packet.data[0]) if packet.data else None
+                    logging.info("got response packet: %s", response_code.name if response_code else packet)
+                    self._handle_response(packet)
+                elif packet.packet_type == PACKET.EVENT:
+                    logging.info("got event packet: %s", packet)
+                    self._handle_event(packet)
                 else:
                     logging.info("got non-RF packet: %s", packet)
                     continue
             except queue.Empty:
+                # periodically re-query + re-publish transceiver diagnostics
+                if time.time() - self._diag.get('_last_query', 0) > 60:
+                    self._diag['_last_query'] = time.time()
+                    self._query_diagnostics()
+                    self._publish_diagnostics()
                 continue
             except KeyboardInterrupt:
                 logging.debug("Exception: KeyboardInterrupt")

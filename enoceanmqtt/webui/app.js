@@ -77,9 +77,19 @@ function renderGateway() {
     mqttEl.className = 'pill ' + (gw.mqtt ? 'ok' : 'bad');
     // just the connection state - the details go into the tooltip
     mqttEl.innerHTML = '<span class="dot"></span>' + t('mqtt') + ' ' + (gw.mqtt ? t('connected') : t('disconnected'));
-    // hover tooltips with configured settings
+    // hover tooltips with configured settings + transceiver diagnostics
     const cfg = state.config || {};
     if (cfg.enocean_port) gwEl.setAttribute('data-tip', 'Port: ' + cfg.enocean_port + (cfg.log_packets !== undefined ? '\nLog packets: ' + cfg.log_packets : ''));
+    const dg = (state.gateway && state.gateway.diagnostics) || {};
+    if (dg.chip_id) {
+      const extra = ['chip: ' + dg.chip_id]
+        .concat(dg.app_version ? ['app ' + dg.app_version] : [])
+        .concat(dg.repeater_level !== null && dg.repeater_level !== undefined ? ['repeater ' + dg.repeater_level] : [])
+        .concat(dg.duty_cycle_available !== null && dg.duty_cycle_available !== undefined ? ['TX duty ' + dg.duty_cycle_available + '%'] : [])
+        .concat(dg.transmit_failures ? ['TX fails ' + dg.transmit_failures] : []);
+      const cur = gwEl.getAttribute('data-tip') || '';
+      gwEl.setAttribute('data-tip', (cur ? cur + '\n' : '') + extra.join('\n'));
+    }
     if (cfg.mqtt_host) mqttEl.setAttribute('data-tip', 'mqtt://' + cfg.mqtt_host + (cfg.mqtt_port ? ':' + cfg.mqtt_port : ''));
   }
 }
