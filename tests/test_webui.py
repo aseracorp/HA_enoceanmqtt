@@ -1131,6 +1131,30 @@ def test_eep_engine_decode():
     assert engine.find_profile(0xD5, 0x00, 0x01) is not None
 
 
+def test_diagnostics_parse():
+    """ESP3 diagnostics parsing (version / repeater / duty-cycle)."""
+    from enoceanmqtt.diagnostics import parse_version, parse_repeater, parse_duty_cycle
+
+    # CO_RD_VERSION: app(4) api(4) chip_id(4) chip_ver(4) ...
+    rd = [1, 0, 0, 15, 1, 2, 3, 4, 0xFF, 0x80, 0x11, 0x22, 10, 20, 30, 40]
+    app, api, chip = parse_version(rd)
+    assert app == '1.0.0.15', app
+    assert api == '1.2.3.4', api
+    assert chip == 'FF:80:11:22', chip
+
+    # short response -> None
+    assert parse_version([1, 2]) == (None, None, None)
+
+    # CO_RD_REPEATER: [REP_ENABLE, REP_LEVEL] -> level
+    assert parse_repeater([1, 2]) == 2
+    assert parse_repeater([0, 2]) == 0   # disabled
+    assert parse_repeater([1]) is None
+
+    # CO_RD_DUTYCYCLE_LIMIT: [available%]
+    assert parse_duty_cycle([68]) == 68
+    assert parse_duty_cycle([]) is None
+
+
 def test_cover_position_maths():
     """Eltako FSB cover-position accumulation (pure core)."""
     from enoceanmqtt.cover import update_cover_position
@@ -1167,4 +1191,3 @@ def test_cover_store_persistence():
         assert s2.get_position(0x123) == 42
         s2.set_position(0x123, 87)
         assert CoverStore(db).get_position(0x123) == 87
-

@@ -93,6 +93,7 @@ class WebInterface:
                 'connected': com.enocean is not None and com.enocean.is_alive(),
                 'base_id': com.enocean_sender_hex,
                 'mqtt': com.mqtt.is_connected() if com.mqtt else False,
+                'diagnostics': com.diagnostics,
             },
             'learn_mode': com.learn_mode,
             'sensors': sensors,
