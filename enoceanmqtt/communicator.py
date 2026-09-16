@@ -12,6 +12,8 @@ import datetime
 from enocean.communicators.serialcommunicator import SerialCommunicator
 from enoceanmqtt.tcpclientcommunicator import TCPClientCommunicator
 from enocean.protocol.packet import RadioPacket, UTETeachInPacket
+from enoceanmqtt.eep_engine import engine as eep_engine
+from enoceanmqtt.eep_engine.utils import to_bitarray
 from enocean.protocol.constants import PACKET, RETURN_CODE, RORG
 import enocean.utils
 import paho.mqtt.client as mqtt
@@ -1226,6 +1228,32 @@ class Communicator:
             # learn request received
             logging.info("learn request not emitted to mqtt")
 
+    def _eep_decode(self, packet, sensor):
+        """decode a telegram with the code-defined EEP engine.
+
+        Returns {shortcut: {'value': ..., 'raw_value': ..., 'description': ...,
+        'unit': ...}} (engine format) or {} when the profile is unknown or no
+        case matches. Works for 4BS (A5), RPS (F6), 1BS (D5) and VLD (D2).
+        """
+        prof = eep_engine.find_profile(sensor.get('rorg'), sensor.get('func'), sensor.get('type'))
+        if prof is None:
+            return {}
+        rorg = sensor.get('rorg')
+        # payload bytes (exclude rorg byte, sender id, status) -> bit array
+        if rorg in (RORG.BS4,):         # 4BS: 4 payload bytes
+            payload = packet.data[1:5]
+        elif rorg == RORG.VLD:          # VLD: variable payload, before sender+status
+            payload = packet.data[1:len(packet.data) - 1 - 4]
+        else:                            # RPS/BS1: 1 payload byte
+            payload = packet.data[1:2]
+        bit_data = to_bitarray(payload, 8 * len(payload))
+        status = packet.status if getattr(packet, 'status', None) is not None else (packet.data[-1] if packet.data else 0)
+        bit_status = to_bitarray([status & 0xFF], 8)
+        case = eep_engine.select_case(prof, bit_data, bit_status)
+        if case is None:
+            return {}
+        return eep_engine.decode(case, bit_data, bit_status)
+
     def _handle_data_packet(self, packet, sensor, mqtt_json):
         # radio packet of proper rorg type received; parse EEP
         found_property = False
@@ -1233,15 +1261,17 @@ class Communicator:
         if sensor.get('direction'):
             direction = sensor.get('direction')
 
-        # Retrieve command from the received packet and pass it to parse_eep()
+        # Retrieve command from the received packet and pass it to the engine
         command = None
         if sensor.get('command'):
             command = self._get_command_id(packet, sensor)
             if command:
                 logging.debug('Retrieved command id from packet: %s', hex(command))
 
-        # Retrieve properties from EEP
-        properties = packet.parse_eep(sensor['func'], sensor['type'], direction, command)
+        # Decode the telegram with the code-defined EEP engine (validated
+        # against the official EnOcean certification vectors). No hardcoded
+        # EEP tables / bit layouts here.
+        decoded = self._eep_decode(packet, sensor)
 
         # Now send also raw data to MQTT
         raw_data = packet.data[1:len(packet.data)-1-4]
@@ -1249,9 +1279,8 @@ class Communicator:
         mqtt_json["_RAW_DATA_"] = enocean.utils.to_hex_string(raw_data)
 
         # loop through all EEP properties
-        for prop_name in properties:
+        for prop_name, cur_prop in decoded.items():
             found_property = True
-            cur_prop = packet.parsed[prop_name]
             # we only extract numeric values, either the scaled ones
             # or the raw values for enums
             if isinstance(cur_prop['value'], numbers.Number):

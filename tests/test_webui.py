@@ -1102,3 +1102,30 @@ def test_delete_update_sensor_with_slash_in_name():
             assert 'a/b' not in [s['name'] for s in b['sensors']]
         finally:
             web.stop()
+
+
+def test_eep_engine_decode():
+    """the code-defined EEP engine decodes real telegrams (4BS / RPS / VLD)
+    without any hardcoded bit tables in this project."""
+    from enoceanmqtt.eep_engine import engine
+    from enoceanmqtt.eep_engine.utils import to_bitarray
+
+    # A5-02-05 temperature: payload bytes -> 33.41 degC
+    prof = engine.find_profile(0xA5, 0x02, 0x05)
+    assert prof is not None
+    bits = to_bitarray([0x08, 0x00, 0x2A, 0x3C], 32)
+    case = engine.select_case(prof, bits, to_bitarray([0], 8))
+    dec = engine.decode(case, bits, to_bitarray([0], 8))
+    assert abs(dec['TMP']['value'] - 33.4117) < 0.01
+
+    # F6-02-01 rocker2 press (0x10) decodes as rocker, not smoke
+    prof2 = engine.find_profile(0xF6, 0x02, 0x01)
+    bits2 = to_bitarray([0x10], 8)
+    case2 = engine.select_case(prof2, bits2, to_bitarray([0x20], 8))
+    dec2 = engine.decode(case2, bits2, to_bitarray([0x20], 8))
+    assert dec2['R2']['value'] == 'Button AI'
+    assert 'SMO' not in dec2  # not the smoke detector
+
+    # the code-defined catalog covers all three families
+    assert engine.find_profile(0xD2, 0x01, 0x12) is not None
+    assert engine.find_profile(0xD5, 0x00, 0x01) is not None
