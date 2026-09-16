@@ -7,11 +7,12 @@ import numbers
 import json
 import os
 import re
+import time
 import datetime
 
 from enocean.communicators.serialcommunicator import SerialCommunicator
 from enoceanmqtt.tcpclientcommunicator import TCPClientCommunicator
-from enocean.protocol.packet import RadioPacket, UTETeachInPacket
+from enocean.protocol.packet import Packet, RadioPacket, UTETeachInPacket
 from enoceanmqtt.eep_engine import engine as eep_engine
 from enoceanmqtt.eep_engine.utils import to_bitarray
 from enoceanmqtt.cover import POSITION_SUBTOPIC, SHUT_TIME_SUBTOPIC, update_cover_position
