@@ -1179,11 +1179,18 @@ document.querySelectorAll('.card.collapsible > .card-header').forEach((h) => {
 (function () {
   try {
     const saved = localStorage.getItem('enm-lang');
-    currentLang = (saved === 'de' || saved === 'fr' || saved === 'it') ? saved : 'en';
+    if (saved === 'de' || saved === 'fr' || saved === 'it' || saved === 'en') {
+      currentLang = saved;
+    } else {
+      // no cached language -> detect from the browser (e.g. 'de-DE' -> 'de')
+      const nav = (navigator.language || navigator.languages?.[0] || 'en').toLowerCase();
+      currentLang = (nav.startsWith('de') || nav.startsWith('fr') || nav.startsWith('it')) ? nav.slice(0, 2) : 'en';
+      try { localStorage.setItem('enm-lang', currentLang); } catch (e) { /* ignore */ }
+    }
     const sel = $('lang-select');
     if (sel) sel.value = currentLang;
   } catch (e) { /* ignore */ }
-  // translate immediately so field help icons get their tooltips on first paint
+  // translate immediately so field labels + help icons get their tooltips on first paint
   applyTranslations();
 })();
 
