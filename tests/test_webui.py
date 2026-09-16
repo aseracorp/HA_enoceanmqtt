@@ -1153,3 +1153,41 @@ def test_diagnostics_parse():
     # CO_RD_DUTYCYCLE_LIMIT: [available%]
     assert parse_duty_cycle([68]) == 68
     assert parse_duty_cycle([]) is None
+
+
+def test_cover_position_maths():
+    """Eltako FSB cover-position accumulation (pure core)."""
+    from enoceanmqtt.cover import update_cover_position
+
+    # F6 absolute end-position: open (0x70) / closed (0x50)
+    assert update_cover_position(None, "70:20", {}, None) == 100
+    assert update_cover_position(80, "50:20", {}, None) == 0
+    # F6 movement start -> no position
+    assert update_cover_position(50, "01:20", {}, None) is None
+
+    # A5 running time: 1s drive, 100s shut_time, direction=up -> +1%
+    dec = {'DB3': 0, 'DB2': 10, 'DB1': 1}  # 10 deciseconds = 1s
+    assert update_cover_position(50, "a5:..:..:..:..", dec, 100) == 51
+    # direction=down -> -1%
+    dec2 = {'DB3': 0, 'DB2': 10, 'DB1': 2}
+    assert update_cover_position(50, "a5:..:..:..:..", dec2, 100) == 49
+    # clamping at boundaries
+    dec3 = {'DB3': 255, 'DB2': 255, 'DB1': 2}  # huge drive
+    assert update_cover_position(50, "a5:..:..:..:..", dec3, 1) == 0
+    dec4 = {'DB3': 255, 'DB2': 255, 'DB1': 1}
+    assert update_cover_position(50, "a5:..:..:..:..", dec4, 1) == 100
+
+
+def test_cover_store_persistence():
+    """cover positions persist across store restarts (TinyDB)."""
+    from enoceanmqtt.cover_store import CoverStore
+    with tempfile.TemporaryDirectory() as tmp:
+        db = os.path.join(tmp, 'covers.json')
+        s1 = CoverStore(db)
+        assert s1.get_position(0x123) is None
+        s1.set_position(0x123, 42)
+        # reopen -> survives restart
+        s2 = CoverStore(db)
+        assert s2.get_position(0x123) == 42
+        s2.set_position(0x123, 87)
+        assert CoverStore(db).get_position(0x123) == 87

@@ -50,12 +50,16 @@ mqtt_debug      = false
 address = 0xYYYYYYYY # The address of your FSB14
 model   = eltako/fsb14
 sender  = 0xFFXXXXXX # base id of your EnOcean transceiver + unique offset
+# Optional: full open/close travel time in seconds (cover position)
+#   shut_time = 30
 
 # Define an FSB61 device
 [my_fsb61]
 address = 0xYYYYYYYY # The address of your FSB61
 model   = eltako/fsb61
 sender  = 0xFFXXXXXX # base id of your EnOcean transceiver + unique offset
+# Optional: full open/close travel time in seconds (cover position)
+#   shut_time = 30
 
 # Define an FSR14 device
 [my_fsr14]
