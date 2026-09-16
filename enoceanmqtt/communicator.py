@@ -17,6 +17,7 @@ from enoceanmqtt.eep_engine import engine as eep_engine
 from enoceanmqtt.eep_engine.utils import to_bitarray
 from enoceanmqtt.cover import POSITION_SUBTOPIC, SHUT_TIME_SUBTOPIC, update_cover_position
 from enoceanmqtt.cover_store import CoverStore
+from enoceanmqtt.secure_store import SecureStore
 from enocean.protocol.constants import PACKET, RETURN_CODE, RORG
 import enocean.utils
 import paho.mqtt.client as mqtt
@@ -132,6 +133,22 @@ class Communicator:
 
         # persistent cover positions (Eltako FSB-type, TinyDB)
         self._cover_store = CoverStore(self.conf.get('cover_positions_file'))
+        # persistent rolling codes for secure (VAES) devices
+        self._secure_store = SecureStore(self.conf.get('secure_rlc_file'))
+        # per-device secure config: {address_hex: {key: <16-byte hex>, slf: <0x8B>, ...}}
+        self._secure_config = {}
+        try:
+            raw = self.conf.get('secure_devices') or {}
+            if isinstance(raw, str):
+                import yaml
+                raw = yaml.safe_load(raw) or {}
+            for addr, cfg in (raw or {}).items():
+                try:
+                    self._secure_config[int(addr, 16)] = cfg
+                except (ValueError, TypeError):
+                    logging.warning("ignoring invalid secure device address: %s", addr)
+        except Exception:   # pylint: disable=broad-except
+            logging.exception("failed to parse secure_devices config")
 
         # check for mandatory configuration
         if 'mqtt_host' not in self.conf or 'enocean_port' not in self.conf:
@@ -1769,10 +1786,69 @@ class Communicator:
             logging.error("Failed to send teach-in to %s: %s", name, exc)
             return False, str(exc)
 
+    def _handle_secure_packet(self, packet):
+        """decrypt a VAES secure telegram (SEC 0x30 / SEC_ENCAPS 0x31) and
+        route the recovered plaintext to normal packet handling.
+
+        Requires a per-device configuration: the pre-shared key (hex) and an
+        optional SLF/roaming window. The rolling code is persisted via
+        SecureStore so replay protection survives restarts.
+        """
+        try:
+            from enoceanmqtt.security import SecureDevice, decrypt_telegram, parse_slf
+            address = enocean.utils.combine_hex(packet.sender)
+            cfg = self._secure_config.get(address)
+            if not cfg or not cfg.get('key'):
+                logging.warning("secure telegram from %s but no key configured",
+                                enocean.utils.to_hex_string(packet.sender))
+                return
+            key = bytes.fromhex(cfg['key'])
+            slf = parse_slf(int(cfg.get('slf', '0x8B'), 0))
+            rlc = self._secure_store.get_rlc(address)
+            dev = SecureDevice(key=key, rlc=rlc, rlc_size=slf.rlc_size,
+                               rlc_tx=slf.rlc_tx, cmac_len=slf.cmac_len)
+            # secure DATA field = bytes between the RORG byte and the trailing
+            # sender(4)+status(1); length = cmac(3/4) + enc (+ optional RLC)
+            wire = bytes(packet.data[1:len(packet.data) - 5])
+            inner = decrypt_telegram(dev, packet.rorg, wire)
+            if inner is None:
+                logging.warning("secure telegram from %s failed auth (RLC/CMAC)",
+                                enocean.utils.to_hex_string(packet.sender))
+                return
+            self._secure_store.set_rlc(address, dev.rlc)
+            inner_rorg, inner_data = inner
+            if inner_rorg is None:
+                # RORG-less RPS/PTM payload nibble
+                inner_rorg = 0xF6
+            # route the recovered bytes as a normal radio telegram
+            # (data layout: rorg, payload, sender, status)
+            payload = list(inner_data)
+            status = packet.data[-1] if packet.data else 0
+            data = [inner_rorg] + payload + list(packet.sender) + [status]
+            try:
+                from enocean.protocol.packet import RadioPacket
+                from enocean.protocol.constants import PACKET
+                recovered = RadioPacket(PACKET.RADIO_ERP1, data=data,
+                                        optional=list(getattr(packet, 'optional', []) or []))
+                recovered.parse()
+                recovered.received = getattr(packet, 'received', None)
+                logging.info("decrypted secure telegram -> RORG 0x%02X from %s",
+                             inner_rorg, enocean.utils.to_hex_string(packet.sender))
+                self._process_radio_packet(recovered)
+            except Exception as exc:   # pylint: disable=broad-except
+                logging.error("secure decode routing failed: %s", exc)
+        except Exception as exc:   # pylint: disable=broad-except
+            logging.error("secure telegram handling failed: %s", exc)
+
     def _process_radio_packet(self, packet):
         # Universal Teach-In telegrams are handled separately
         if packet.rorg == RORG.UTE:
             self._handle_ute_packet(packet)
+            return
+
+        # secure telegrams (SEC / SEC_ENCAPS) - AES/VAES + rolling code
+        if packet.rorg in (RORG.SEC, RORG.SEC_ENCAPS):
+            self._handle_secure_packet(packet)
             return
 
         address = enocean.utils.combine_hex(packet.sender)

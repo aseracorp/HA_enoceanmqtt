@@ -1297,3 +1297,44 @@ def test_tcp_communicator_backoff_reconnect():
         assert calls.get('connected'), 'never reached connected state'
     finally:
         socket.socket = orig
+
+
+def test_secure_rlc_store_persistence():
+    """rolling codes persist across store reloads (replay protection)."""
+    from enoceanmqtt.secure_store import SecureStore
+    with tempfile.TemporaryDirectory() as tmp:
+        db = os.path.join(tmp, 'secure_rlc.json')
+        s1 = SecureStore(db)
+        assert s1.get_rlc(0x123456) == 0
+        s1.set_rlc(0x123456, 42)
+        s2 = SecureStore(db)  # "restart"
+        assert s2.get_rlc(0x123456) == 42
+
+
+def test_secure_telegram_roundtrip():
+    """encrypt + decrypt a VAES secure telegram round-trips with RLC advance."""
+    from enoceanmqtt.security import (SecureDevice, decrypt_telegram,
+                                      encrypt_telegram, parse_slf)
+    # PTM/RPS-style (RORG-less 0x30), 24-bit implicit RLC, 3-byte CMAC (0x8B)
+    dev = SecureDevice(key=bytes(range(16)), rlc=7, rlc_size=3,
+                       rlc_tx=False, cmac_len=3)
+    rorg_s, wire = encrypt_telegram(dev, 0xF6, b'\x0c')  # nibble payload
+    assert rorg_s == 0x30
+    assert dev.rlc == 8  # advanced
+
+    rx = SecureDevice(key=bytes(range(16)), rlc=7, rlc_size=3,
+                      rlc_tx=False, cmac_len=3)
+    inner = decrypt_telegram(rx, rorg_s, wire)
+    assert inner is not None
+    assert inner[0] is None          # RORG-less
+    assert inner[1][0] == 0x0c       # nibble payload round-trips
+    assert rx.rlc == 8               # receiver advanced to match
+
+    # replayed (old RLC) telegram must be rejected
+    replay = SecureDevice(key=bytes(range(16)), rlc=8, rlc_size=3,
+                          rlc_tx=False, cmac_len=3)
+    assert decrypt_telegram(replay, rorg_s, wire) is None
+
+    # SLF parse sanity
+    slf = parse_slf(0x8B)
+    assert slf.vaes and slf.rlc_size == 3 and slf.cmac_len == 3 and not slf.rlc_tx
