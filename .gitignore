@@ -13,3 +13,5 @@ dist
 *.priv
 .tests
 .venv
+# cover position store (created at runtime)
+cover_positions.json

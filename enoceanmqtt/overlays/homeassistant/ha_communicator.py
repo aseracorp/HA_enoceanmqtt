@@ -88,12 +88,24 @@ class HACommunicator(Communicator):
                     new_sens['rorg'] = int(new_sens['rorg'],0)
                     new_sens['func'] = int(new_sens['func'],0)
                     new_sens['type'] = int(new_sens['type'],0)
+                    # Eltako FSB shutter actuators: mark as cover + default
+                    # travel time so the daemon accumulates/persists position.
+                    if model.lower().startswith('fsb'):
+                        new_sens['category'] = 'cover'
+                    if cur_model.get('shut_time'):
+                        new_sens['shut_time'] = cur_model.get('shut_time')
                     # Better to work with JSON in HA so force JSON usage
                     # Also force publish_rssi and publish_date
                     new_sens['publish_json'] = "1"
                     new_sens['publish_rssi'] = "1"
                     new_sens['publish_date'] = "1"
                     new_sens.setdefault('persistent', "1")
+                    # Eltako shutter actuators (FSB14/FSB61/FJ62) are covers:
+                    # tag them so the backend accumulates + persists the
+                    # absolute position (survives restarts).
+                    if model.lower().startswith('fsb') or model.lower().startswith('fj'):
+                        new_sens['category'] = 'cover'
+                        new_sens['shut_time'] = str(cur_model.get('shut_time', '') or '')
                     sensors.append(new_sens)
                     logging.debug("Created sensor: %s", new_sens)
 
