@@ -814,29 +814,41 @@ class Communicator:
 
         RPS telegrams do not carry an EEP, but the single data byte (data[1])
         encodes button/switch fields whose bit layout differs per EEP (from
-        the EnOcean EEP.xml field offsets). Values that are unique to a
-        specific EEP (smoke, leakage, key card) are matched exactly; the
-        rocker switch / window handle / push button are told apart by which
-        bit groups are used. Returns (func, type) or None.
+        the EnOcean EEP.xml field offsets).
+
+        Warning: the D0 bit spaces of the 2-rocker switch (F6-02-01) overlap
+        with the smoke detector (F6-05-02) and leakage sensor (F6-05-01):
+          0x10 / 0x30 = smoke alarm ON / battery low  BUT also rocker-2 press
+          0x11        = water detected                BUT also rocker-2 press
+        A single RPS telegram therefore cannot tell them apart unambiguously.
+        Rocker switches are by far the most common F6 device and are exactly
+        what a user triggers during teach-in, so ambiguous values are
+        classified as the rocker switch. Only 0x70 (key card) is unique to a
+        detector. Users with a real smoke/leakage sensor can correct the EEP
+        in the edit dialog.
+
+        Returns (func, type) or None.
         """
         if packet.rorg != RORG.RPS or len(packet.data) < 2:
             return None
         d0 = packet.data[1]
 
-        # exact value matches (unique to one EEP)
+        # 0x70 is NOT a valid 2-rocker state (R2 would exceed 0..3) - it is
+        # the Key Card Activated Switch (F6-04-01). Unambiguous.
         if d0 == 0x70:
             return (0x04, 0x01)   # Key Card Activated Switch
-        if d0 == 0x11:
-            return (0x05, 0x01)   # Liquid Leakage Sensor
-        if d0 in (0x10, 0x30):
-            return (0x05, 0x02)   # Smoke Detector
 
-        # window handle uses only bits 2-3 (values 1..3)
+        # window handle uses only bits 2-3 (values 1..3): 0x04 / 0x0C.
+        # These are not valid rocker presses (R1=0, EB=0/1, R2=0) and not
+        # smoke/leakage values.
         if d0 in (0x04, 0x0C):
             return (0x10, 0x00)   # Window Handle
 
-        # 2-rocker switch: R2 (bits 4-6) or SA (bit 7) set, or R1 (bits 0-2)
-        # set without bit 2 (bit 2 belongs to the window handle)
+        # Any other D0 that carries R1 (bits 0-2), EB (bit 3), R2 (bits 4-6)
+        # or SA (bit 7) is a 2-rocker switch (F6-02-01). This includes the
+        # values 0x10/0x30/0x11 that also appear in smoke/leakage telegrams -
+        # they are classified as rocker because that is the overwhelmingly
+        # common and user-triggered F6 device.
         r2 = (d0 >> 4) & 0x07
         sa = (d0 >> 7) & 0x01
         r1 = (d0 >> 0) & 0x07
