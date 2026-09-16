@@ -359,10 +359,18 @@ class HACommunicator(Communicator):
             pass
 
         if device_map is None:
-            logging.warning('Device not yet supported: %s%s',
-                            eep_dash, ' (Virtual).' if is_virtual else \
-                                      '. Only RSSI sensor will be available')
-            device_map = []
+            # not hand-curated in mapping.yaml -> generate a default entity
+            # map straight from the code-defined EEP engine, so every
+            # decodable profile auto-appears in Home Assistant.
+            from enoceanmqtt.default_ha_mapping import build_default_entities
+            from enoceanmqtt.eep_engine import engine as _eep_engine
+            from enoceanmqtt.eep_registry import get_registry
+            prof = _eep_engine.find_profile(rorg, func, type_)
+            reg = get_registry().get(rorg, func, type_)
+            category = (reg or {}).get('category') if reg else None
+            device_map = build_default_entities(prof, category) if prof else []
+            logging.info('Generated default HA entities for %s: %d fields',
+                         eep_dash, len(device_map))
 
         if not is_virtual:
             # Add RSSI sensor in HA

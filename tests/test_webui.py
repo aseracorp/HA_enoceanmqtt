@@ -1223,3 +1223,32 @@ def test_device_discovery_serial_no_ports():
     from enoceanmqtt.device_discovery import discover_serial
     ports = discover_serial()
     assert isinstance(ports, list)
+
+
+def test_default_ha_mapping():
+    """unmapped profiles get sensible default HA entities from the engine."""
+    from enoceanmqtt.eep_engine import engine
+    from enoceanmqtt.default_ha_mapping import build_default_entities
+
+    # F6-02-01 rocker -> binary_sensors (enum fields)
+    p = engine.find_profile(0xF6, 0x02, 0x01)
+    ents = build_default_entities(p)
+    comps = [e['component'] for e in ents]
+    assert all(c == 'binary_sensor' for c in comps), comps
+    names = [e['name'] for e in ents]
+    assert 'R1' in names and 'SA' in names
+
+    # A5-02-05 temp -> numeric sensor; skip control bits (LRNB)
+    p2 = engine.find_profile(0xA5, 0x02, 0x05)
+    ents2 = build_default_entities(p2)
+    names2 = [e['name'] for e in ents2]
+    assert 'TMP' in names2 and 'LRNB' not in names2
+    assert all(e['component'] == 'sensor' for e in ents2)
+
+    # the builder covers all 230 profiles without error (union of fields)
+    from enoceanmqtt.eep_engine import PROFILES
+    total = 0
+    for key, prof in PROFILES.items():
+        build_default_entities(prof)
+        total += 1
+    assert total == len(PROFILES)
