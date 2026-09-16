@@ -14,6 +14,8 @@ from enoceanmqtt.tcpclientcommunicator import TCPClientCommunicator
 from enocean.protocol.packet import RadioPacket, UTETeachInPacket
 from enoceanmqtt.eep_engine import engine as eep_engine
 from enoceanmqtt.eep_engine.utils import to_bitarray
+from enoceanmqtt.cover import POSITION_SUBTOPIC, SHUT_TIME_SUBTOPIC, update_cover_position
+from enoceanmqtt.cover_store import CoverStore
 from enocean.protocol.constants import PACKET, RETURN_CODE, RORG
 import enocean.utils
 import paho.mqtt.client as mqtt
@@ -116,6 +118,9 @@ class Communicator:
         self._store = SensorStore(self._resolve_sensor_store_path())
         self._dynamic_names = set()
         self._load_dynamic_sensors()
+
+        # persistent cover positions (Eltako FSB-type, TinyDB)
+        self._cover_store = CoverStore(self.conf.get('cover_positions_file'))
 
         # check for mandatory configuration
         if 'mqtt_host' not in self.conf or 'enocean_port' not in self.conf:
@@ -1210,9 +1215,13 @@ class Communicator:
             if not found_property:
                 logging.warning("message not interpretable: %s", sensor['name'])
             else:
+                # Eltako FSB covers: accumulate + persist the absolute position
+                # (running-time A5-3F-7F telegrams, absolute F6 0x70/0x50).
+                address = enocean.utils.combine_hex(packet.sender)
+                if sensor.get('category') == 'cover' or str(sensor.get('shut_time', '')).strip():
+                    self._update_cover_position(address, sensor, mqtt_json)
                 self._publish_mqtt(sensor, mqtt_json)
                 # remember the latest decoded values for the web UI
-                address = enocean.utils.combine_hex(packet.sender)
                 self._latest_value[address] = {
                     'values': dict(mqtt_json),
                     'ts': packet.received.isoformat() if packet.received else None,
@@ -1227,6 +1236,31 @@ class Communicator:
         else:
             # learn request received
             logging.info("learn request not emitted to mqtt")
+
+    def _update_cover_position(self, address, sensor, mqtt_json):
+        """accumulate + persist the absolute cover position for an Eltako FSB.
+
+        Publishes the position to the retained ``_ha/pos`` sub-topic (two
+        levels deep so it stays invisible to the device's ``+`` subscribers)
+        and the configured travel time to ``_ha/shut_time``.
+        """
+        try:
+            prev = self._cover_store.get_position(address)
+            shut_time = sensor.get('shut_time') or self.conf.get('shut_time') or 255
+            pos = update_cover_position(prev, mqtt_json.get('_RAW_DATA_'),
+                                        mqtt_json, shut_time)
+            if pos is not None:
+                self._cover_store.set_position(address, pos)
+                # publish the retained absolute position HA reads
+                if self.mqtt:
+                    topic = sensor['name'] + POSITION_SUBTOPIC
+                    self.mqtt.publish(topic, '{"POS": %d}' % pos, retain=True)
+                    self.mqtt.publish(sensor['name'] + SHUT_TIME_SUBTOPIC,
+                                      str(shut_time), retain=True)
+                mqtt_json['POS'] = pos
+        except Exception:   # pylint: disable=broad-except
+            logging.exception("cover position update failed for %s",
+                              sensor.get('name'))
 
     def _eep_decode(self, packet, sensor):
         """decode a telegram with the code-defined EEP engine.
