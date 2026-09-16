@@ -1326,13 +1326,17 @@ class Communicator:
                 if sensor.get('category') == 'cover' or str(sensor.get('shut_time', '')).strip():
                     self._update_cover_position(address, sensor, mqtt_json)
                 self._publish_mqtt(sensor, mqtt_json)
-                # remember the latest decoded values for the web UI
+                # remember the latest decoded values for the web UI.
+                # The LRN / LRNB learn bit is a protocol flag, not a measured
+                # value - drop it from the UI (latest + graph history).
+                ui_values = {k: v for k, v in mqtt_json.items()
+                             if k not in ('LRN', 'LRNB')}
                 self._latest_value[address] = {
-                    'values': dict(mqtt_json),
+                    'values': ui_values,
                     'ts': packet.received.isoformat() if packet.received else None,
                 }
                 # append to the rolling history for the value graph
-                entry = {'values': dict(mqtt_json),
+                entry = {'values': ui_values,
                          'ts': packet.received.isoformat() if packet.received else None}
                 hist = self._history.setdefault(address, [])
                 hist.append(entry)
