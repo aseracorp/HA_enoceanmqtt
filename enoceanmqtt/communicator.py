@@ -487,10 +487,82 @@ class Communicator:
             for key, value in payload.items():
                 self.conf[key] = str(value)
             logging.info("Updated [CONFIG] in %s", conf_file)
+            # apply the changed settings live - no process restart needed
+            self._apply_live_config(payload)
             return {'ok': True}
         except Exception as exc:   # pylint: disable=broad-except
             logging.error("save_config failed: %s", exc)
             return {'ok': False, 'error': str(exc)}
+
+    def _apply_live_config(self, payload):
+        """apply config changes without restarting the process.
+
+        Reconnects the MQTT client when broker settings changed and the
+        EnOcean transceiver when the port changed. The web UI stays up so a
+        misconfigured broker/port does not take the configurator down.
+        """
+        changed = set(payload.keys())
+        mqtt_keys = {'mqtt_host', 'mqtt_port', 'mqtt_user', 'mqtt_pwd',
+                     'mqtt_ssl', 'mqtt_ssl_insecure', 'mqtt_ssl_ca_certs',
+                     'mqtt_ssl_certfile', 'mqtt_ssl_keyfile',
+                     'mqtt_keepalive', 'mqtt_client_id', 'mqtt_prefix'}
+        if changed & mqtt_keys:
+            logging.info("MQTT settings changed - reconnecting live")
+            try:
+                self._reconnect_mqtt()
+            except Exception as exc:   # pylint: disable=broad-except
+                logging.error("live MQTT reconnect failed: %s", exc)
+        if 'enocean_port' in changed:
+            logging.info("EnOcean port changed - reconnecting transceiver live")
+            try:
+                self._reconnect_enocean()
+            except Exception as exc:   # pylint: disable=broad-except
+                logging.error("live EnOcean reconnect failed: %s", exc)
+
+    def _reconnect_mqtt(self):
+        """reconnect the MQTT client with the current conf values."""
+        if not self.mqtt:
+            return
+        try:
+            self.mqtt.loop_stop()
+            self.mqtt.disconnect()
+        except Exception:   # pylint: disable=broad-except
+            pass
+        mqtt_port = int(self.conf.get('mqtt_port', 1883))
+        keepalive = int(self.conf.get('mqtt_keepalive', 60))
+        client_id = self.conf.get('mqtt_client_id', '')
+        self.mqtt = mqtt.Client(client_id=client_id)
+        self.mqtt.on_connect = self._on_connect
+        self.mqtt.on_disconnect = self._on_disconnect
+        self.mqtt.on_message = self._on_mqtt_message
+        if self.conf.get('mqtt_user'):
+            self.mqtt.username_pw_set(self.conf['mqtt_user'], self.conf.get('mqtt_pwd'))
+        if str(self.conf.get('mqtt_ssl')) in ("True", "true", "1"):
+            self.mqtt.tls_set(
+                ca_certs=self.conf.get('mqtt_ssl_ca_certs'),
+                certfile=self.conf.get('mqtt_ssl_certfile'),
+                keyfile=self.conf.get('mqtt_ssl_keyfile'))
+            if str(self.conf.get('mqtt_ssl_insecure')) in ("True", "true", "1"):
+                self.mqtt.tls_insecure_set(True)
+        self.mqtt.connect_async(self.conf['mqtt_host'], port=mqtt_port, keepalive=keepalive)
+        self.mqtt.loop_start()
+
+    def _reconnect_enocean(self):
+        """(re)connect the EnOcean transceiver with the current conf port."""
+        if getattr(self, 'enocean', None) is not None:
+            try:
+                self.enocean.stop()
+            except Exception:   # pylint: disable=broad-except
+                pass
+        eport = self.conf['enocean_port']
+        seport = eport.split(':')
+        if seport[0] == "tcp":
+            self.enocean = TCPClientCommunicator(seport[1], int(seport[2]))
+        else:
+            self.enocean = SerialCommunicator(eport)
+        self.enocean.start()
+        self.enocean_sender = None
+        self.enocean.teach_in = False
 
     def _classify_category(self, sensor):
         """the device category the web UI shows (mirrors describe_sensor).
@@ -1863,9 +1935,29 @@ class Communicator:
                             self._diag['transmit_failures'])
 
     def run(self):
-        """the main loop with blocking enocean packet receive handler"""
+        """the main loop with blocking enocean packet receive handler
+
+        The loop never exits when the transceiver is temporarily
+        unavailable - it waits and reconnects (exponential backoff) so the
+        web UI stays up for configuration. Only a process supervisor restart
+        or a keyboard interrupt stops it.
+        """
         # start endless loop for listening
-        while self.enocean.is_alive() and not self._restart_requested:
+        _reconnect_delay = 1
+        while not self._restart_requested:
+            # (re)connect the transceiver if the previous one died
+            if self.enocean is None or not self.enocean.is_alive():
+                try:
+                    logging.warning("EnOcean transceiver not alive; reconnecting "
+                                    "in %ds", _reconnect_delay)
+                    time.sleep(_reconnect_delay)
+                    _reconnect_delay = min(_reconnect_delay * 2, 30)
+                    self._reconnect_enocean()
+                except Exception as exc:   # pylint: disable=broad-except
+                    logging.error("EnOcean reconnect failed: %s", exc)
+                    continue
+                _reconnect_delay = 1
+            # Request transmitter ID, if needed
             # Request transmitter ID, if needed
             if self.enocean_sender is None:
                 self.enocean_sender = self.enocean.base_id

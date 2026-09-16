@@ -83,6 +83,11 @@ class WebInterface:
             self._srv = None
 
     # -- controller methods (bound into the handler) --------------------------
+    def discover(self):
+        """return locally attached EnOcean dongles + mDNS ser2net endpoints"""
+        from enoceanmqtt.device_discovery import discover
+        return discover()
+
     def get_status(self):
         com = self.communicator
         sensors = []
@@ -231,6 +236,8 @@ class WebInterface:
                 # --- JSON API ---
                 if self.command == 'GET' and path == '/api/status':
                     return self._send(200, web.get_status())
+                if self.command == 'GET' and path == '/api/discovery':
+                    return self._send(200, web.discover())
                 if self.command == 'GET' and path == '/api/config':
                     return self._send(200, web.get_config())
                 if self.command == 'POST' and path == '/api/restart':
