@@ -5,7 +5,7 @@ window.LANG_de = {
     start_teachin: 'Einlernen starten',    stop_teachin: 'Einlernen stoppen',
     add_device: 'Gerät hinzufügen',    add_sub: 'Wählen Sie, welche Art von Gerät hinzugefügt werden soll',
     add_sensor: 'Sensor',    add_actor: 'Aktor',
-    add_bidir: 'Bidirektional',
+    add_bidir: 'Bidirektional',    add: 'Hinzufügen',
     teachin_active: 'Einlernen aktiv - drücken Sie die Anlern-Taste am Sensor… (oder eine beliebige Taste, wenn keine Anlern-Taste vorhanden ist)',    sensor_name: 'Sensorname',
     cancel: 'Abbrechen',    save_sensor: 'Sensor speichern',
     manual_hint: 'oder füllen Sie die Felder unten manuell aus.',    desc_sensor: 'Sender',
