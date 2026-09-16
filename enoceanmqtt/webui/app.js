@@ -112,7 +112,7 @@ function fmtLatest(s) {
   const meta = l.meta || {};
   // show value + unit only; each value is a clickable graph link, e.g.
   // "170 lx · 21.44 °C · Button pressed"
-  const keys = Object.keys(l.values).filter((k) => !k.startsWith('_'));
+  const keys = Object.keys(l.values).filter((k) => !k.startsWith('_') && k !== 'LRN' && k !== 'LRNB');
   if (!keys.length) return '—';
   return keys.map((k) => {
     let v = l.values[k];
@@ -139,7 +139,7 @@ async function showGraph(name, field) {
     const hist = res.history || [];
     if (!hist.length) { $('graph-body').innerHTML = 'No values recorded yet for this device.'; return; }
     // pick the requested field (e.g. _RSSI_) or the first real (non-meta) value key
-    let keys = Object.keys(hist[hist.length - 1].values || {}).filter((k) => !k.startsWith('_'));
+    let keys = Object.keys(hist[hist.length - 1].values || {}).filter((k) => !k.startsWith('_') && k !== 'LRN' && k !== 'LRNB');
     if (field) {
       const hasField = hist.some((h) => h.values && h.values[field] !== undefined);
       if (hasField) keys = [field];
