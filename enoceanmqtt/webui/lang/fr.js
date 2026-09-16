@@ -5,7 +5,7 @@ window.LANG_fr = {
     start_teachin: 'Démarrer l\'enseignement',    stop_teachin: 'Arrêter l\'enseignement',
     add_device: 'Ajouter un appareil',    add_sub: 'Choisissez le type d\'appareil à ajouter',
     add_sensor: 'Capteur',    add_actor: 'Actionneur',
-    add_bidir: 'Bidirectionnel',
+    add_bidir: 'Bidirectionnel',    add: 'Ajouter',
     teachin_active: 'Enseignement actif - appuyez sur le bouton d\'enseignement du capteur… (ou sur n\'importe quel bouton si aucun bouton d\'enseignement n\'est présent)',    sensor_name: 'Nom du capteur',
     cancel: 'Annuler',    save_sensor: 'Enregistrer le capteur',
     manual_hint: 'ou remplissez les champs ci-dessous manuellement.',    desc_sensor: 'Émetteur',

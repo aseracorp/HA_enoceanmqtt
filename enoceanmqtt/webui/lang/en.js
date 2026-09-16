@@ -5,7 +5,7 @@ window.LANG_en = {
     start_teachin: 'Start teach-in',    stop_teachin: 'Stop teach-in',
     add_device: 'Add device',    add_sub: 'Choose what kind of device to add',
     add_sensor: 'Sensor',    add_actor: 'Actor',
-    add_bidir: 'Bidirectional',
+    add_bidir: 'Bidirectional',    add: 'Add',
     teachin_active: 'Teach-in active - press the teach-in button on your sensor… (or any button if no teach-in button is present)',    sensor_name: 'Sensor name',
     cancel: 'Cancel',    save_sensor: 'Save sensor',
     manual_hint: 'or fill in the fields below manually.',    desc_sensor: 'Sender',

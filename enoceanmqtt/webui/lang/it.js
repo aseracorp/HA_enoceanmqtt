@@ -5,7 +5,7 @@ window.LANG_it = {
     start_teachin: 'Avvia teach-in',    stop_teachin: 'Ferma teach-in',
     add_device: 'Aggiungi dispositivo',    add_sub: 'Scegli il tipo di dispositivo da aggiungere',
     add_sensor: 'Sensore',    add_actor: 'Attuatore',
-    add_bidir: 'Bidirezionale',
+    add_bidir: 'Bidirezionale',    add: 'Aggiungi',
     teachin_active: 'Teach-in attivo - premi il pulsante teach-in sul sensore… (o un pulsante qualsiasi se non è presente un pulsante teach-in)',    sensor_name: 'Nome sensore',
     cancel: 'Annulla',    save_sensor: 'Salva sensore',
     manual_hint: 'oppure compila i campi qui sotto manualmente.',    desc_sensor: 'Mittente',
