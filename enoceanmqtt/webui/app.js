@@ -313,6 +313,36 @@ function openConfigEdit() {
 }
 $('btn-top-config')?.addEventListener('click', openConfigEdit);
 $('configedit-cancel')?.addEventListener('click', () => { $('configedit-overlay').hidden = true; });
+$('configedit-detect')?.addEventListener('click', async () => {
+  try {
+    const data = await api('/api/discovery');
+    const serial = (data.serial || []).filter(s => s.candidate);
+    const mdns = data.mdns || [];
+    const pick = (ser) => {
+      // prefer a real ttyUSB/ttyACM candidate, else the first mdns endpoint
+      const found = (serial.find(s => s.enocean) || serial.find(s => s.candidate) || serial[0]);
+      if (found) return found.device;
+      if (mdns.length) {
+        const m = mdns[0];
+        return (m.txt && (m.txt.tcpPort || m.txt.port)) ? 'tcp:' + m.host + ':' + m.txt.port : (m.port ? 'tcp:' + (m.host || '') + ':' + m.port : null);
+      }
+      return null;
+    };
+    const val = pick();
+    const field = Array.from(document.querySelectorAll('#config-grid [data-cfgkey="enocean_port"]'))[0];
+    if (field && val) {
+      field.value = val;
+      toast('Detected: ' + val, 'success');
+    } else if (serial.length || mdns.length) {
+      const list = serial.map(s => s.device).concat(mdns.map(m => m.name + ' @' + (m.port || '')));
+      toast('No device auto-selected. Found: ' + list.join(', '), 'error');
+    } else {
+      toast('No EnOcean device found', 'error');
+    }
+  } catch (err) {
+    toast(t('err_detect_device') + err.message, 'error');
+  }
+});
 
 function configPayloadFromGrid() {
   const payload = {};

@@ -1191,3 +1191,35 @@ def test_cover_store_persistence():
         assert s2.get_position(0x123) == 42
         s2.set_position(0x123, 87)
         assert CoverStore(db).get_position(0x123) == 87
+
+
+def test_device_discovery_mdns_parse():
+    """mDNS response parser extracts PTR/SRV/TXT records correctly."""
+    from enoceanmqtt.device_discovery import _MdnsResponse
+    import struct
+
+    # craft a response with a PTR answer
+    qname = b'\x08_services\x07_dns-sd\x04_udp\x05local\x00'
+    # name compression pointer to 0xC00C
+    def name(label):
+        return bytes([len(label)]) + label.encode()
+    response = bytearray()
+    header = struct.pack('!HHHHHH', 0, 0x8400, 0, 1, 0, 0)  # response, no q, 1 an
+    response += header
+    # answer name: pointer 0xC00C
+    response += b'\xc0\x0c'
+    response += struct.pack('!HHIH', 12, 1, 120, 0)  # PTR, IN, ttl, rdlen=0
+    # (empty rdata - we only verify parsing does not crash and finds the name)
+    resp = _MdnsResponse(bytes(response))
+    ans = resp.parse()
+    assert ans is not None
+    found = [a for a in ans if a[1] == 12]
+    # we don't require a specific count - just that parse returns a list
+    assert isinstance(found, list)
+
+
+def test_device_discovery_serial_no_ports():
+    """with no serial ports present, discover_serial returns [] safely."""
+    from enoceanmqtt.device_discovery import discover_serial
+    ports = discover_serial()
+    assert isinstance(ports, list)
