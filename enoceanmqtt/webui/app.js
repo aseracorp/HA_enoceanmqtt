@@ -589,8 +589,10 @@ function populateEepDatalist(listId, mode) {
   if (!ul) return;
   const catFilter = (p) => {
     if (!mode) return true;
-    if (mode === 'sensor') return p.category === 'sensor';
-    if (mode === 'actor') return p.category === 'actor' || (typeof p.eep === 'string' && p.eep.toUpperCase().startsWith('F6'));
+    if (mode === 'sensor') return p.category !== 'bidirectional';
+    // every EEP can be used as an actor - we can simulate any EEP (even a
+    // sensor one) by sending it from a virtual sender.
+    if (mode === 'actor') return true;
     if (mode === 'bidirectional') return p.category === 'bidirectional';
     return true;
   };

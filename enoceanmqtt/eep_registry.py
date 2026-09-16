@@ -1,59 +1,25 @@
-# Author: Marc Alexandre K. <marcalexandrek-developer@yahoo.fr>
-"""EnOcean Equipment Profile (EEP) registry
+"""EnOcean Equipment Profile (EEP) registry — backed by the code-defined engine.
 
-The Python enocean library ships an ``EEP.xml`` file (the same database that is
-published as the EnOcean EEP PDF) describing every supported RORG/FUNC/TYPE
-profile. This module reads that file and exposes the list of profiles so the web
-interface can offer a human-readable EEP picker (e.g. when adding a sensor
-manually or when a UTE teach-in telegram does not carry the EEP).
+This replaces the old EEP.xml parser. Profiles are now expressed as *code* in
+``eep_engine/`` (the same engine that validates against the official EnOcean
+certification vectors — see ``tests/test_eep_certification.py``). There is no
+hardcoded EEP table here.
 
-The enocean package must be importable (it is a hard dependency of enoceanmqtt).
+The web UI needs each profile tagged with a category so the Add popup can
+offer sensors / actors / bidirectional devices. Per the project design, every
+profile is usable as a sensor OR as an actor (we can simulate any sensor EEP
+as a virtual sender), so profiles are only split into:
+  - ``bidirectional`` — the handful of EEP families that genuinely send AND
+    receive (e.g. A5-20 actuators, D2-01/06 smartACK valves, D2-11 smartACK)
+  - ``sensor`` — everything else (also usable as an actor).
+``smartack`` marks the fast-acknowledgement devices that expect a quick reply.
 """
 import logging
-import os
-import xml.etree.ElementTree as ET
 
-#: short human names for the EnOcean RORG families
-RORG_NAMES = {
-    '0xF6': 'RPS (Switches / Rocker)',
-    '0xD5': '1BS (Contact / Status)',
-    '0xA5': '4BS (Measurement)',
-    '0xD2': 'VLD (Variable Length)',
-    '0xD1': 'MSC (Managed / Repeater)',
-}
+from enoceanmqtt.eep_engine import PROFILES
 
-#: explicit overrides for profiles that are not (or are ambiguous) in the
-#: EEP database. Keyed by 'RORG-FUNC-TYPE'. ``category`` is one of
-#: ``sensor``, ``actor`` or ``bidirectional``; ``smartack`` marks devices
-#: that expect a fast (<~300ms) acknowledgement reply.
-#:
-#: A5-20-01 - 4BS "Battery Powered Actuator" family, bi-directional actor
-#:            (the EEP database names func 0x20 "Actuator (BI-DIR)").
-#: D2-11-01 - VLD smartACK "Bidirectional valve" profile. Not present in the
-#:            shipped EEP.xml (v2.6.4), added here so it can be used and gets
-#:            the fast smartACK reply path.
-EEP_OVERRIDES = {
-    'A5-20-01': {'category': 'bidirectional', 'name': 'Bi-directional Battery Powered Actuator'},
-    'A5-20-02': {'category': 'bidirectional', 'name': 'Bi-directional Battery Powered Actuator'},
-    'A5-20-03': {'category': 'bidirectional', 'name': 'Bi-directional Battery Powered Actuator'},
-    'A5-20-09': {'category': 'bidirectional', 'name': 'Bi-directional Battery Powered Actuator'},
-    'A5-20-0A': {'category': 'bidirectional', 'name': 'Bi-directional Battery Powered Actuator'},
-    'D2-11-01': {'category': 'sensor', 'smartack': True,
-                 'name': 'Bidirectional Valve (smartACK)', 'rorg_name': 'VLD (Variable Length)'},
-    'D2-11-02': {'category': 'sensor', 'smartack': True,
-                 'name': 'Bidirectional Valve (smartACK)', 'rorg_name': 'VLD (Variable Length)'},
-}
-
-#: RORG-FUNC families that are actors (devices that RECEIVE commands from us,
-#: as opposed to sensors that send measurements). Actors may still report
-#: status back, hence some are also bidirectional.
-ACTOR_FUNCS = {
-    0xA5: {0x10, 0x11, 0x20},
-    0xD2: {0x01, 0x03, 0x05, 0x06},
-}
-
-#: RORG-FUNC families that are inherently bidirectional (device expects a
-#: reply from the controller when it sends a telegram).
+#: RORG-FUNC families that are inherently bidirectional (device sends a
+#: telegram and expects a reply from the controller).
 BIDIRECTIONAL_FUNCS = {
     0xA5: {0x20},
     0xD2: {0x01, 0x06, 0x11},
@@ -66,120 +32,49 @@ SMARTACK_FUNCS = {
 
 
 class EEPRegistry:
-    """reads the enocean library EEP database into a simple list of profiles"""
+    """the code-defined EEP profiles, exposed as the legacy list API."""
 
     def __init__(self):
         self.profiles = []
-        self._rorg_names = {}
-        try:
-            self._load()
-        except Exception as exc:   # pylint: disable=broad-except
-            logging.error("Cannot load EEP registry: %s", exc)
-
-    def _load(self):
-        # locate EEP.xml shipped with the enocean package
-        try:
-            import enocean
-        except ImportError:
-            logging.error("enocean package not available, EEP registry is empty")
-            return
-        eep_path = os.path.join(os.path.dirname(os.path.realpath(enocean.__file__)),
-                                'protocol', 'EEP.xml')
-        if not os.path.isfile(eep_path):
-            logging.error("Cannot find EEP.xml at %s", eep_path)
-            return
-        tree = ET.parse(eep_path)
-        root = tree.getroot()
-        for telegram in root.findall('telegram'):
-            rorg = telegram.get('rorg')
-            rorg_name = RORG_NAMES.get(rorg, telegram.get('type', ''))
-            for function in telegram.findall('profiles'):
-                func = function.get('func')
-                for profile in function.findall('profile'):
-                    type_ = profile.get('type')
-                    entry = {
-                        'rorg': int(rorg, 16),
-                        'func': int(func, 16),
-                        'type': int(type_, 16),
-                        'rorg_hex': rorg,
-                        'func_hex': func,
-                        'type_hex': type_,
-                        'eep': f'{rorg}-{func}-{type_}',
-                        'name': profile.get('description') or f'Type {type_}',
-                        'rorg_name': rorg_name,
-                    }
-                    self._classify(entry)
-                    self.profiles.append(entry)
-
-        # add override profiles that are not present in the EEP.xml database
-        existing = {(p['rorg'], p['func'], p['type']) for p in self.profiles}
-        for eep, override in EEP_OVERRIDES.items():
-            try:
-                rorg, func, type_ = (int(x, 16) for x in eep.split('-'))
-            except (ValueError, TypeError):
-                continue
-            if (rorg, func, type_) in existing:
-                continue
-            rorg_hex = f'0x{rorg:02X}'
-            func_hex = f'0x{func:02X}'
-            type_hex = f'0x{type_:02X}'
-            smartack = bool(override.get('smartack'))
-            # smartACK devices are inherently bidirectional
-            bidirectional = (override.get('category') == 'bidirectional') or smartack
-            category = override.get('category', 'sensor')
-            if bidirectional:
-                category = 'bidirectional'
+        for (rorg, func, type_), profile in PROFILES.items():
             entry = {
-                'rorg': rorg, 'func': func, 'type': type_,
-                'rorg_hex': rorg_hex, 'func_hex': func_hex, 'type_hex': type_hex,
-                'eep': f'{rorg_hex}-{func_hex}-{type_hex}',
-                'name': override.get('name', f'Type {type_:02X}'),
-                'rorg_name': override.get('rorg_name', 'VLD (Variable Length)'),
-                'category': category,
-                'bidirectional': bidirectional,
-                'smartack': smartack,
+                'rorg': rorg,
+                'func': func,
+                'type': type_,
+                'rorg_hex': f'0x{rorg:02X}',
+                'func_hex': f'0x{func:02X}',
+                'type_hex': f'0x{type_:02X}',
+                'eep': f'0x{rorg:02X}-0x{func:02X}-0x{type_:02X}',
+                'name': profile.title,
+                'rorg_name': self._rorg_name(rorg),
             }
+            self._classify(entry)
             self.profiles.append(entry)
+        self.profiles.sort(key=lambda p: (p['rorg'], p['func'], p['type']))
+
+    @staticmethod
+    def _rorg_name(rorg):
+        names = {
+            0xF6: 'RPS (Switches / Rocker)',
+            0xD5: '1BS (Contact / Status)',
+            0xA5: '4BS (Measurement)',
+            0xD2: 'VLD (Variable Length)',
+            0xD1: 'MSC (Managed / Repeater)',
+        }
+        return names.get(rorg, f'RORG 0x{rorg:02X}')
 
     @staticmethod
     def _classify(entry):
-        '''assign category / bidirectional / smartack flags to a profile'''
-        eep = entry['eep']
+        """assign category / bidirectional / smartack flags to a profile."""
         rorg = entry['rorg']
         func = entry['func']
-        override = EEP_OVERRIDES.get(eep)
-        if override:
-            entry['category'] = override.get('category', 'sensor')
-            entry['bidirectional'] = bool(override.get('category') == 'bidirectional' or
-                                          override.get('bidirectional'))
-            entry['smartack'] = bool(override.get('smartack'))
-            if 'name' in override:
-                entry['name'] = override['name']
-            if 'rorg_name' in override:
-                entry['rorg_name'] = override['rorg_name']
-            return
-
-        bidirectional = func in BIDIRECTIONAL_FUNCS.get(rorg, set())
         smartack = func in SMARTACK_FUNCS.get(rorg, set())
-        is_actor = func in ACTOR_FUNCS.get(rorg, set())
-
-        # smartACK devices are inherently bidirectional (they receive commands
-        # and report status via the smartACK handshake), e.g. D2-11-01 - just
-        # a different mechanism than the A5-20 bidirectional family.
-        if smartack:
-            bidirectional = True
-
-        # A bidirectional device (smartACK or A5-20 ...) is its own third
-        # category. A plain one-way actor (receiver) stays an actor.
-        if bidirectional:
-            category = 'bidirectional'
-        elif is_actor:
-            category = 'actor'
-        else:
-            category = 'sensor'
-        entry['category'] = category
-        entry['bidirectional'] = bidirectional
+        bidirectional = func in BIDIRECTIONAL_FUNCS.get(rorg, set()) or smartack
         entry['smartack'] = smartack
+        entry['bidirectional'] = bidirectional
+        # every profile is usable as a sensor or an actor; only the
+        # bidirectional families form their own third category.
+        entry['category'] = 'bidirectional' if bidirectional else 'sensor'
 
     def search(self, query=''):
         """return profiles whose name/EEP matches the query (case-insensitive)"""
