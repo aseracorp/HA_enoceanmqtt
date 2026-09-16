@@ -143,3 +143,11 @@ type            = 0x0C
 address         = 0xBAAAAAAD
 # This sensor will be ignored
 ignore          = 1
+
+# ------------------------------------------------------------------
+# Secure EnOcean telegrams (AES/VAES, rolling code) - optional
+# Per-device pre-shared keys. Format: 16-byte key as 32 hex chars, plus the
+# device's SLF (0x8B default). The rolling code is persisted in
+# secure_rlc_file so replay protection survives restarts.
+#   secure_devices = { "0xFFD61181": { "key": "00112233445566778899AABBCCDDEEFF", "slf": "0x8B" } }
+#   secure_rlc_file = /data/secure_rlc.json
