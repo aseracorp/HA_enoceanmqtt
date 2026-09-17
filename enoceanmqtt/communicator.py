@@ -728,12 +728,66 @@ class Communicator:
                         for x in eep.split('-'))
 
     def eep_catalog(self):
-        """return the list of known EnOcean equipment profiles"""
-        return [{'eep': self._fmt_eep(p['eep']), 'name': p['name'], 'rorg_name': p['rorg_name'],
-                 'category': p.get('category', 'sensor'),
-                 'bidirectional': bool(p.get('bidirectional')),
-                 'smartack': bool(p.get('smartack'))}
-                for p in self._eep_registry.profiles]
+        """return the list of known EnOcean equipment profiles.
+
+        This is the standard code-defined catalog plus the custom Eltako
+        device models (FSB14/FSR14/…) from the HA mapping, so Eltako devices
+        can be selected in the web UI add-device popups.
+        """
+        catalog = [{'eep': self._fmt_eep(p['eep']), 'name': p['name'],
+                    'rorg_name': p['rorg_name'],
+                    'category': p.get('category', 'sensor'),
+                    'bidirectional': bool(p.get('bidirectional')),
+                    'smartack': bool(p.get('smartack'))}
+                   for p in self._eep_registry.profiles]
+        # append custom Eltako model entries (model -> its device EEPs)
+        for entry in self._eltako_catalog_entries():
+            catalog.append(entry)
+        return catalog
+
+    def _eltako_catalog_entries(self):
+        """build selectable catalog entries from the HA mapping's eltako section."""
+        try:
+            import yaml
+            mapping_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        'overlays', 'homeassistant', 'mapping.yaml')
+            if not os.path.isfile(mapping_file):
+                return []
+            data = yaml.safe_load(open(mapping_file, encoding='utf-8')) or {}
+            eltako = data.get('eltako') or {}
+            out = []
+            for model, model_cfg in eltako.items():
+                if not isinstance(model_cfg, dict):
+                    continue
+                for dc in (model_cfg.get('device_config') or []):
+                    if not isinstance(dc, dict):
+                        continue
+                    rorg = dc.get('rorg'); func = dc.get('func'); type_ = dc.get('type')
+                    if not (rorg and func and type_):
+                        continue
+                    parts = []
+                    for v in (rorg, func, type_):
+                        try:
+                            parts.append('%02X' % int(v, 16))
+                        except (ValueError, TypeError):
+                            parts = None
+                            break
+                    if not parts:
+                        continue
+                    eep = '-'.join(parts)
+                    out.append({
+                        'eep': eep,
+                        'name': 'Eltako %s' % model.upper(),
+                        'rorg_name': 'Eltako',
+                        'category': 'sensor',
+                        'bidirectional': False,
+                        'smartack': False,
+                        'eltako_model': model,
+                    })
+            return out
+        except Exception:   # pylint: disable=broad-except
+            logging.exception("failed to load Eltako catalog from mapping.yaml")
+            return []
 
     @property
     def diagnostics(self):

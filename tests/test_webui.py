@@ -1361,3 +1361,21 @@ def test_lrn_filtered_from_ui_stores():
         ui_values = {k: v for k, v in mqtt_json.items() if k not in ('LRN', 'LRNB')}
         assert 'LRN' not in ui_values and 'LRNB' not in ui_values
         assert 'TMP' in ui_values
+
+
+def test_eep_catalog_includes_eltako():
+    """the EEP catalog exposes Eltako model entries selectable in the web UI."""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {'mqtt_host':'localhost','mqtt_port':'1883',
+                'enocean_port':'tcp:127.0.0.1:9999','mqtt_prefix':'enocean/',
+                'webui_disable':'1','webui_sensor_store':os.path.join(tmp,'s.json')}
+        com = _mk_com(conf)
+        cat = com.eep_catalog()
+        elt = [e for e in cat if e.get('eltako_model')]
+        assert len(elt) > 0
+        names = {e['name'] for e in elt}
+        assert any('FSB14' in n for n in names), names
+        assert any('FSR14' in n for n in names), names
+        # the FSB14 multi-radio has both EEPs exposed
+        fsb_eeps = {e['eep'] for e in elt if 'FSB14' in e['name']}
+        assert 'A5-3F-7F' in fsb_eeps and 'F6-02-01' in fsb_eeps, fsb_eeps
