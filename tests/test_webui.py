@@ -1379,3 +1379,37 @@ def test_eep_catalog_includes_eltako():
         # the FSB14 multi-radio has both EEPs exposed
         fsb_eeps = {e['eep'] for e in elt if 'FSB14' in e['name']}
         assert 'A5-3F-7F' in fsb_eeps and 'F6-02-01' in fsb_eeps, fsb_eeps
+
+
+def test_config_loader_name_field():
+    """a named (Eltako) sensor in the config must not crash the loader.
+
+    Regression: 'name' was not in the string whitelist, so int(name, 0) was
+    attempted on e.g. 'my_fsb14' -> ValueError -> no sensors loaded -> empty
+    web UI. 'name' is kept as a string; 'address'/'sender' stay hex ints.
+    """
+    from enoceanmqtt.enoceanmqtt import load_config_file
+    with tempfile.TemporaryDirectory() as tmp:
+        conf_file = os.path.join(tmp, 'enoceanmqtt.conf')
+        with open(conf_file, 'w') as f:
+            f.write("""[CONFIG]
+mqtt_prefix = enocean/
+[my_fsb14]
+address = 0xFFFFFFFF
+name = my_fsb14
+model = eltako/fsb14
+sender = 0xFF800000
+[temp]
+address = 0x12345678
+rorg = 0xA5
+func = 0x02
+type = 0x05
+""")
+        sensors, _ = load_config_file([conf_file])
+        names = {s.get('name') for s in sensors}
+        # both sections load; the named one keeps its user-provided name
+        assert 'my_fsb14' in names, names
+        assert any('temp' in n for n in names), names
+        fsb = next(s for s in sensors if s.get('name') == 'my_fsb14')
+        assert fsb['address'] == 0xFFFFFFFF
+        assert fsb['model'] == 'eltako/fsb14'
