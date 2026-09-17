@@ -276,11 +276,16 @@ function isBoolConf(k, v) {
   return ['0', '1', 'true', 'false', 'yes', 'no', 'on', 'off'].includes(sv) && (v === '' || /^(0|1|true|false|yes|no|on|off)$/i.test(String(v)));
 }
 
-function openConfigEdit() {
+function openConfigEdit(filter) {
   const grid = $('config-grid');
   if (!grid || !state.config) return;
   const conf = state.config;
-  const keys = Object.keys(conf).filter((k) => !CONFIG_HIDDEN.has(k));
+  let keys = Object.keys(conf).filter((k) => !CONFIG_HIDDEN.has(k));
+  if (Array.isArray(filter) && filter.length) {
+    // show only the relevant settings (MQTT / EnOcean gateway)
+    const f = filter.map(s => s.toLowerCase());
+    keys = keys.filter((k) => f.some((p) => k.toLowerCase().includes(p)));
+  }
   grid.classList.add('config-two-col');
   grid.innerHTML = keys.map((k) => {
     const label = configLabel(k);
@@ -311,38 +316,31 @@ function openConfigEdit() {
   });
   $('configedit-overlay').hidden = false;
 }
-$('btn-top-config')?.addEventListener('click', openConfigEdit);
-$('configedit-cancel')?.addEventListener('click', () => { $('configedit-overlay').hidden = true; });
-$('configedit-detect')?.addEventListener('click', async () => {
-  try {
-    const data = await api('/api/discovery');
-    const serial = (data.serial || []).filter(s => s.candidate);
-    const mdns = data.mdns || [];
-    const pick = (ser) => {
-      // prefer a real ttyUSB/ttyACM candidate, else the first mdns endpoint
-      const found = (serial.find(s => s.enocean) || serial.find(s => s.candidate) || serial[0]);
-      if (found) return found.device;
-      if (mdns.length) {
-        const m = mdns[0];
-        return (m.txt && (m.txt.tcpPort || m.txt.port)) ? 'tcp:' + m.host + ':' + m.txt.port : (m.port ? 'tcp:' + (m.host || '') + ':' + m.port : null);
-      }
-      return null;
-    };
-    const val = pick();
-    const field = Array.from(document.querySelectorAll('#config-grid [data-cfgkey="enocean_port"]'))[0];
-    if (field && val) {
-      field.value = val;
-      toast('Detected: ' + val, 'success');
-    } else if (serial.length || mdns.length) {
-      const list = serial.map(s => s.device).concat(mdns.map(m => m.name + ' @' + (m.port || '')));
-      toast('No device auto-selected. Found: ' + list.join(', '), 'error');
-    } else {
-      toast('No EnOcean device found', 'error');
+$('btn-top-config')?.addEventListener('click', () => openConfigEdit());
+// MQTT status pill -> MQTT settings popup
+$('mqtt-status')?.addEventListener('click', () => openConfigEdit(['mqtt']));
+$('mqtt-status')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openConfigEdit(['mqtt']); } });
+// Gateway status pill -> EnOcean gateway settings popup
+$('gw-status')?.addEventListener('click', () => openConfigEdit(['enocean']));
+$('gw-status')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openConfigEdit(['enocean']); } });
+// auto-search for an EnOcean gateway when not connected (no separate button)
+(function autoDiscover() {
+  if (!state.gateway || state.gateway.connected) return;   // already connected
+  api('/api/discovery').then((data) => {
+    if (!data) return;
+    const ser = (data.serial || []).find((s) => s.candidate);
+    const mdns = (data.mdns || [])[0];
+    const found = (ser && ser.device) || (mdns && (mdns.port ? 'tcp:' + (mdns.host || '') + ':' + mdns.port : null));
+    if (found && state.config && !String(state.config.enocean_port || '').trim()) {
+      state.config.enocean_port = found;
+      const field = Array.from(document.querySelectorAll('#config-grid [data-cfgkey="enocean_port"]'))[0];
+      if (field) field.value = found;
+      toast('Discovered gateway: ' + found, 'success');
     }
-  } catch (err) {
-    toast(t('err_detect_device') + err.message, 'error');
-  }
-});
+  }).catch(() => {});
+})();
+$('configedit-cancel')?.addEventListener('click', () => { $('configedit-overlay').hidden = true; });
+
 
 function configPayloadFromGrid() {
   const payload = {};
@@ -352,26 +350,18 @@ function configPayloadFromGrid() {
   });
   return payload;
 }
-async function saveConfigPayload(payload, andRestart) {
+async function saveConfigPayload(payload) {
   try {
     const res = await api('/api/config', { method: 'POST', body: JSON.stringify(payload) });
     if (!res.ok) throw new Error(res.error || 'save failed');
     toast(t('config_saved'), 'success');
     $('configedit-overlay').hidden = true;
     state.config = Object.assign({}, state.config, payload);
-    if (andRestart) {
-      // ask the gateway process supervisor to restart us
-      try {
-        await fetch('/api/restart', { method: 'POST' });
-      } catch (e) { /* ignore */ }
-      toast('Restarting…', 'info');
-    }
   } catch (err) {
     toast(t('err_save_config') + err.message, 'error');
   }
 }
-$('configedit-save')?.addEventListener('click', () => saveConfigPayload(configPayloadFromGrid(), false));
-$('configedit-save-restart')?.addEventListener('click', () => saveConfigPayload(configPayloadFromGrid(), true));
+$('configedit-save')?.addEventListener('click', () => saveConfigPayload(configPayloadFromGrid()));
 
 function fmtLastSeenFull(ts) {
   if (!ts) return '—';
@@ -642,7 +632,7 @@ function populateEepDatalist(listId, mode) {
 function renderEepList(ul, q) {
   if (!ul.children.length) {
     ul.innerHTML = _eepOpts.map((p) =>
-      '<li data-eep="' + escapeHtml(p.eep) + '" data-name="' + escapeHtml(p.name) + '" title="' + escapeHtml(translateEepName(p.name)) + '">' +
+      '<li data-eep="' + escapeHtml(p.eep) + '" data-name="' + escapeHtml(p.name) + '" data-aliases="' + escapeHtml((p.aliases || []).join(' ')) + '" title="' + escapeHtml(translateEepName(p.name)) + '">' +
         '<span class="eep-code">' + escapeHtml(p.eep) + '</span>' +
         '<span class="eep-name">' + escapeHtml(translateEepName(p.name)) + '</span></li>').join('');
   }
@@ -651,7 +641,8 @@ function renderEepList(ul, q) {
   ul.querySelectorAll('li').forEach((li) => {
     const eep = li.getAttribute('data-eep').toLowerCase();
     const name = li.getAttribute('data-name').toLowerCase();
-    const match = !query || eep.includes(query) || name.includes(query);
+    const aliases = (li.getAttribute('data-aliases') || '').toLowerCase();
+    const match = !query || eep.includes(query) || name.includes(query) || aliases.includes(query);
     li.hidden = !match;
     if (match) count++;
   });
@@ -798,7 +789,8 @@ function resolveEep(value) {
   const hits = (state.eep || []).filter((p) =>
     p.eep.toLowerCase() === vl ||
     p.eep.replace(/[-:]/g, '').toLowerCase() === norm ||
-    (p.name && p.name.toLowerCase().includes(vl)));
+    (p.name && p.name.toLowerCase().includes(vl)) ||
+    (p.aliases && p.aliases.some((a) => String(a).toLowerCase() === vl || String(a).toLowerCase().includes(vl))));
   if (!hits.length) return null;
   // exact EEP code wins; otherwise the first (best) description match
   const exact = hits.find((p) => p.eep.toLowerCase() === vl || p.eep.replace(/[-:]/g, '').toLowerCase() === norm);
