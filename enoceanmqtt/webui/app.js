@@ -789,13 +789,20 @@ function initCustomSelect(selectId) {
 function resolveEep(value) {
   // Only accept an EEP from the catalog - a free-form 'XX-YY-ZZ' that is not
   // in state.eep is NOT a valid equipment profile and must be rejected.
+  // Search matches the EEP code AND the description/name (substring, e.g.
+  // typing "temperature" lists every temperature profile).
   const v = (value || '').trim();
   if (!v) return null;
-  const hit = (state.eep || []).find((p) =>
-    p.eep.toLowerCase() === v.toLowerCase() ||
-    p.eep.replace(/[-:]/g, '').toLowerCase() === v.replace(/[-:]/g, '').toLowerCase() ||
-    p.name.toLowerCase() === v.toLowerCase());
-  return hit ? hit.eep : null;
+  const vl = v.toLowerCase();
+  const norm = v.replace(/[-:]/g, '').toLowerCase();
+  const hits = (state.eep || []).filter((p) =>
+    p.eep.toLowerCase() === vl ||
+    p.eep.replace(/[-:]/g, '').toLowerCase() === norm ||
+    (p.name && p.name.toLowerCase().includes(vl)));
+  if (!hits.length) return null;
+  // exact EEP code wins; otherwise the first (best) description match
+  const exact = hits.find((p) => p.eep.toLowerCase() === vl || p.eep.replace(/[-:]/g, '').toLowerCase() === norm);
+  return (exact || hits[0]).eep;
 }
 
 // Device names may only contain letters, digits and _ - / (like MQTT topic
