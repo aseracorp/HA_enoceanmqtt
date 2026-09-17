@@ -1364,21 +1364,29 @@ def test_lrn_filtered_from_ui_stores():
 
 
 def test_eep_catalog_includes_eltako():
-    """the EEP catalog exposes Eltako model entries selectable in the web UI."""
+    """shutter/cover Eltako models stay selectable; other Eltako models become
+    search-only aliases on the standard EEP (not shown in the dropdown)."""
     with tempfile.TemporaryDirectory() as tmp:
         conf = {'mqtt_host':'localhost','mqtt_port':'1883',
                 'enocean_port':'tcp:127.0.0.1:9999','mqtt_prefix':'enocean/',
                 'webui_disable':'1','webui_sensor_store':os.path.join(tmp,'s.json')}
         com = _mk_com(conf)
         cat = com.eep_catalog()
-        elt = [e for e in cat if e.get('eltako_model')]
-        assert len(elt) > 0
-        names = {e['name'] for e in elt}
-        assert any('FSB14' in n for n in names), names
-        assert any('FSR14' in n for n in names), names
-        # the FSB14 multi-radio has both EEPs exposed
-        fsb_eeps = {e['eep'] for e in elt if 'FSB14' in e['name']}
-        assert 'A5-3F-7F' in fsb_eeps and 'F6-02-01' in fsb_eeps, fsb_eeps
+        # visible Eltako entries: only the cover/shutter models (FSB14 etc.)
+        vis = [e for e in cat if e.get('eltako_model')]
+        assert len(vis) > 0
+        vis_names = ' '.join(e['name'] for e in vis)
+        assert 'FSB14' in vis_names, vis_names   # cover position = extra func
+        # relays/dimmers/sensors are NOT visible entries...
+        assert 'FSR14' not in vis_names, vis_names
+        # ...but are search-only aliases on the standard profile
+        aliased = [e for e in cat if e.get('aliases')]
+        all_aliases = {a for e in aliased for a in e['aliases']}
+        assert 'FSR14' in all_aliases, all_aliases
+        # alias must NOT be in the dropdown name
+        fsr = [e for e in aliased if 'FSR14' in e.get('aliases', [])]
+        assert fsr and all('FSR14' not in e['name'] for e in fsr), 'alias leaked into name'
+
 
 
 def test_config_loader_name_field():

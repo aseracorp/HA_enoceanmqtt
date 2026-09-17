@@ -36,8 +36,8 @@
         </div>
       </div>
       <div class="gateway">
-        <span class="pill" id="gw-status"><span class="dot"></span><span data-i18n="gateway">Gateway</span></span>
-        <span class="pill" id="mqtt-status"><span class="dot"></span>MQTT</span>
+        <span class="pill pill-click" id="gw-status" role="button" tabindex="0" title="EnOcean gateway settings"><span class="dot"></span><span data-i18n="gateway">Gateway</span></span>
+        <span class="pill pill-click" id="mqtt-status" role="button" tabindex="0" title="MQTT settings"><span class="dot"></span>MQTT</span>
         <button type="button" class="theme-toggle" id="btn-top-config" title="Configuration" aria-label="Configuration">⚙</button>
         <select class="lang-select" id="lang-select" title="Language / Sprache / Langue / Lingua" aria-label="Language">
           <option value="en">EN</option>
@@ -144,10 +144,8 @@
     <h3 data-i18n="edit_config">Edit configuration</h3>
     <div class="config-grid" id="config-grid"></div>
     <div class="modal-actions">
-      <button class="btn" id="configedit-detect" data-i18n="detect_device">Detect device</button>
       <button class="btn" id="configedit-cancel" data-i18n="cancel">Cancel</button>
-      <button class="btn" id="configedit-save" data-i18n="save_config">Save configuration</button>
-      <button class="btn btn-primary" id="configedit-save-restart" data-i18n="save_restart">Save &amp; restart</button>
+      <button class="btn btn-primary" id="configedit-save" data-i18n="save_config">Save configuration</button>
     </div>
   </div>
 </div>

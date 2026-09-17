@@ -730,32 +730,106 @@ class Communicator:
     def eep_catalog(self):
         """return the list of known EnOcean equipment profiles.
 
-        This is the standard code-defined catalog plus the custom Eltako
-        device models (FSB14/FSR14/…) from the HA mapping, so Eltako devices
-        can be selected in the web UI add-device popups.
+        The standard code-defined catalog plus the Eltako models that add
+        functionality beyond the standard EEP:
+          * shutter / blind actuators (FSB14, FSB61, FJ62, TF61J) - these have
+            cover-position tracking on top of the plain A5-3F-7F / F6-02-01.
+        Every other Eltako model uses a plain standard EEP, so it is attached
+        as a search-only **alias** to the matching standard profile (typing
+        e.g. 'FSR14' finds it) but is NOT shown as a duplicate dropdown entry.
         """
+        # standard catalog
         catalog = [{'eep': self._fmt_eep(p['eep']), 'name': p['name'],
                     'rorg_name': p['rorg_name'],
                     'category': p.get('category', 'sensor'),
                     'bidirectional': bool(p.get('bidirectional')),
                     'smartack': bool(p.get('smartack'))}
                    for p in self._eep_registry.profiles]
-        # append custom Eltako model entries (model -> its device EEPs)
-        for entry in self._eltako_catalog_entries():
-            catalog.append(entry)
+        by_eep = {e['eep']: e for e in catalog}
+        special, plain = self._eltako_models()
+        # 1) visible Eltako entries for the models with extra functionality
+        for eep in sorted(special):
+            models = special[eep]
+            catalog.append({
+                'eep': eep,
+                'name': 'Eltako ' + ', '.join(sorted(models)),
+                'rorg_name': 'Eltako',
+                'category': 'sensor',
+                'bidirectional': False,
+                'smartack': False,
+                'eltako_model': True,
+            })
+        # 2) search-only aliases on the matching standard profile
+        for eep, models in plain.items():
+            entry = by_eep.get(eep)
+            if entry is None:
+                continue
+            aliases = sorted(set(entry.get('aliases', []) + models))
+            entry['aliases'] = aliases  # not appended to name -> not shown in dropdown
         return catalog
 
-    def _eltako_catalog_entries(self):
-        """build selectable catalog entries from the HA mapping's eltako section."""
+    def _eltako_models(self):
+        """split the Eltako models into (special, plain).
+
+        ``special`` = models whose mapping adds functionality the plain
+        standard EEP does not have (shutter/cover position) -> shown as a
+        selectable 'Eltako <model>' entry.
+        ``plain``   = all other models -> search-only aliases on the standard
+        EEP (found when typing, hidden from the dropdown).
+
+        Returns (special, plain): both dicts {eep: [model, ...]}.
+        """
         try:
             import yaml
             mapping_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                         'overlays', 'homeassistant', 'mapping.yaml')
             if not os.path.isfile(mapping_file):
-                return []
+                return {}, {}
             data = yaml.safe_load(open(mapping_file, encoding='utf-8')) or {}
             eltako = data.get('eltako') or {}
-            out = []
+            special = {}
+            plain = {}
+            for model, model_cfg in eltako.items():
+                if not isinstance(model_cfg, dict):
+                    continue
+                # does this model add a cover (shutter position) entity?
+                comps = {e.get('component') for e in (model_cfg.get('entities') or [])
+                         if isinstance(e, dict)}
+                is_special = 'cover' in comps
+                for dc in (model_cfg.get('device_config') or []):
+                    if not isinstance(dc, dict):
+                        continue
+                    rorg = dc.get('rorg'); func = dc.get('func'); type_ = dc.get('type')
+                    if not (rorg and func and type_):
+                        continue
+                    try:
+                        eep = '-'.join('%02X' % int(v, 16) for v in (rorg, func, type_))
+                    except (ValueError, TypeError):
+                        continue
+                    bucket = special if is_special else plain
+                    bucket.setdefault(eep, set()).add(model.upper())
+            return {k: sorted(v) for k, v in special.items()}, {k: sorted(v) for k, v in plain.items()}
+        except Exception:   # pylint: disable=broad-except
+            logging.exception("failed to load Eltako models from mapping.yaml")
+            return {}, {}
+
+
+    def _eltako_aliases(self):
+        """map each Eltako model's standard EEP -> list of model names.
+
+        Returns {eep: [model, ...]} from the HA mapping's eltako section.
+        Eltako uses standard EnOcean EEPs, so they become search aliases on
+        the existing standard profile instead of duplicate dropdown entries.
+        """
+        try:
+            import yaml
+            mapping_file = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        'overlays', 'homeassistant', 'mapping.yaml')
+            if not os.path.isfile(mapping_file):
+                return {}
+            data = yaml.safe_load(open(mapping_file, encoding='utf-8')) or {}
+            eltako = data.get('eltako') or {}
+            out = {}
             for model, model_cfg in eltako.items():
                 if not isinstance(model_cfg, dict):
                     continue
@@ -774,20 +848,13 @@ class Communicator:
                             break
                     if not parts:
                         continue
-                    eep = '-'.join(parts)
-                    out.append({
-                        'eep': eep,
-                        'name': 'Eltako %s' % model.upper(),
-                        'rorg_name': 'Eltako',
-                        'category': 'sensor',
-                        'bidirectional': False,
-                        'smartack': False,
-                        'eltako_model': model,
-                    })
-            return out
+                    out.setdefault('-'.join(parts), set()).add(model.upper())
+            return {k: list(v) for k, v in out.items()}
         except Exception:   # pylint: disable=broad-except
-            logging.exception("failed to load Eltako catalog from mapping.yaml")
-            return []
+            logging.exception("failed to load Eltako aliases from mapping.yaml")
+            return {}
+
+
 
     @property
     def diagnostics(self):
