@@ -1501,3 +1501,20 @@ def test_diagnostics_query_rate_limited():
         com._diag['_last_query'] = time.time() - DIAGNOSTICS_INTERVAL - 1
         com._query_diagnostics()
         assert len(com.enocean.sent) == n1 + 3
+
+
+def test_thermokon_aliases():
+    """Thermokon device aliases appear on their standard EEPs (search-only),
+    with SR65+ added as successor for every SR65 type."""
+    from enoceanmqtt.thermokon_aliases import thermokon_alias_map
+    m = thermokon_alias_map()
+    # A5-20-01 (valve/room control) carries the SR65 family
+    a5_20 = set(m.get('A5-20-01', []))
+    assert 'Thermokon SR65' in a5_20
+    assert 'Thermokon SR65+' in a5_20
+    assert 'Thermokon SAB+' in a5_20
+    # every SR65* type also has a SR65+ successor alias
+    sr65_types = {a for eep, als in m.items() for a in als if a.startswith('Thermokon SR65') and not a.endswith('+')}
+    assert sr65_types, 'expected some SR65 types'
+    for t in sr65_types:
+        assert 'Thermokon SR65+' in a5_20, t
