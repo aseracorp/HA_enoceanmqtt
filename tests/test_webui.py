@@ -1421,3 +1421,83 @@ type = 0x05
         fsb = next(s for s in sensors if s.get('name') == 'my_fsb14')
         assert fsb['address'] == 0xFFFFFFFF
         assert fsb['model'] == 'eltako/fsb14'
+
+
+def test_eep_catalog_cached():
+    """the EEP catalog is built once and cached; sensor changes invalidate it
+    (so the 2 s /api/status poll does not re-read + re-parse mapping.yaml)."""
+    import yaml
+    from unittest import mock
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999', 'mqtt_prefix': 'enoceanmqtt/',
+            'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = _mk_com(conf)
+        com.mqtt = FakeMQTT()
+
+        calls = {'n': 0}
+        real_load = yaml.safe_load
+        def counting_load(*a, **k):
+            calls['n'] += 1
+            return real_load(*a, **k)
+
+        with mock.patch('yaml.safe_load', side_effect=counting_load):
+            c1 = com.eep_catalog()
+            assert len(c1) > 0
+            n_after_first = calls['n']
+            assert n_after_first >= 1
+
+            # second call: cache hit, no re-parse
+            c2 = com.eep_catalog()
+            assert c2 == c1
+            assert calls['n'] == n_after_first
+
+            # adding a sensor invalidates -> rebuilt once
+            com.add_sensor({'name': 'kitchen', 'address': '0x12345678', 'eep': 'A5-02-05'})
+            c3 = com.eep_catalog()
+            assert calls['n'] > n_after_first
+            assert len(c3) == len(c1)
+
+
+def test_diagnostics_query_rate_limited():
+    """_query_diagnostics only sends one round per interval and backs off
+    when the dongle does not answer (no packet pile-up on a dead stick)."""
+    from enoceanmqtt.communicator import DIAGNOSTICS_INTERVAL
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999', 'mqtt_prefix': 'enoceanmqtt/',
+            'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = _mk_com(conf)
+        com.mqtt = FakeMQTT()
+
+        # first round: sent
+        com._diag['_last_query'] = 0
+        com._diag['_query_answered'] = True
+        com._query_diagnostics()
+        n1 = len(com.enocean.sent)
+        assert n1 == 3
+
+        # immediate second call: rate-limited, nothing sent
+        com._query_diagnostics()
+        assert len(com.enocean.sent) == n1
+
+        # simulate the stick answering
+        from enocean.protocol.constants import RETURN_CODE
+        from enocean.protocol.packet import ResponsePacket
+        resp = ResponsePacket(2, [0x00, 0x01, 0x00, 0x0F, 0x01, 0x02, 0x03, 0x04,
+                                  0xFF, 0x80, 0x11, 0x22, 0, 0, 0, 0, 0, 0],
+                              [])
+        resp.response = RETURN_CODE.OK
+        com._handle_response(resp)
+        assert com._diag.get('_query_answered') is True
+
+        # pretend the interval elapsed -> new round allowed
+        com._diag['_last_query'] = time.time() - DIAGNOSTICS_INTERVAL - 1
+        com._query_diagnostics()
+        assert len(com.enocean.sent) == n1 + 3

@@ -32,6 +32,9 @@ from enoceanmqtt.diagnostics import (CO_RD_VERSION, CO_RD_REPEATER, CO_RD_DUTYCY
 #: accepted EnOcean address formats: int, '0x...', 'FF:80:00:00', 'A5-02-05'
 _HEX_STRIP_RE = re.compile(r'[^0-9a-fA-F]')
 
+#: minimum seconds between transceiver diagnostics COMMON_COMMAND rounds
+DIAGNOSTICS_INTERVAL = 60
+
 
 def parse_int(value):
     """parse an int that may be given as int, '0x...', 'FF:80:00:00' or plain hex"""
@@ -130,6 +133,10 @@ class Communicator:
         }
         self._dynamic_names = set()
         self._load_dynamic_sensors()
+
+        # cached EEP catalog (built once, invalidated when sensors change so the
+        # web UI's 2 s /api/status poll does not re-read + re-parse mapping.yaml)
+        self._eep_catalog_cache = None
 
         # persistent cover positions (Eltako FSB-type, TinyDB)
         self._cover_store = CoverStore(self.conf.get('cover_positions_file'))
@@ -312,6 +319,7 @@ class Communicator:
             if stored['name'] == target_name:
                 added.append(sensor)
         self._index_sensors()
+        self._invalidate_eep_catalog()
         return added[0] if added else None
 
     def add_sensor(self, payload):
@@ -738,6 +746,12 @@ class Communicator:
         as a search-only **alias** to the matching standard profile (typing
         e.g. 'FSR14' finds it) but is NOT shown as a duplicate dropdown entry.
         """
+        # The catalog is static at runtime: build + cache it once. Rebuilding
+        # on every /api/status poll (2 s) costs a full mapping.yaml read +
+        # parse + alias merge, which is pure waste and shows up as constant
+        # CPU. Invalidated via _invalidate_eep_catalog() when sensors change.
+        if self._eep_catalog_cache is not None:
+            return self._eep_catalog_cache
         # standard catalog
         catalog = [{'eep': self._fmt_eep(p['eep']), 'name': p['name'],
                     'rorg_name': p['rorg_name'],
@@ -766,7 +780,18 @@ class Communicator:
                 continue
             aliases = sorted(set(entry.get('aliases', []) + models))
             entry['aliases'] = aliases  # not appended to name -> not shown in dropdown
+        self._eep_catalog_cache = catalog
         return catalog
+
+    def _invalidate_eep_catalog(self):
+        """drop the cached EEP catalog after sensors change.
+
+        The catalog itself only depends on mapping.yaml + the EEP registry,
+        both static at runtime - but invalidating on sensor changes is cheap
+        and guarantees the /api/status payload (which embeds the catalog) can
+        never go stale if that ever changes.
+        """
+        self._eep_catalog_cache = None
 
     def _eltako_models(self):
         """split the Eltako models into (special, plain).
@@ -858,8 +883,12 @@ class Communicator:
 
     @property
     def diagnostics(self):
-        """transceiver diagnostics (chip id, repeater, duty-cycle, TX fails)."""
-        return dict(self._diag)
+        """transceiver diagnostics (chip id, repeater, duty-cycle, TX fails).
+
+        Internal rate-limiting bookkeeping (``_last_query`` / ``_query_answered``)
+        is filtered out so it never leaks to MQTT or the web UI.
+        """
+        return {k: v for k, v in self._diag.items() if not k.startswith('_')}
 
     @property
     def enocean_sender_hex(self):
@@ -2073,9 +2102,23 @@ class Communicator:
         return {'ok': True, 'message': 'Restart scheduled'}
 
     def _query_diagnostics(self):
-        """send ESP3 common commands to read transceiver diagnostics."""
+        """send ESP3 common commands to read transceiver diagnostics.
+
+        Rate-limited: a single round of three COMMON_COMMANDs is sent at most
+        once per DIAGNOSTICS_INTERVAL, and only when the previous round was
+        answered (a dead/unresponsive dongle would otherwise queue three
+        packets every minute forever, growing the transmit backlog + serial
+        writes without any benefit).
+        """
         if not self.enocean:
             return
+        now = time.time()
+        if now - self._diag.get('_last_query', 0) < DIAGNOSTICS_INTERVAL:
+            return
+        if self._diag.get('_last_query') is not None and not self._diag.get('_query_answered'):
+            return  # previous round got no response; do not pile up more
+        self._diag['_last_query'] = now
+        self._diag['_query_answered'] = False
         try:
             for code in (CO_RD_VERSION, CO_RD_REPEATER, CO_RD_DUTYCYCLE_LIMIT):
                 self.enocean.send(Packet(PACKET.COMMON_COMMAND, data=[code]))
@@ -2105,6 +2148,9 @@ class Communicator:
         if response_code != RETURN_CODE.OK:
             logging.debug("diagnostics response not OK: %s", response_code)
             return
+        # mark the current diagnostics round as answered so the next one may
+        # be sent (see _query_diagnostics rate limiting)
+        self._diag['_query_answered'] = True
         rd = list(getattr(packet, 'response_data', []) or [])
         if len(rd) >= 16:
             app, api, chip = parse_version(rd)
@@ -2159,7 +2205,6 @@ class Communicator:
                     continue
                 _reconnect_delay = 1
             # Request transmitter ID, if needed
-            # Request transmitter ID, if needed
             if self.enocean_sender is None:
                 self.enocean_sender = self.enocean.base_id
                 # now that we know the base id, query transceiver diagnostics
@@ -2184,9 +2229,10 @@ class Communicator:
                     logging.info("got non-RF packet: %s", packet)
                     continue
             except queue.Empty:
-                # periodically re-query + re-publish transceiver diagnostics
-                if time.time() - self._diag.get('_last_query', 0) > 60:
-                    self._diag['_last_query'] = time.time()
+                # periodically re-query + re-publish transceiver diagnostics.
+                # _query_diagnostics() itself rate-limits (incl. dead-dongle
+                # backoff), so this is just the outer throttle.
+                if time.time() - self._diag.get('_last_query', 0) > DIAGNOSTICS_INTERVAL:
                     self._query_diagnostics()
                     self._publish_diagnostics()
                 continue
