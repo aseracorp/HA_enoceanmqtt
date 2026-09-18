@@ -17,6 +17,7 @@ proxy), therefore it performs no authentication of its own.
 import json
 import logging
 import os
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, unquote
@@ -188,12 +189,21 @@ class WebInterface:
                     body = json.dumps(body).encode('utf-8')
                 elif isinstance(body, str):
                     body = body.encode('utf-8')
-                self.send_response(code)
-                self.send_header('Content-Type', content_type)
-                self.send_header('Content-Length', str(len(body)))
-                self.send_header('Cache-Control', 'no-store')
-                self.end_headers()
-                self.wfile.write(body)
+                try:
+                    self.send_response(code)
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('Content-Length', str(len(body)))
+                    self.send_header('Cache-Control', 'no-store')
+                    self.end_headers()
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    # the client (browser poller) went away mid-write - nothing
+                    # we can do; swallowing it prevents the per-request
+                    # traceback spam + thread death storm in the log (observed
+                    # under heavy load).
+                    pass
+                except socket.timeout:
+                    pass
 
             def _read_body(self):
                 length = int(self.headers.get('Content-Length') or 0)

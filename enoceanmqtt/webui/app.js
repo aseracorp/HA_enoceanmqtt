@@ -43,6 +43,14 @@ async function api(path, opts = {}) {
 }
 
 /* ---------------- load + render ---------------- */
+/*
+ * Config is unchanged by telegram traffic and only affects the (rare) edit
+ * popup + tooltips, so we fetch it once on boot and then only every
+ * CONFIG_REFRESH_MS - NOT on every 2 s status poll. This avoids a second
+ * /api/config round-trip 30x/minute for zero benefit.
+ */
+const CONFIG_REFRESH_MS = 30000;
+let _lastConfigFetch = 0;
 async function loadStatus() {
   try {
     const data = await api('/api/status');
@@ -57,7 +65,11 @@ async function loadStatus() {
     populateEepDatalist('e-eep-list', addMode);
     populateSenders(state.virtual_senders);
     applyTranslations();
-    loadConfig();
+    const now = Date.now();
+    if (now - _lastConfigFetch > CONFIG_REFRESH_MS) {
+      _lastConfigFetch = now;
+      loadConfig();
+    }
   } catch (e) {
     toast(t('err_load_status') + e.message, 'error');
   }
