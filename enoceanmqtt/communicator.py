@@ -18,6 +18,7 @@ from enoceanmqtt.eep_engine.utils import to_bitarray
 from enoceanmqtt.cover import POSITION_SUBTOPIC, SHUT_TIME_SUBTOPIC, update_cover_position
 from enoceanmqtt.cover_store import CoverStore
 from enoceanmqtt.secure_store import SecureStore
+from enoceanmqtt.thermokon_aliases import thermokon_alias_map
 from enocean.protocol.constants import PACKET, RETURN_CODE, RORG
 import enocean.utils
 import paho.mqtt.client as mqtt
@@ -780,6 +781,12 @@ class Communicator:
                 continue
             aliases = sorted(set(entry.get('aliases', []) + models))
             entry['aliases'] = aliases  # not appended to name -> not shown in dropdown
+        # 3) Thermokon search aliases (Thermokon <type>; SR65+ successor added)
+        for eep, names in thermokon_alias_map().items():
+            entry = by_eep.get(eep)
+            if entry is None:
+                continue
+            entry['aliases'] = sorted(set(entry.get('aliases', [])) | set(names))
         self._eep_catalog_cache = catalog
         return catalog
 

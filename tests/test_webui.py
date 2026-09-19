@@ -1501,3 +1501,47 @@ def test_diagnostics_query_rate_limited():
         com._diag['_last_query'] = time.time() - DIAGNOSTICS_INTERVAL - 1
         com._query_diagnostics()
         assert len(com.enocean.sent) == n1 + 3
+
+
+def test_thermokon_aliases():
+    """Thermokon device aliases (prefix 'Thermokon EasySens') appear on their
+    standard EEPs as search-only aliases; SR65+ successor added for every
+    SR65 type; SR07/SR06 variant tables match the datasheets."""
+    from enoceanmqtt.thermokon_aliases import thermokon_alias_map, PREFIX, THERMOKON_ALIASES
+    m = thermokon_alias_map()
+    all_als = set(a for v in m.values() for a in v)
+    # prefix on everything
+    assert all(a.startswith(PREFIX) for a in all_als)
+    # SR65 outdoor temp -> A5-02-xx (NOT A5-20-01)
+    assert 'Thermokon EasySens SR65' in set(m.get('A5-02-05', []))
+    assert 'Thermokon EasySens SR65+' in set(m.get('A5-02-05', []))
+    assert 'Thermokon EasySens SR65' not in set(m.get('A5-20-01', []))
+    # window contact / handle
+    assert 'Thermokon EasySens SRW03' in set(m.get('D5-00-01', []))
+    assert 'Thermokon EasySens SRG02' in set(m.get('F6-10-00', []))
+    # German duplicates for the transmitters
+    assert 'Thermokon EasySens Funkschalter' in all_als
+    assert 'Thermokon EasySens Handsender' in all_als
+    # SR07 variant table (hand-verified)
+    s07 = {k: THERMOKON_ALIASES[k] for k in THERMOKON_ALIASES if k.startswith('SR07')}
+    assert s07['SR07 Temp'] == ['A5-02-05']
+    assert s07['SR07 Temp_rH'] == ['A5-04-01']
+    assert s07['SR07 PT Temp_rH'] == ['A5-10-10']
+    assert s07['SR07 PMS Temp_rH'] == ['A5-10-11']
+    # SR06 LCD variant table (hand-verified)
+    s06 = {k: THERMOKON_ALIASES[k] for k in THERMOKON_ALIASES if k.startswith('SR06 LCD')}
+    assert s06['SR06 LCD 2T Temp'] == ['A5-10-03', 'D2-11-01']
+    assert s06['SR06 LCD 4T Temp_rH Typ 3'] == ['A5-10-11', 'D2-11-08']
+    assert s06['SR06 LCD 2T+Blind Temp_rH'] == ['A5-10-12', 'F6-02-01', 'D2-11-02']
+    # STC-DO8 Type 1 / Type 2 send only A5-20-12
+    assert THERMOKON_ALIASES['STC-DO 8 Type 1'] == ['A5-20-12']
+    assert THERMOKON_ALIASES['STC-DO 8 Type 2'] == ['A5-20-12']
+    # every SR65* type also has a SR65+ successor alias
+    sr65_types = {a for als in m.values() for a in als
+                  if a.startswith(PREFIX + 'SR65') and not a.endswith('+')}
+    assert sr65_types
+    for t in sr65_types:
+        mia = [eep for eep, als in m.items() if t in als and (PREFIX + 'SR65+') not in als]
+        assert not mia, (t, mia)
+
+
