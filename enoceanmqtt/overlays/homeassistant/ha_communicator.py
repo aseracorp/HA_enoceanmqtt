@@ -4,6 +4,7 @@
 import logging
 import copy
 import os
+import re
 import time
 import json
 import yaml
@@ -41,6 +42,42 @@ class HACommunicator(Communicator):
             return reference + "_" + address + "_" + sender
         eep = format((sensor['rorg'] << 16) + (sensor['func'] << 8) + sensor['type'], '06X')
         return eep + "_" + address + "_" + sender
+
+    def _legacy_display_name(self, sensor, base=None):
+        """the device name shown in Home Assistant before friendly names
+        existed: 'e2m_' + the sanitized (prefix-stripped, '/'-flattened)
+        name. Used as fallback for configuration-file devices so upgrading
+        does not rename anything."""
+        raw = base if base is not None else sensor.get('name', '')
+        prefix = self.conf.get('mqtt_prefix', 'enocean/')
+        stripped = str(raw).replace(prefix, '').replace('/', '_')
+        return 'e2m_' + stripped
+
+    def _friendly(self, sensor, fallback=''):
+        """the display name for Home Assistant: the user-entered friendly
+        name (spaces allowed) when present, else the fallback (for legacy
+        config-file devices this is the old 'e2m_' device name)."""
+        fn = sensor.get('friendly_name')
+        if fn and str(fn).strip():
+            return str(fn).strip()
+        return fallback if fallback else sensor.get('name', '')
+
+    def _entity_id(self, name):
+        """entity-ID slug for a device name, 'e2m_' prefixed.
+
+        Mirrors what Home Assistant does with the friendly name when it
+        generates an entity_id: lowercase, spaces and special characters
+        become '_'. The result is what users see in Home Assistant, e.g.
+        'Wohnzimmer Temp' -> 'e2m_wohnzimmer_temp'. A name that already
+        carries the 'e2m_' prefix (legacy devices) is kept as-is so the
+        prefix is not doubled.
+        """
+        slug = str(name or '').strip().lower()
+        slug = re.sub(r'[^a-z0-9_]+', '_', slug)
+        slug = re.sub(r'_+', '_', slug).strip('_')
+        if not slug:
+            return 'e2m_device'
+        return slug if slug.startswith('e2m_') else 'e2m_' + slug
 
     def __init__(self, config, sensors):
         # Read mapping file
@@ -381,7 +418,14 @@ class HACommunicator(Communicator):
         address = format(sensor['address'], '08X')
         sender = _sender_hex(sensor)
         dev_uid = self._device_uid(sensor)
-        dev_name = "e2m_" + sensor['name'].replace(self.conf['mqtt_prefix'], "").replace("/", "_")
+        # the Home Assistant device name shows the user-entered friendly
+        # name (spaces allowed); for config-file devices (no friendly_name)
+        # the legacy 'e2m_...' device name is kept so nothing renames on
+        # upgrade. The entity-ID slug is derived from the same name.
+        friendly = self._friendly(
+            sensor, fallback=self._legacy_display_name(sensor))
+        dev_name = friendly
+        dev_object_id = self._entity_id(friendly)
         sensor_cfgtopics = []
 
         # Delete previous entities that are no more used in loaded mapping
@@ -415,6 +459,16 @@ class HACommunicator(Communicator):
 
             # The entity name to be displayed in HA
             cfg['name'] = entity['name']
+
+            # Force a deterministic, human-meaningful entity_id in Home
+            # Assistant: derived from the friendly name (e2m_<friendly>
+            # slugified) so the user sees the name they typed, sanitized,
+            # instead of a random hash. unique_id is unchanged, so existing
+            # entities keep their registered entity_id. The platform prefix
+            # is required by Home Assistant's default_entity_id.
+            cfg['default_entity_id'] = (entity['component'] + '.' +
+                                        dev_object_id + '_' +
+                                        str(entity['name'])).lower()
 
             # Associate all entities to the device in HA
             cfg['device'] = {}
@@ -493,7 +547,14 @@ class HACommunicator(Communicator):
         address = format(sensor['address'], '08X')
         sender = _sender_hex(sensor)
         dev_uid = self._device_uid(sensor)
-        dev_name = "e2m_" + name.replace(self.conf['mqtt_prefix'], "").replace("/", "_")
+        # the Home Assistant device name shows the user-entered friendly
+        # name (spaces allowed); for config-file devices (no friendly_name)
+        # the legacy 'e2m_...' device name is kept so nothing renames on
+        # upgrade. The entity-ID slug is derived from the same name.
+        friendly = self._friendly(
+            sensor, fallback=self._legacy_display_name(sensor, base=name))
+        dev_name = friendly
+        dev_object_id = self._entity_id(friendly)
         sensor_cfgtopics = []
 
         # Delete previous entities that are no more used in loaded mapping
@@ -531,6 +592,16 @@ class HACommunicator(Communicator):
 
             # The entity name to be displayed in HA
             cfg['name'] = entity['name']
+
+            # Force a deterministic, human-meaningful entity_id in Home
+            # Assistant: derived from the friendly name (e2m_<friendly>
+            # slugified) so the user sees the name they typed, sanitized,
+            # instead of a random hash. unique_id is unchanged, so existing
+            # entities keep their registered entity_id. The platform prefix
+            # is required by Home Assistant's default_entity_id.
+            cfg['default_entity_id'] = (entity['component'] + '.' +
+                                        dev_object_id + '_' +
+                                        str(entity['name'])).lower()
 
             # Associate all entities to the device in HA
             cfg['device'] = {}

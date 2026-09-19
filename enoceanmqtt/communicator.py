@@ -288,6 +288,11 @@ class Communicator:
             sensor['sender'] = stored['sender']
         if stored.get('ignore'):
             sensor['ignore'] = stored['ignore']
+        # the user-entered friendly name (free text, spaces allowed) is used
+        # for the Home Assistant display name; 'name' stays the sanitized
+        # MQTT-topic / entity-id base.
+        if stored.get('friendly_name'):
+            sensor['friendly_name'] = stored['friendly_name']
         for key in ('category', 'bidirectional', 'smartack', 'virtual',
                     'direction', 'answer', 'default_data', 'command', 'channel'):
             if stored.get(key) is not None:
@@ -326,13 +331,27 @@ class Communicator:
     def add_sensor(self, payload):
         """add a sensor (manual or web interface) and persist it"""
         try:
+            # The user may type a friendly name with spaces (friendly_name):
+            # it becomes the Home Assistant display name. 'name' is the
+            # sanitized MQTT-topic / entity-id base and is derived from the
+            # friendly name when not given explicitly.
+            friendly_name = str(payload.get('friendly_name', '')).strip()
             name = str(payload.get('name', '')).strip()
+            if not name:
+                name = self._sanitize_entity_id(friendly_name or '')
             address = payload.get('address')
             eep = str(payload.get('eep', '')).strip()
             sender = payload.get('sender')
 
             if not self._is_valid_name(name):
                 return {'ok': False, 'error': 'A sensor name is required (letters, digits, _ - / only)'}
+            if not friendly_name:
+                friendly_name = payload.get('friendly_name', '')
+                if friendly_name is None or str(friendly_name).strip() == '':
+                    friendly_name = name
+            # a friendly name like '---' produces an empty entity-id base
+            if not self._sanitize_entity_id(friendly_name):
+                return {'ok': False, 'error': 'A device name is required (letters, digits, _ - /)'}
             address = parse_int(address)
             if address is None:
                 return {'ok': False, 'error': 'Invalid sensor address'}
@@ -351,7 +370,8 @@ class Communicator:
             if any(s.get('name') == full_name for s in self.sensors):
                 return {'ok': False, 'error': 'A sensor with this name already exists'}
 
-            stored = {'name': name, 'address': address,
+            stored = {'name': name, 'friendly_name': friendly_name,
+                      'address': address,
                       'rorg': rorg, 'func': func, 'type': type_}
             if sender:
                 sp = parse_int(sender)
@@ -395,8 +415,21 @@ class Communicator:
             return {'ok': False, 'error': 'Sensor not found'}
 
         changes = {}
-        # optional rename
+        # optional rename: the user edits the friendly name (spaces allowed);
+        # the sanitized entity-id / MQTT topic base is re-derived from it and
+        # stored as 'name' so existing topics/discovery stay consistent.
+        new_friendly = payload.get('friendly_name')
         new_name = payload.get('name')
+        if new_friendly is not None:
+            new_friendly = str(new_friendly).strip()
+            if not new_friendly:
+                return {'ok': False, 'error': 'A device name is required'}
+            new_slug = self._sanitize_entity_id(new_friendly)
+            if not new_slug:
+                return {'ok': False, 'error': 'A device name is required (letters, digits, _ - /)'}
+            changes['friendly_name'] = new_friendly
+            if new_name in (None, ''):
+                new_name = new_slug
         if new_name is not None:
             new_name = str(new_name).strip()
             if not self._is_valid_name(new_name):
@@ -614,10 +647,31 @@ class Communicator:
         return 'sensor'
 
     @staticmethod
+    def _sanitize_entity_id(name):
+        """turn a user-entered friendly name into a Home Assistant entity-ID
+        slug: lowercase, and any character outside [a-z0-9_] (spaces, '-',
+        '/', umlauts, ...) becomes '_'. Runs of '_' collapse into one and
+        leading/trailing '_' are trimmed.
+
+        Home Assistant entity_ids only allow [a-z0-9_] (see
+        homeassistant/core.VALID_ENTITY_ID), so dashes become underscores
+        too. The result is what the user sees in HA for the device:
+        "Wohnzimmer Temp" -> "wohnzimmer_temp",
+        "Living Room / Temp" -> "living_room_temp",
+        "Temp-Garage" -> "temp_garage".
+        """
+        n = str(name or '').strip().lower()
+        n = re.sub(r'[^a-z0-9_]+', '_', n)
+        n = re.sub(r'_+', '_', n).strip('_')
+        return n
+
+    @staticmethod
     def _is_valid_name(name):
         """true for names containing only letters, digits, '_', '-' and '/'.
 
-        '/' groups devices and becomes '_' in the Home Assistant device name.
+        This is the *entity-id / MQTT topic* form of the name (spaces are
+        handled separately via ``friendly_name``): '/' groups devices and
+        becomes '_' in the Home Assistant device name.
         """
         n = str(name or '').strip()
         return bool(n) and re.fullmatch(r'[A-Za-z0-9_\-\/]+', n) is not None
@@ -714,6 +768,7 @@ class Communicator:
 
         return {
             'name': display_name,
+            'friendly_name': sensor.get('friendly_name') or display_name,
             'address': address,
             'sender': sensor.get('sender'),
             'virtual': sensor.get('virtual'),
@@ -968,7 +1023,8 @@ class Communicator:
         if rorg is None:
             rorg = packet.rorg
         name = 'learn_' + format(address, '08x')
-        stored = {'name': name, 'address': address, 'rorg': rorg}
+        stored = {'name': name, 'friendly_name': name,
+                  'address': address, 'rorg': rorg}
         if func is not None and type_ is not None:
             # EEP was extracted from the telegram (e.g. a 4BS learn telegram)
             stored['func'] = func

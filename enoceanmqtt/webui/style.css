@@ -331,6 +331,14 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 170px; }
 .field-grow { flex: 1; min-width: 240px; position: relative; }
 .field label { font-size: 12.5px; font-weight: 500; color: var(--text-secondary); }
+
+/* entity-id preview under the device name input (friendly name -> e2m_...) */
+.entity-preview {
+  font-size: 11.5px; color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  word-break: break-all;
+}
+.entity-preview:empty { display: none; }
 .field .opt { color: var(--text-muted); font-weight: 400; }
 
 .field input[type="text"] {

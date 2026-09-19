@@ -424,7 +424,9 @@ function renderSensors() {
       addrHtml = fmtAddr(s.address);
     }
     const source = s.source === 'dynamic' ? ' <span class="pill" style="font-size:10px;padding:1px 6px">web</span>' : '';
-    const name = escapeHtml(s.name);
+    // show the friendly name when present (spaces etc.); s.name stays the
+    // sanitized lookup key used by the row buttons / API calls
+    const name = escapeHtml(s.friendly_name || s.name);
     const catCls = deviceCategory(s);
     const catTxt = catCls === 'actor' ? t('actor') : (catCls === 'bidirectional' ? t('bidirectional') : t('sensor'));
     const badges = [];
@@ -497,7 +499,8 @@ function openEdit(name) {
   editingDevice = name;
   const cat = deviceCategory(s);
   try {
-  $('e-name').value = s.name;
+  $('e-name').value = s.friendly_name || s.name;
+  updateEntityPreview('e-name', 'e-name-preview');
   $('e-address').value = (s.address !== undefined && s.address !== null && s.address !== 0xFFFFFFFF)
     ? fmtAddr(s.address, true) : '';
   $('e-eep-search').value = s.eep || '';
@@ -531,7 +534,10 @@ $('edit-ok')?.addEventListener('click', async () => {
   const eep = resolveEep(eepInput);
   if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
-  const body = { name: name, eep: eep };
+  // the friendly name is shown in HA; the entity-id / MQTT topic base is the
+  // slugified version (backend re-derives it, but we send it explicitly so
+  // the UI stays in control and renaming an existing device keeps working).
+  const body = { friendly_name: name, name: slugifyEntityId(name), eep: eep };
   const addrVal = $('e-address').value.trim();
   const address = parseAddress(addrVal);
   const cat = deviceCategory(state.sensors.find((x) => x.name === editingDevice) || {});
@@ -809,15 +815,47 @@ function resolveEep(value) {
   return (exact || hits[0]).eep;
 }
 
-// Device names may only contain letters, digits and _ - / (like MQTT topic
-// segments). Spaces and other special characters are not allowed. The '/'
-// is explicitly allowed and is used to group devices (it becomes '_' in the
-// Home Assistant device name). No leading/trailing whitespace either.
+// The user-facing device name ("friendly name") is free text: spaces and
+// most printable characters are allowed (e.g. "Living Room Temp").
+// The Home Assistant entity_id / MQTT topic base is derived from it by
+// slugifyEntityId() and must not be empty.
 function isValidName(name) {
   const n = String(name || '').trim();
-  if (!n) return false;
-  if (!/^[A-Za-z0-9_\-\/]+$/.test(n)) return false;
-  return true;
+  return n.length > 0;
+}
+
+// Mirror of Home Assistant's slugify() (separator '_'): lowercase, any
+// character outside [a-z0-9_-] becomes '_', runs collapse, edges trimmed.
+function slugifyEntityId(name) {
+  // Home Assistant entity_ids allow only [a-z0-9_], so '-' and anything
+  // else outside that set becomes '_' here too.
+  let s = String(name || '').trim().toLowerCase();
+  s = s.replace(/[^a-z0-9_]+/g, '_');
+  s = s.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+  return s;
+}
+
+// The entity_id the device will get in Home Assistant: 'e2m_' + the
+// slugified friendly name (entity-level keys get the field appended).
+function entityIdPreview(name, field) {
+  let slug = slugifyEntityId(name);
+  if (!slug) return 'e2m_...';
+  const base = 'e2m_' + slug;
+  return base + (field ? '_' + field : '');
+}
+
+// Show the Home Assistant entity_id that will be derived from the friendly
+// name in a <small> preview element next to the name input.
+function updateEntityPreview(inputId, previewId) {
+  const input = $(inputId);
+  const preview = $(previewId);
+  if (!input || !preview) return;
+  const name = input.value.trim();
+  if (!name) {
+    preview.textContent = '';
+    return;
+  }
+  preview.textContent = '→ ' + entityIdPreview(name);
 }
 
 function eepViewerUrl(eep) {
@@ -1010,7 +1048,7 @@ $('as-save')?.addEventListener('click', async () => {
   if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
   if (address === null) return toast(t('err_bad_address'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
-  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address, eep, category: 'sensor', virtual: 0 }) });
+  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ friendly_name: name, name: slugifyEntityId(name), address, eep, category: 'sensor', virtual: 0 }) });
   if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
   toast(t('sensor_added'), 'success');
   $('addsensor-overlay').hidden = true; asReset();
@@ -1039,7 +1077,7 @@ $('aa-save')?.addEventListener('click', async () => {
   if (!eep) return toast(t('err_no_eep'), 'error');
   if (!name) name = defaultActorName(sender);
   if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
-  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address: 0xFFFFFFFF, eep, sender, category: 'actor', virtual: 1 }) });
+  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ friendly_name: name, name: slugifyEntityId(name), address: 0xFFFFFFFF, eep, sender, category: 'actor', virtual: 1 }) });
   if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
   toast(t('actor_added'), 'success');
   $('addactor-overlay').hidden = true;
@@ -1102,7 +1140,7 @@ $('ab-save')?.addEventListener('click', async () => {
   if (!eep) return toast(t('err_no_eep'), 'error');
   if (!name) name = defaultActorName(sender);
   if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
-  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ name, address, eep, sender, category: 'bidirectional', virtual: 1, direction: 1, answer: 1 }) });
+  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ friendly_name: name, name: slugifyEntityId(name), address, eep, sender, category: 'bidirectional', virtual: 1, direction: 1, answer: 1 }) });
   if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
   toast(t('bidir_added'), 'success');
   $('addbidir-overlay').hidden = true;
@@ -1223,6 +1261,13 @@ function applyTranslations() {
   });
 }
 $('lang-select')?.addEventListener('change', (e) => setLang(e.target.value));
+// live entity-id preview under the name inputs (edit + add device modals)
+['e-name', 'as-name', 'aa-name', 'ab-name'].forEach((id) => {
+  $(id)?.addEventListener('input', () => {
+    const previewId = id + '-preview';
+    updateEntityPreview(id, previewId);
+  });
+});
 // collapsible cards (e.g. Configuration)
 document.querySelectorAll('.card.collapsible > .card-header').forEach((h) => {
   h.addEventListener('click', () => {

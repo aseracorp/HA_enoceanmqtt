@@ -43,6 +43,12 @@ editing the configuration file:
 * **Bi-directional telegrams** — A5-20-01 style 4BS actors and D2-11-01 smartACK
   sensors are replied to automatically. smartACK replies are sent on a fast path
   (before the MQTT publish) to stay within the device's tight response window.
+* **Friendly names** — the device name you enter is used as the *friendly name*
+  in Home Assistant (spaces are allowed, e.g. `Wohnzimmer Temp`). The Home
+  Assistant entity ID is derived automatically from it (lowercased, sanitized)
+  and prefixed with `e2m_`, e.g. `sensor.e2m_wohnzimmer_temp`. The web UI shows
+  a live preview of the entity ID while you type. Devices defined in the
+  configuration file keep their legacy `e2m_<name>` device name.
 
 Sensors added through the web interface are stored in a `sensors.json` file
 (next to the configuration file, or as configured through `webui_sensor_store`)
