@@ -1505,16 +1505,23 @@ def test_diagnostics_query_rate_limited():
 
 def test_thermokon_aliases():
     """Thermokon device aliases appear on their standard EEPs (search-only),
-    with SR65+ added as successor for every SR65 type."""
+    with SR65+ added as successor for every SR65 type. EEPs come from the
+    actual Thermokon datasheets."""
     from enoceanmqtt.thermokon_aliases import thermokon_alias_map
     m = thermokon_alias_map()
-    # A5-20-01 (valve/room control) carries the SR65 family
-    a5_20 = set(m.get('A5-20-01', []))
-    assert 'Thermokon SR65' in a5_20
-    assert 'Thermokon SR65+' in a5_20
-    assert 'Thermokon SAB+' in a5_20
+    # SR65 outdoor temp -> A5-02-xx (NOT A5-20-01)
+    sr65 = set(m.get('A5-02-05', []))
+    assert 'Thermokon SR65' in sr65
+    assert 'Thermokon SR65+' in sr65
+    assert 'Thermokon SR65' not in m.get('A5-20-01', [])
+    # SRW03 window contact -> D5-00-01; SRG02 handle -> F6-10-00
+    assert 'Thermokon SRW03' in set(m.get('D5-00-01', []))
+    assert 'Thermokon SRG02' in set(m.get('F6-10-00', []))
+    # SR65 Li -> A5-06-xx
+    assert 'Thermokon SR65 Li' in set(m.get('A5-06-01', []))
     # every SR65* type also has a SR65+ successor alias
     sr65_types = {a for eep, als in m.items() for a in als if a.startswith('Thermokon SR65') and not a.endswith('+')}
     assert sr65_types, 'expected some SR65 types'
     for t in sr65_types:
-        assert 'Thermokon SR65+' in a5_20, t
+        mia = [eep for eep, als in m.items() if t in als and 'Thermokon SR65+' not in als]
+        assert not mia, (t, mia)
