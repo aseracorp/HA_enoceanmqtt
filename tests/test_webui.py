@@ -1545,3 +1545,157 @@ def test_thermokon_aliases():
         assert not mia, (t, mia)
 
 
+def test_friendly_name_with_spaces_backend():
+    """web-added sensors accept a friendly name with spaces; the sanitized
+    entity-id / MQTT topic base ('name') is derived from it (e2m_ slug)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = _mk_com(conf)
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        # friendly name with spaces, no explicit 'name' -> name is derived
+        res = com.add_sensor({'friendly_name': 'Wohnzimmer Temp',
+                              'address': 0x12345678, 'eep': 'A5-02-05'})
+        assert res['ok'], res
+        stored = com._store.get('wohnzimmer_temp')
+        assert stored is not None
+        assert stored['friendly_name'] == 'Wohnzimmer Temp'
+        assert stored['name'] == 'wohnzimmer_temp'
+        # describe_sensor exposes both
+        desc = com.describe_sensor(next(
+            s for s in com.sensors if s.get('name') == 'enoceanmqtt/wohnzimmer_temp'))
+        assert desc['friendly_name'] == 'Wohnzimmer Temp'
+        assert desc['name'] == 'wohnzimmer_temp'
+
+        # explicit name still works (backwards compatible) and sets the
+        # friendly name to the raw name when not given
+        res2 = com.add_sensor({'name': 'hall_switch', 'address': 0x11111111,
+                               'eep': 'F6-02-01', 'category': 'actor',
+                               'virtual': 1})
+        assert res2['ok'], res2
+        assert com._store.get('hall_switch')['friendly_name'] == 'hall_switch'
+
+        # heavy slug edge cases
+        res3 = com.add_sensor({'friendly_name': 'Living Room / Temp!  ',
+                               'address': 0x22222222, 'eep': 'A5-02-05'})
+        assert res3['ok'], res3
+        assert com._store.get('living_room_temp') is not None
+
+        # empty / punctuation-only names rejected
+        assert not com.add_sensor({'friendly_name': '   ', 'address': 0x33333333,
+                                   'eep': 'A5-02-05'})['ok']
+        assert not com.add_sensor({'friendly_name': '---', 'address': 0x33333333,
+                                   'eep': 'A5-02-05'})['ok']
+
+
+def _mk_ha_discovery_com(conf, **kwargs):
+    """build a plain Communicator with the HA-overlay discovery methods
+    attached (avoids instantiating the full HACommunicator / DeviceManager /
+    mapping.yaml in unit tests)."""
+    from enoceanmqtt.overlays.homeassistant import ha_communicator as _hac
+    com = _mk_com(conf, **kwargs)
+    # bind the discovery machinery we actually test
+    import yaml as _yaml
+    _map_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             '..', 'enoceanmqtt', 'overlays', 'homeassistant',
+                             'mapping.yaml')
+    with open(_map_path, 'r', encoding='utf-8') as _mf:
+        com._ha_mapping = _yaml.safe_load(_mf)
+    com._mqtt_discovery_prefix = conf.get('mqtt_discovery_prefix', 'homeassistant/')
+    if not com._mqtt_discovery_prefix.endswith('/'):
+        com._mqtt_discovery_prefix += '/'
+    com._mqtt_discovery_eep = _hac.HACommunicator._mqtt_discovery_eep.__get__(com)
+    com._mqtt_discovery_model = _hac.HACommunicator._mqtt_discovery_model.__get__(com)
+    com._legacy_display_name = _hac.HACommunicator._legacy_display_name.__get__(com)
+    com._friendly = _hac.HACommunicator._friendly.__get__(com)
+    com._entity_id = _hac.HACommunicator._entity_id.__get__(com)
+    # _device_uid is a @staticmethod - reference it directly
+    com._device_uid = _hac.HACommunicator._device_uid
+    com._devmgr = type('DM', (), {
+        'db_upsert_device': lambda *a, **k: None,
+        'db_get_device_by_field': lambda *a, **k: None,
+    })()
+    return com
+
+
+def _capture_discovery_payloads(com, sensor):
+    """run the EEP discovery for ``sensor`` and return the parsed payloads."""
+    import json as _json
+    published = {}
+    def fake_publish(topic, payload='', retain=False):
+        if topic.startswith('homeassistant/'):
+            published[topic] = payload
+    com.mqtt.publish = fake_publish
+    com._mqtt_discovery_eep(sensor)
+    configs = []
+    for v in published.values():
+        if not v:
+            continue
+        cfg = _json.loads(v) if isinstance(v, str) else v
+        configs.append(cfg)
+    return configs
+
+
+def test_ha_discovery_friendly_name_and_entity_id():
+    """the HA overlay publishes the friendly name as the device name and a
+    deterministic 'e2m_' entity-id (default_entity_id)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/',
+            'mqtt_discovery_prefix': 'homeassistant/',
+            'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = _mk_ha_discovery_com(conf)
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        com.add_sensor({'friendly_name': 'Wohnzimmer Temp',
+                        'address': 0x12345678, 'eep': 'A5-02-05'})
+        sensor = next(s for s in com.sensors if s.get('name') == 'enoceanmqtt/wohnzimmer_temp')
+
+        configs = _capture_discovery_payloads(com, sensor)
+        assert configs, 'expected discovery payloads'
+        for cfg in configs:
+            if 'device' in cfg:
+                # friendly name appears in the device name
+                assert cfg['device']['name'] == 'Wohnzimmer Temp', cfg['device']['name']
+                # deterministic entity id with e2m_ prefix
+                deid = cfg.get('default_entity_id', '')
+                assert deid.startswith('sensor.e2m_wohnzimmer_temp'), deid
+
+
+def test_ha_discovery_legacy_config_name_unchanged():
+    """config-file devices without a friendly name keep the legacy
+    'e2m_<sanitized>' device name (compatibility with older versions)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/',
+            'mqtt_discovery_prefix': 'homeassistant/',
+            'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        sensor = {'name': 'enoceanmqtt/kitchen', 'address': 0x12345678,
+                  'rorg': 0xA5, 'func': 0x02, 'type': 0x05,
+                  'source': 'config'}
+        com = _mk_ha_discovery_com(conf)
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        configs = _capture_discovery_payloads(com, sensor)
+        assert configs
+        for cfg in configs:
+            if 'device' in cfg:
+                assert cfg['device']['name'] == 'e2m_kitchen', cfg['device']['name']
+                assert cfg['default_entity_id'].startswith(
+                    'sensor.e2m_kitchen'), cfg['default_entity_id']
