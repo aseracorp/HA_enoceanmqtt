@@ -1547,7 +1547,13 @@ def test_thermokon_aliases():
 
 def test_friendly_name_with_spaces_backend():
     """web-added sensors accept a friendly name with spaces; the sanitized
-    entity-id / MQTT topic base ('name') is derived from it (e2m_ slug)."""
+    MQTT topic base ('name') is derived from it.
+
+    '/' is kept in the stored name (it groups the sensor in the MQTT broker)
+    and becomes a space in the Home Assistant friendly name - so:
+    'Living Room / Temp!' -> name 'living_room/temp', friendly
+    'Living Room Temp!' (slash -> space, runs of spaces collapse).
+    """
     with tempfile.TemporaryDirectory() as tmp:
         conf = {
             'mqtt_host': 'localhost', 'mqtt_port': '1883',
@@ -1581,17 +1587,76 @@ def test_friendly_name_with_spaces_backend():
         assert res2['ok'], res2
         assert com._store.get('hall_switch')['friendly_name'] == 'hall_switch'
 
-        # heavy slug edge cases
+        # slash groups the MQTT topic: stored name keeps '/', friendly gets
+        # a space instead
         res3 = com.add_sensor({'friendly_name': 'Living Room / Temp!  ',
                                'address': 0x22222222, 'eep': 'A5-02-05'})
         assert res3['ok'], res3
-        assert com._store.get('living_room_temp') is not None
+        stored3 = com._store.get('living_room/temp')
+        assert stored3 is not None
+        assert stored3['friendly_name'] == 'Living Room Temp!'
+        assert res3['sensor']['name'] == 'living_room/temp'
+        assert res3['sensor']['friendly_name'] == 'Living Room Temp!'
 
         # empty / punctuation-only names rejected
         assert not com.add_sensor({'friendly_name': '   ', 'address': 0x33333333,
                                    'eep': 'A5-02-05'})['ok']
         assert not com.add_sensor({'friendly_name': '---', 'address': 0x33333333,
                                    'eep': 'A5-02-05'})['ok']
+
+
+def test_update_sensor_with_slash_roundtrip():
+    """renaming a web-added sensor with a '/' keeps the MQTT grouping and
+    the slash -> space friendly mapping; config-file sensors get a clear
+    error instead of 'Sensor not found'."""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = _mk_com(conf)
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        res = com.add_sensor({'friendly_name': 'Lights/Kitchen Temp', 'name': 'lights/kitchen_temp',
+                              'address': 0x12345678, 'eep': 'A5-02-05'})
+        assert res['ok'], res
+        assert res['sensor']['name'] == 'lights/kitchen_temp'
+        assert res['sensor']['friendly_name'] == 'Lights Kitchen Temp'
+
+        # rename keeping the grouping: edit box shows the slashed base
+        res = com.update_sensor('lights/kitchen_temp', {
+            'friendly_name': 'lights/kitchen_temp', 'name': 'lights/kitchen_temp'})
+        assert res['ok'], res
+        stored = com._store.get('lights/kitchen_temp')
+        assert stored is not None
+        assert stored['name'] == 'lights/kitchen_temp'
+        assert stored['friendly_name'] == 'lights kitchen_temp'
+
+        # rename WITH a group change
+        res = com.update_sensor('lights/kitchen_temp', {
+            'friendly_name': 'Lights/Hall Temp', 'name': 'lights/hall_temp'})
+        assert res['ok'], res
+        assert com._store.get('lights/hall_temp') is not None
+        assert com._store.get('lights/kitchen_temp') is None
+        assert com._store.get('lights/hall_temp')['friendly_name'] == 'Lights Hall Temp'
+
+        # config-file sensors are not web-editable: clear error, no crash
+        com.sensors.append({'name': 'enoceanmqtt/kitchen', 'source': 'config',
+                            'address': 0x99999999, 'rorg': 0xA5,
+                            'func': 0x02, 'type': 0x05})
+        res = com.update_sensor('kitchen', {'friendly_name': 'Bath',
+                                            'name': 'bath'})
+        assert not res['ok']
+        assert 'configuration file' in res['error']
+        assert 'kitchen' in res['error']
+        # the config sensor itself is untouched
+        assert any(s.get('name') == 'enoceanmqtt/kitchen' for s in com.sensors)
+        res = com.remove_sensor('kitchen')
+        assert not res['ok']
+        assert 'configuration file' in res['error']
 
 
 def _mk_ha_discovery_com(conf, **kwargs):

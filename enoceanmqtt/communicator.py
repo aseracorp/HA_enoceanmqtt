@@ -331,27 +331,25 @@ class Communicator:
     def add_sensor(self, payload):
         """add a sensor (manual or web interface) and persist it"""
         try:
-            # The user may type a friendly name with spaces (friendly_name):
-            # it becomes the Home Assistant display name. 'name' is the
-            # sanitized MQTT-topic / entity-id base and is derived from the
-            # friendly name when not given explicitly.
-            friendly_name = str(payload.get('friendly_name', '')).strip()
+            # The user enters a name that may contain spaces (the Home
+            # Assistant friendly name) and '/' (MQTT topic grouping). The
+            # stored 'name' is the sanitized MQTT-topic base (spaces -> '_',
+            # '/' kept so the broker groups the sensor); 'friendly_name' is
+            # the slash -> space display form shown in Home Assistant.
+            friendly_raw = str(payload.get('friendly_name', '')).strip()
             name = str(payload.get('name', '')).strip()
-            if not name:
-                name = self._sanitize_entity_id(friendly_name or '')
+            if not name or '/' in friendly_raw:
+                name = self._sanitize_name(friendly_raw)
             address = payload.get('address')
             eep = str(payload.get('eep', '')).strip()
             sender = payload.get('sender')
 
             if not self._is_valid_name(name):
                 return {'ok': False, 'error': 'A sensor name is required (letters, digits, _ - / only)'}
-            if not friendly_name:
-                friendly_name = payload.get('friendly_name', '')
-                if friendly_name is None or str(friendly_name).strip() == '':
-                    friendly_name = name
-            # a friendly name like '---' produces an empty entity-id base
-            if not self._sanitize_entity_id(friendly_name):
+            # a name like '---' produces an empty topic base
+            if not self._sanitize_name(friendly_raw or name):
                 return {'ok': False, 'error': 'A device name is required (letters, digits, _ - /)'}
+            friendly_name = self._friendly_from_input(friendly_raw or name)
             address = parse_int(address)
             if address is None:
                 return {'ok': False, 'error': 'Invalid sensor address'}
@@ -397,6 +395,13 @@ class Communicator:
         name = str(name).strip()
         stored = self._store.get(name)
         if not stored:
+            config_match = self._find_config_sensor(name)
+            if config_match is not None:
+                section = self._display_name(config_match)
+                return {'ok': False, 'error': (
+                    "This device is defined in the configuration file "
+                    "(section [%s]). It cannot be removed from the web UI - "
+                    "remove the section and restart the gateway." % section)}
             return {'ok': False, 'error': 'Sensor not found'}
         prefix = self.conf.get('mqtt_prefix', 'enocean/')
         full = next((s for s in self.sensors if s.get('name') == prefix + name), None)
@@ -412,24 +417,32 @@ class Communicator:
         name = str(name).strip()
         stored = self._store.get(name)
         if not stored:
+            config_match = self._find_config_sensor(name)
+            if config_match is not None:
+                section = self._display_name(config_match)
+                return {'ok': False, 'error': (
+                    "This device is defined in the configuration file "
+                    "(section [%s]). It cannot be modified from the web UI - "
+                    "edit the section and restart the gateway." % section)}
             return {'ok': False, 'error': 'Sensor not found'}
 
         changes = {}
-        # optional rename: the user edits the friendly name (spaces allowed);
-        # the sanitized entity-id / MQTT topic base is re-derived from it and
-        # stored as 'name' so existing topics/discovery stay consistent.
+        # optional rename: the user edits the name (spaces and '/' allowed
+        # for MQTT topic grouping). The stored 'name' (MQTT topic base) keeps
+        # the slashes; 'friendly_name' (Home Assistant display) maps '/' to a
+        # space and is stored in slash -> space form.
         new_friendly = payload.get('friendly_name')
         new_name = payload.get('name')
         if new_friendly is not None:
             new_friendly = str(new_friendly).strip()
             if not new_friendly:
                 return {'ok': False, 'error': 'A device name is required'}
-            new_slug = self._sanitize_entity_id(new_friendly)
-            if not new_slug:
+            new_topic = self._sanitize_name(new_friendly)
+            if not new_topic:
                 return {'ok': False, 'error': 'A device name is required (letters, digits, _ - /)'}
-            changes['friendly_name'] = new_friendly
+            changes['friendly_name'] = self._friendly_from_input(new_friendly)
             if new_name in (None, ''):
-                new_name = new_slug
+                new_name = new_topic
         if new_name is not None:
             new_name = str(new_name).strip()
             if not self._is_valid_name(new_name):
@@ -647,18 +660,47 @@ class Communicator:
         return 'sensor'
 
     @staticmethod
-    def _sanitize_entity_id(name):
-        """turn a user-entered friendly name into a Home Assistant entity-ID
-        slug: lowercase, and any character outside [a-z0-9_] (spaces, '-',
-        '/', umlauts, ...) becomes '_'. Runs of '_' collapse into one and
-        leading/trailing '_' are trimmed.
+    def _sanitize_name(name):
+        """turn a user-entered device name into the stored MQTT topic base.
 
-        Home Assistant entity_ids only allow [a-z0-9_] (see
-        homeassistant/core.VALID_ENTITY_ID), so dashes become underscores
-        too. The result is what the user sees in HA for the device:
-        "Wohnzimmer Temp" -> "wohnzimmer_temp",
-        "Living Room / Temp" -> "living_room_temp",
-        "Temp-Garage" -> "temp_garage".
+        Lowercase; '/' is KEPT so it groups the sensor in the MQTT broker
+        (``enoceanmqtt/lights/kitchen/...``); spaces and any other character
+        outside [a-z0-9_/] become '_'. Runs of '_' collapse, '_' hugging a
+        '/' is dropped (so 'a / b' -> 'a/b'), edges trimmed.
+
+        "Lights/Kitchen Temp" -> "lights/kitchen_temp"
+        "Wohnzimmer Temp"    -> "wohnzimmer_temp"
+        "Living Room / Temp" -> "living_room/temp"
+        """
+        n = str(name or '').strip().lower()
+        n = re.sub(r'[^a-z0-9_/]+', '_', n)
+        n = re.sub(r'_+', '_', n)
+        n = re.sub(r'_/', '/', n).replace('/_', '/')
+        n = re.sub(r'/{2,}', '/', n)
+        return n.strip('_/')
+
+    @staticmethod
+    def _friendly_from_input(name):
+        """the Home Assistant friendly name shown for a user-entered name.
+
+        '/' (MQTT topic grouping) is shown as a space, exactly as requested:
+        "Lights/Kitchen Temp" -> "Lights Kitchen Temp". Runs of spaces
+        collapse so a group separator styled ' / ' becomes a single space.
+        """
+        return re.sub(r' +', ' ', re.sub(r'/', ' ', str(name or ''))).strip()
+
+    @staticmethod
+    def _sanitize_entity_id(name):
+        """turn a friendly name into a Home Assistant entity-ID slug.
+
+        Lowercase, and any character outside [a-z0-9_] (spaces, '-', '/',
+        umlauts, ...) becomes '_' - Home Assistant entity_ids only allow
+        [a-z0-9_] (homeassistant/core.VALID_ENTITY_ID). Runs of '_' collapse,
+        edges trimmed. Used wherever a pure entity-ID slug is needed (the
+        stored MQTT topic base keeps '/' via ``_sanitize_name``).
+
+        "Lights Kitchen Temp" -> "lights_kitchen_temp"
+        "Temp-Garage"         -> "temp_garage".
         """
         n = str(name or '').strip().lower()
         n = re.sub(r'[^a-z0-9_]+', '_', n)
@@ -701,6 +743,16 @@ class Communicator:
         if sensor.get('model') and len(display_name) > 3 and display_name[-3] == '/':
             display_name = display_name[:-3]
         return display_name
+
+    def _find_config_sensor(self, name):
+        """find a configuration-file sensor by its display name (prefix
+        stripped, model '/XX' suffix hidden), or None."""
+        for sensor in self.sensors:
+            if sensor.get('source') == 'dynamic':
+                continue
+            if self._display_name(sensor) == name:
+                return sensor
+        return None
 
     def describe_sensor(self, sensor):
         """build a JSON-friendly status description of a device"""
@@ -768,7 +820,11 @@ class Communicator:
 
         return {
             'name': display_name,
-            'friendly_name': sensor.get('friendly_name') or display_name,
+            # display the friendly name with '/' (MQTT grouping) as a space,
+            # like Home Assistant shows it - legacy stored friendly names
+            # (e.g. 'Kitchen / Temp') render consistently too.
+            'friendly_name': self._friendly_from_input(
+                sensor.get('friendly_name') or display_name),
             'address': address,
             'sender': sensor.get('sender'),
             'virtual': sensor.get('virtual'),
