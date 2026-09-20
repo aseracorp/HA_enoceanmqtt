@@ -16,3 +16,4 @@ dist
 # cover position store (created at runtime)
 cover_positions.json
 secure_rlc.json
+.venv-test

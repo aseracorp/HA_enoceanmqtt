@@ -37,6 +37,9 @@ async function api(path, opts = {}) {
     const reason = data.error || data.message || ('Request failed (' + res.status + ')');
     const err = new Error(reason);
     err.status = res.status;
+    // keep a machine-readable code so the UI can show a localized message
+    err.error_code = data.error_code;
+    err.section = data.section;
     throw err;
   }
   return data;
@@ -499,10 +502,11 @@ function openEdit(name) {
   editingDevice = name;
   const cat = deviceCategory(s);
   try {
-  // The edit field holds the MQTT topic base (slashes = broker grouping),
-  // which round-trips losslessly; the HA friendly name / entity id are
-  // derived live from it in the preview below.
-  $('e-name').value = s.name;
+  // The edit field holds the friendly name (spaces, the form the user
+  // originally typed). Slashes map to spaces, and the backend maps them
+  // back to '/' when storing the MQTT topic base, so the broker grouping
+  // is preserved losslessly on save while the field stays readable.
+  $('e-name').value = s.friendly_name || s.name;
   updateEntityPreview('e-name', 'e-name-preview');
   $('e-address').value = (s.address !== undefined && s.address !== null && s.address !== 0xFFFFFFFF)
     ? fmtAddr(s.address, true) : '';
@@ -579,7 +583,7 @@ $('edit-ok')?.addEventListener('click', async () => {
     editingDevice = null;
     await loadStatus();
   } catch (err) {
-    toast(t('err_update_device') + err.message, 'error');
+    toast(t('err_update_device') + friendlyError(err), 'error');
   }
 });
 
@@ -1233,7 +1237,7 @@ $('modal-ok')?.addEventListener('click', async () => {
     toast(t('device_removed') + ' "' + name + '"', 'success');
     await loadStatus();
   } catch (err) {
-    toast(t('err_remove_device') + err.message, 'error');
+    toast(t('err_remove_device') + friendlyError(err), 'error');
   }
 });
 
@@ -1256,6 +1260,17 @@ function t(key) {
   const en = langDict('en');
   if (en && en[key] !== undefined) return en[key];
   return key;
+}
+function friendlyError(err) {
+  // backend errors come with a machine-readable code; translate when known,
+  // otherwise fall back to the backend-provided English text.
+  if (err && err.error_code === 'config_file_sensor') {
+    const section = err.section || '';
+    const key = 'err_config_file_sensor';
+    const localized = langDict(currentLang) && langDict(currentLang)[key];
+    if (localized) return localized.replace('{section}', section);
+  }
+  return err ? err.message : '';
 }
 function applyTranslations() {
   document.querySelectorAll('[data-i18n]').forEach((el) => {

@@ -41,6 +41,7 @@ window.LANG_fr = {
     actor_added: 'Actionneur ajouté',    bidir_added: 'Appareil bidirectionnel ajouté',
     err_add_device: 'Échec de l\'ajout : ',    device_removed: 'Appareil supprimé',
     err_remove_device: 'Échec de la suppression : ',
+    err_config_file_sensor: 'Cet appareil est défini dans le fichier de configuration (section [{section}]). Il ne peut pas être modifié depuis l\'interface web - modifiez la section et redémarrez la passerelle.',
     save_restart: 'Enregistrer & redémarrer',    sensor_detected: 'Capteur détecté - confirmez les détails ci-dessous.',    actor_name: 'Nom de l\'actionneur',    device_name: 'Nom de l\'appareil',
 
     actor_hint: 'Saisissez un nom, choisissez l\'ID émetteur et l\'EEP, puis envoyez le télégramme d\'apprentissage pour que l\'appareil apprenne cette passerelle. (l\'actionneur doit d\'abord être en mode enseignement)',    bidir_hint: 'Démarrer l\'enseignement, puis déclencher l\'appareil. À la réception, nous répondons avec un télégramme d\'apprentissage depuis le prochain ID émetteur libre et pré-remplissons les détails ci-dessous.',
