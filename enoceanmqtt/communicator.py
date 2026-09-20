@@ -398,10 +398,13 @@ class Communicator:
             config_match = self._find_config_sensor(name)
             if config_match is not None:
                 section = self._display_name(config_match)
-                return {'ok': False, 'error': (
-                    "This device is defined in the configuration file "
-                    "(section [%s]). It cannot be removed from the web UI - "
-                    "remove the section and restart the gateway." % section)}
+                return {'ok': False,
+                        'error_code': 'config_file_sensor',
+                        'section': section,
+                        'error': (
+                            "This device is defined in the configuration file "
+                            "(section [%s]). It cannot be removed from the web UI - "
+                            "remove the section and restart the gateway." % section)}
             return {'ok': False, 'error': 'Sensor not found'}
         prefix = self.conf.get('mqtt_prefix', 'enocean/')
         full = next((s for s in self.sensors if s.get('name') == prefix + name), None)
@@ -420,10 +423,13 @@ class Communicator:
             config_match = self._find_config_sensor(name)
             if config_match is not None:
                 section = self._display_name(config_match)
-                return {'ok': False, 'error': (
-                    "This device is defined in the configuration file "
-                    "(section [%s]). It cannot be modified from the web UI - "
-                    "edit the section and restart the gateway." % section)}
+                return {'ok': False,
+                        'error_code': 'config_file_sensor',
+                        'section': section,
+                        'error': (
+                            "This device is defined in the configuration file "
+                            "(section [%s]). It cannot be modified from the web UI - "
+                            "edit the section and restart the gateway." % section)}
             return {'ok': False, 'error': 'Sensor not found'}
 
         changes = {}

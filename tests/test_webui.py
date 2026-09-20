@@ -1652,11 +1652,16 @@ def test_update_sensor_with_slash_roundtrip():
         assert not res['ok']
         assert 'configuration file' in res['error']
         assert 'kitchen' in res['error']
+        # machine-readable code + section so the web UI can localize the toast
+        assert res.get('error_code') == 'config_file_sensor'
+        assert res.get('section') == 'kitchen'
         # the config sensor itself is untouched
         assert any(s.get('name') == 'enoceanmqtt/kitchen' for s in com.sensors)
         res = com.remove_sensor('kitchen')
         assert not res['ok']
         assert 'configuration file' in res['error']
+        assert res.get('error_code') == 'config_file_sensor'
+        assert res.get('section') == 'kitchen'
 
 
 def _mk_ha_discovery_com(conf, **kwargs):

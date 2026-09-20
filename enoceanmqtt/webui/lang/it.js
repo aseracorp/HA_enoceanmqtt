@@ -41,6 +41,7 @@ window.LANG_it = {
     actor_added: 'Attuatore aggiunto',    bidir_added: 'Dispositivo bidirezionale aggiunto',
     err_add_device: 'Impossibile aggiungere il dispositivo: ',    device_removed: 'Dispositivo rimosso',
     err_remove_device: 'Impossibile rimuovere il dispositivo: ',
+    err_config_file_sensor: 'Questo dispositivo è definito nel file di configurazione (sezione [{section}]). Non può essere modificato dall\'interfaccia web - modifica la sezione e riavvia il gateway.',
     save_restart: 'Salva e riavvia',    sensor_detected: 'Sensore rilevato - conferma i dettagli qui sotto.',    actor_name: 'Nome attuatore',    device_name: 'Nome dispositivo',
 
     actor_hint: 'Inserisci un nome, scegli l\'ID mittente e l\'EEP, poi invia il telegramma di apprendimento così il dispositivo conosce questo gateway. (l\'attuatore deve essere prima in modalità teach-in)',    bidir_hint: 'Avvia teach-in, poi attiva il dispositivo. Alla ricezione rispondiamo con un telegramma di apprendimento dal prossimo ID mittente libero e precompiliamo i dettagli qui sotto.',

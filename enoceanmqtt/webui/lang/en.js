@@ -41,6 +41,7 @@ window.LANG_en = {
     actor_added: 'Actor added',    bidir_added: 'Bidirectional added',
     err_add_device: 'Failed to add device: ',    device_removed: 'Device removed',
     err_remove_device: 'Failed to remove device: ',
+    err_config_file_sensor: 'This device is defined in the configuration file (section [{section}]). It cannot be changed from the web UI - edit the section and restart the gateway.',
     save_restart: 'Save & restart',    sensor_detected: 'Sensor detected - confirm the details below.',    actor_name: 'Actor name',    device_name: 'Device name',
 
     actor_hint: 'Enter a name, pick the sender ID to transmit from and the EEP, then send the teach-in telegram so the device learns this gateway. (the actor has to be in teach-in mode first)',    bidir_hint: 'Start teach-in, then trigger the device. On receipt we answer with a teach-in telegram from the next free sender ID and pre-fill the details below.',

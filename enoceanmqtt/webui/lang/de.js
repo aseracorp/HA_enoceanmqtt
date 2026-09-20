@@ -40,7 +40,7 @@ window.LANG_de = {
     err_no_sender: 'Bitte eine Sender-ID wählen',    sensor_added: 'Sensor hinzugefügt',
     actor_added: 'Aktor hinzugefügt',    bidir_added: 'Bidirektionales Gerät hinzugefügt',
     err_add_device: 'Gerät konnte nicht hinzugefügt werden: ',    device_removed: 'Gerät entfernt',
-    err_remove_device: 'Gerät konnte nicht entfernt werden: ',    save_restart: 'Speichern & neu starten',
+    err_remove_device: 'Gerät konnte nicht entfernt werden: ',    err_config_file_sensor: 'Dieses Gerät ist in der Konfigurationsdatei definiert (Abschnitt [{section}]). Es kann nicht über die Weboberfläche geändert werden - bearbeiten Sie den Abschnitt und starten Sie das Gateway neu.',    save_restart: 'Speichern & neu starten',
     sensor_detected: 'Sensor erkannt - bestätigen Sie die Daten unten.',
     actor_name: 'Aktor-Name',
     device_name: 'Geräte-Name',
