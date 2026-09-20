@@ -499,7 +499,10 @@ function openEdit(name) {
   editingDevice = name;
   const cat = deviceCategory(s);
   try {
-  $('e-name').value = s.friendly_name || s.name;
+  // The edit field holds the MQTT topic base (slashes = broker grouping),
+  // which round-trips losslessly; the HA friendly name / entity id are
+  // derived live from it in the preview below.
+  $('e-name').value = s.name;
   updateEntityPreview('e-name', 'e-name-preview');
   $('e-address').value = (s.address !== undefined && s.address !== null && s.address !== 0xFFFFFFFF)
     ? fmtAddr(s.address, true) : '';
@@ -534,10 +537,14 @@ $('edit-ok')?.addEventListener('click', async () => {
   const eep = resolveEep(eepInput);
   if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
-  // the friendly name is shown in HA; the entity-id / MQTT topic base is the
-  // slugified version (backend re-derives it, but we send it explicitly so
-  // the UI stays in control and renaming an existing device keeps working).
-  const body = { friendly_name: name, name: slugifyEntityId(name), eep: eep };
+  // the name keeps '/' (MQTT topic grouping); the backend stores it as the
+  // topic base and derives the HA friendly name (slash -> space) + entity id.
+  // Only send the name when it actually changed - editing just the EEP or
+  // address must not silently rewrite an existing pretty friendly name.
+  const mqtt = slugifyMqttName(name);
+  if (!mqtt) return toast(t('err_bad_name'), 'error');
+  const body = { eep: eep };
+  if (mqtt !== editingDevice) { body.friendly_name = name; body.name = mqtt; }
   const addrVal = $('e-address').value.trim();
   const address = parseAddress(addrVal);
   const cat = deviceCategory(state.sensors.find((x) => x.name === editingDevice) || {});
@@ -835,6 +842,26 @@ function slugifyEntityId(name) {
   return s;
 }
 
+// The stored MQTT topic base: lowercase, '/' KEPT (it groups the sensor in
+// the broker), spaces and anything else outside [a-z0-9_/] become '_',
+// '_' hugging '/' is dropped so 'a / b' -> 'a/b'.
+// "Lights/Kitchen Temp" -> "lights/kitchen_temp".
+function slugifyMqttName(name) {
+  let s = String(name || '').trim().toLowerCase();
+  s = s.replace(/[^a-z0-9_/]+/g, '_');
+  s = s.replace(/_+/g, '_');
+  s = s.replace(/_\/+/g, '/').replace(/\/_+/g, '/');
+  s = s.replace(/\/{2,}/g, '/');
+  return s.replace(/^[_\ /]+|[_\ /]+$/g, '');
+}
+
+// The Home Assistant friendly name for a typed name: '/' (topic grouping)
+// shows as a space and runs of spaces collapse. "Lights/Kitchen Temp" ->
+// "Lights Kitchen Temp".
+function friendlyFromMqtt(name) {
+  return String(name || '').replace(/\//g, ' ').replace(/ +/g, ' ').trim();
+}
+
 // The entity_id the device will get in Home Assistant: 'e2m_' + the
 // slugified friendly name (entity-level keys get the field appended).
 function entityIdPreview(name, field) {
@@ -844,8 +871,10 @@ function entityIdPreview(name, field) {
   return base + (field ? '_' + field : '');
 }
 
-// Show the Home Assistant entity_id that will be derived from the friendly
-// name in a <small> preview element next to the name input.
+// Show the Home Assistant friendly name + entity_id that will be derived
+// from the typed name in a <small> preview element next to the name input.
+// The typed name may contain '/' (MQTT topic grouping): it becomes a space
+// in the HA friendly name and stays / becomes '_' in the entity id.
 function updateEntityPreview(inputId, previewId) {
   const input = $(inputId);
   const preview = $(previewId);
@@ -855,7 +884,10 @@ function updateEntityPreview(inputId, previewId) {
     preview.textContent = '';
     return;
   }
-  preview.textContent = '→ ' + entityIdPreview(name);
+  const friendly = friendlyFromMqtt(name);
+  const entity = entityIdPreview(friendly);
+  preview.textContent = '→ HA: ' + friendly + ' · e2m: ' + entity;
+  preview.title = 'Home Assistant friendly name · entity id';
 }
 
 function eepViewerUrl(eep) {
@@ -1048,7 +1080,7 @@ $('as-save')?.addEventListener('click', async () => {
   if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
   if (address === null) return toast(t('err_bad_address'), 'error');
   if (!eep) return toast(t('err_no_eep'), 'error');
-  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ friendly_name: name, name: slugifyEntityId(name), address, eep, category: 'sensor', virtual: 0 }) });
+  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ friendly_name: name, name: slugifyMqttName(name), address, eep, category: 'sensor', virtual: 0 }) });
   if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
   toast(t('sensor_added'), 'success');
   $('addsensor-overlay').hidden = true; asReset();
@@ -1077,7 +1109,7 @@ $('aa-save')?.addEventListener('click', async () => {
   if (!eep) return toast(t('err_no_eep'), 'error');
   if (!name) name = defaultActorName(sender);
   if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
-  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ friendly_name: name, name: slugifyEntityId(name), address: 0xFFFFFFFF, eep, sender, category: 'actor', virtual: 1 }) });
+  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ friendly_name: name, name: slugifyMqttName(name), address: 0xFFFFFFFF, eep, sender, category: 'actor', virtual: 1 }) });
   if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
   toast(t('actor_added'), 'success');
   $('addactor-overlay').hidden = true;
@@ -1140,7 +1172,7 @@ $('ab-save')?.addEventListener('click', async () => {
   if (!eep) return toast(t('err_no_eep'), 'error');
   if (!name) name = defaultActorName(sender);
   if (!isValidName(name)) return toast(t('err_bad_name'), 'error');
-  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ friendly_name: name, name: slugifyEntityId(name), address, eep, sender, category: 'bidirectional', virtual: 1, direction: 1, answer: 1 }) });
+  const res = await api('/api/sensors', { method: 'POST', body: JSON.stringify({ friendly_name: name, name: slugifyMqttName(name), address, eep, sender, category: 'bidirectional', virtual: 1, direction: 1, answer: 1 }) });
   if (!res.ok) return toast(t('err_add_device') + (res.error || ''), 'error');
   toast(t('bidir_added'), 'success');
   $('addbidir-overlay').hidden = true;
