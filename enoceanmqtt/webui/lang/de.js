@@ -30,6 +30,7 @@ window.LANG_de = {
     no_actors: 'Keine Aktoren konfiguriert.',    no_sensors: 'Keine Sensoren konfiguriert.',
     no_devices: 'Noch keine Geräte konfiguriert.',    connected: 'verbunden',    disconnected: 'nicht verbunden',
     searching_gateway: 'Suche nach EnOcean-Gateway…',
+    discovery_found: 'EnOcean-Gateway gefunden:',    discovery_use: 'Dieses Gateway verwenden',    discovery_serial: 'lokale Seriell',    discovery_none: 'Noch kein Gateway gefunden',
     eep_placeholder: 'A5-20-01, Temperatur, Schalter…',    device_count: 'Geräte',
     eep_viewer: 'Im EEP-Viewer öffnen',    send_label: 'Senden',
     err_load_status: 'Status konnte nicht geladen werden: ',    err_load_config: 'Konfiguration konnte nicht geladen werden: ',

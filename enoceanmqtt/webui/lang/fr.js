@@ -30,6 +30,7 @@ window.LANG_fr = {
     no_actors: 'Aucun actionneur configuré.',    no_sensors: 'Aucun capteur configuré.',
     no_devices: 'Aucun appareil configuré.',    connected: 'connecté',    disconnected: 'déconnecté',
     searching_gateway: 'recherche d\'une passerelle EnOcean…',
+    discovery_found: 'Passerelle EnOcean trouvée:',    discovery_use: 'Utiliser cette passerelle',    discovery_serial: 'série locale',    discovery_none: 'Aucune passerelle trouvée',
     eep_placeholder: 'A5-20-01, température, interrupteur…',    device_count: 'appareils',
     eep_viewer: 'Ouvrir dans la visionneuse EEP',    send_label: 'envoyer',
     err_load_status: 'Échec du chargement de l\'état : ',    err_load_config: 'Échec du chargement de la configuration : ',

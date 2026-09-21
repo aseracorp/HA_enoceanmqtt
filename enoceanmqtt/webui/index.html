@@ -266,6 +266,19 @@
   </div>
 </div>
 
+<!-- persistent discovered-gateway notice (hidden until something is found) -->
+<div class="discovery-banner" id="discovery-banner" hidden>
+  <div class="discovery-banner-body">
+    <span class="dot discovery-dot" aria-hidden="true"></span>
+    <span id="discovery-banner-text"></span>
+  </div>
+  <div class="discovery-banner-actions">
+    <span class="discovery-serial" id="discovery-serial-count"></span>
+    <button type="button" class="btn btn-small" id="discovery-use" data-i18n="discovery_use">Use this gateway</button>
+    <button type="button" class="btn btn-small btn-plain" id="discovery-dismiss" aria-label="Dismiss" title="Dismiss">✕</button>
+  </div>
+</div>
+
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="/lang/en.js"></script>
 <script src="/lang/de.js"></script>

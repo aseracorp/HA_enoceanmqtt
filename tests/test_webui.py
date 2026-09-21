@@ -1193,6 +1193,151 @@ def test_cover_store_persistence():
         assert CoverStore(db).get_position(0x123) == 87
 
 
+def _mdns_packet(answers):
+    """build a realistic mDNS response with name-compression pointers.
+
+    answers: list of (owner_name, rtype, rdata). owner names are encoded as
+    real DNS names; the `_tcp.local` suffix uses the 0xC015 compression
+    pointer into the question area (offset 12 + len('\x08_ser2net') = 21) -
+    exactly how real responders pack the repeated suffix.
+    """
+    import struct
+    packet = bytearray()
+    packet += struct.pack('!HHHHHH', 0, 0x8400, 1, len(answers), 0, 0)
+    # question area occupies offset 12
+    packet += b'\x08_ser2net\x04_tcp\x05local\x00'
+    packet += struct.pack('!HH', 12, 1)
+
+    def enc(fqdn):
+        if fqdn.endswith('._tcp.local'):
+            prefix = fqdn[:-(len('._tcp.local'))].split('.')
+            body = b''
+            for part in prefix:
+                body += bytes([len(part)]) + part.encode()
+            return body + b'\xc0\x15'    # -> offset 21 (_tcp.local suffix)
+        out = b''
+        for part in fqdn.split('.'):
+            out += bytes([len(part)]) + part.encode()
+        return out + b'\x00'
+
+    for owner, rtype, rdata in answers:
+        packet += enc(owner)
+        packet += struct.pack('!HHIH', rtype, 1, 120, len(rdata))
+        packet += rdata
+    return bytes(packet)
+
+
+def test_device_discovery_mdns_srv_host_port():
+    """PTR+SRV+A+TXT answers yield host/port; SRV target captured.
+
+    Regression: the old parser dropped the SRV target (host was never set)
+    and decoded the PTR rdata as raw bytes, so the UI could never build a
+    usable 'tcp:host:port' endpoint."""
+    import socket, struct
+    from enoceanmqtt.device_discovery import _MdnsResponse, discover_mdns, SERVICE_TYPES
+
+    # instance name: gw._ser2net._tcp.local (own FQDN, no compression)
+    def enc_name(name):
+        out = b''
+        for part in name.split('.'):
+            out += bytes([len(part)]) + part.encode()
+        return out + b'\x00'
+
+    answers = [
+        ('_ser2net._tcp.local',     12, enc_name('gw._ser2net._tcp.local')),          # PTR
+        ('gw._ser2net._tcp.local',  33, struct.pack('!HHH', 0, 0, 30000) + enc_name('enocean.local')),  # SRV
+        ('enocean.local',            1,  socket.inet_aton('192.168.1.50')),             # A
+        ('gw._ser2net._tcp.local',  16, b'\x0cmodel=TCM310'),                          # TXT
+    ]
+    packet = _mdns_packet(answers)
+
+    # 1) raw parser sees all 4 records and SRV target decodes
+    resp = _MdnsResponse(packet)
+    ans = resp.parse()
+    assert ans is not None and len(ans) == 4, len(ans)
+    srv = [a for a in ans if a[1] == 33][0]
+    _n, _t, _c, _tl, rdata, roff = srv
+    target, _ = resp._name(roff + 6)
+    assert target == 'enocean.local', target
+    assert struct.unpack('!H', rdata[4:6])[0] == 30000
+
+    # 2) discover_mdns with a mocked socket that yields this packet
+    import enoceanmqtt.device_discovery as dd
+    _real_socket = socket.socket
+
+    class _FakeSock:
+        invocations = []
+        def __init__(self, *a, **k):
+            pass
+        def setsockopt(self, *a): pass
+        def bind(self, *a): pass
+        def settimeout(self, *a): pass
+        def sendto(self, *a):
+            _FakeSock.invocations.append('query')
+        def recvfrom(self, n):
+            # first listener read returns the packet, then block
+            if not getattr(self, '_served', False):
+                self._served = True
+                return packet, ('192.168.1.1', 5353)
+            raise socket.timeout()
+        def close(self): pass
+
+    orig = dd.socket.socket
+    try:
+        dd.socket.socket = _FakeSock
+        # force a tiny timeout so the fake recvfrom drives the loop
+        res = discover_mdns(timeout=0.05)
+    finally:
+        dd.socket.socket = orig
+    assert len(res) == 1, res
+    e = res[0]
+    assert '_ser2net' in e['service'], e      # instance name contains the type
+    assert e['host'] == '192.168.1.50', e      # from A record (target .local)
+    assert e['port'] == 30000, e
+    assert e['txt'].get('model') == 'TCM310', e
+    # query() must have sent PTR queries for each service type
+    assert dd.SERVICE_TYPES and 'query' in _FakeSock.invocations
+
+
+def test_device_discovery_mdns_srv_target_is_ip():
+    """when SRV target is an IP literal, host uses it directly."""
+    import socket, struct
+    from enoceanmqtt.device_discovery import discover_mdns
+
+    def enc_name(name):
+        out = b''
+        for part in name.split('.'):
+            out += bytes([len(part)]) + part.encode()
+        return out + b'\x00'
+
+    answers = [
+        ('_ser2net._tcp.local',     12, enc_name('gw._ser2net._tcp.local')),
+        ('gw._ser2net._tcp.local',  33, struct.pack('!HHH', 0, 0, 30000) + enc_name('192.168.1.50')),
+    ]
+    packet = _mdns_packet(answers)
+    import enoceanmqtt.device_discovery as dd
+    class _FakeSock:
+        def __init__(self, *a, **k): pass
+        def setsockopt(self, *a): pass
+        def bind(self, *a): pass
+        def settimeout(self, *a): pass
+        def sendto(self, *a): pass
+        def recvfrom(self, n):
+            if not getattr(self, '_served', False):
+                self._served = True
+                return packet, ('192.168.1.1', 5353)
+            raise socket.timeout()
+        def close(self): pass
+    orig = dd.socket.socket
+    try:
+        dd.socket.socket = _FakeSock
+        res = discover_mdns(timeout=0.05)
+    finally:
+        dd.socket.socket = orig
+    assert len(res) == 1 and res[0]['host'] == '192.168.1.50', res
+    assert res[0]['port'] == 30000, res
+
+
 def test_device_discovery_mdns_parse():
     """mDNS response parser extracts PTR/SRV/TXT records correctly."""
     from enoceanmqtt.device_discovery import _MdnsResponse
@@ -1893,6 +2038,49 @@ def test_boot_without_gateway_status_and_reconnect():
         com.enocean = FakeEnocean()
         assert com.gateway_connected() is True
 
+
+
+def test_api_discovery_serves_cache():
+    """/api/discovery returns the communicator's background discovery cache
+    (no live network call on the web-handler path)."""
+    import urllib.request
+    import socket as _socket
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': '/dev/enocean-does-not-exist-6789',
+            'mqtt_prefix': 'enoceanmqtt/',
+            'webui_disable': '0',
+            'webui_port': '0',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.mqtt = FakeMQTT()
+        # pre-populate the cache the way the background thread would
+        with com._discovery_cache_lock:
+            com._discovery_cache = {
+                'serial': [{'device': '/dev/ttyUSB0', 'candidate': True, 'enocean': True,
+                            'description': 'USB300', 'hwid': '10:20'}],
+                'mdns': [{'service': 'gw._ser2net._tcp.local', 'name': 'gw',
+                          'host': '192.168.1.50', 'port': 30000, 'txt': {'model': 'TCM310'}}],
+            }
+
+        web = WebInterface(com)
+        sock = _socket.socket()
+        sock.bind(('127.0.0.1', 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        web.start(host='127.0.0.1', port=port)
+        time.sleep(0.3)
+        try:
+            with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/discovery') as r:
+                data = json.loads(r.read())
+            assert data['serial'][0]['device'] == '/dev/ttyUSB0'
+            assert data['mdns'][0]['host'] == '192.168.1.50'
+            assert data['mdns'][0]['port'] == 30000
+        finally:
+            web.stop()
+        web.stop()
 
 
 def test_tcp_down_no_transmit_queue_growth():
