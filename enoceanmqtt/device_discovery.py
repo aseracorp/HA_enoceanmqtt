@@ -34,7 +34,9 @@ Two sockets are used:
 """
 from __future__ import annotations
 
+import os
 import socket
+import stat
 import struct
 import time
 
@@ -52,11 +54,54 @@ _ENOCEAN_HINTS = (b"tcm515", b"tcm310", b"tcm300", b"enocean", b"ser2net",
                   b"usb300", b"tcm", b"eltako", b"fsb", b"fsr", b"esp3",
                   b"tcpclientcommunicator")
 
-#: USB VID/PID (or substrings in hwid/description) of common EnOcean dongles
+#: USB VID/PID (or substrings in hwid/description) of known EnOcean dongles.
+#: NB: the USB300 uses the FTDI chipset (VID 0403, PID 6001), and 10:20 is
+#: the qingping-style vendor id; treat these as *candidate* only when they
+#: appear with an EnOcean-ish description/path, otherwise any FTDI USB-serial
+#: adapter would be flagged.
 _ENOCEAN_HWID_HINTS = ("10:20", "tcm", "enocean", "usb300", "2504")
+
+#: strong hints that never false-positive on a generic FTDI adapter
+_ENOCEAN_STRONG_HINTS = ("enocean", "tcm300", "tcm310", "tcm515", "tcm516",
+                         "usb300", "2504", "busware", "eltako", "esp3")
+
+#: FTDI is the chipset the USB300 uses; flag it as EnOcean only when the
+#: description/path also mentions enocean/tcm/usb300 (avoid generic adapters)
+_FTDI_VID = ("0403", "6001")
 
 #: fallback port when an mDNS SRV record is missing (ser2net default)
 _DEFAULT_SER2NET_PORT = 30000
+
+#: when a symlink points into /dev/serial/by-id or /dev/serial/by-path, we
+#: still need the *resolved* device (pyserial reports the link target); the
+#: by-id name itself carries the VID ("usb-FTDI...") which is a hint too.
+_DEV_SCAN_HINTS = ("enocean", "tcm", "usb300", "2504", "esp3", "busware", "ftdi")
+
+
+def _device_looks_enocean(device, desc, hwid):
+    """True when a serial device is (or is likely) an EnOcean transceiver."""
+    device_l = (device or "").lower()
+    desc_l = (desc or "").lower()
+    hwid_l = (hwid or "").lower()
+    hay = device_l + ' ' + desc_l + ' ' + hwid_l
+    # strong EnOcean signals anywhere
+    if any(h in hay for h in _ENOCEAN_STRONG_HINTS):
+        return True
+    # qingping-style vendor id
+    if "10:20" in hwid_l or "10:20" in device_l:
+        return True
+    # FTDI chipset is EnOcean-ish ONLY when paired with an EnOcean hint
+    if any(v in hwid_l for v in _FTDI_VID):
+        if any(h in desc_l or h in device_l for h in _ENOCEAN_STRONG_HINTS):
+            return True
+    # resolve symlinks: /dev/enocean -> /dev/serial/by-id/usb-EnOcean...
+    try:
+        real = os.path.realpath(device).lower()
+        if any(h in real for h in _DEV_SCAN_HINTS):
+            return True
+    except OSError:
+        pass
+    return False
 
 
 def discover_serial(timeout=1.0):
@@ -64,25 +109,60 @@ def discover_serial(timeout=1.0):
 
     Each entry: {'device': ..., 'description': ..., 'hwid': ...,
     'enocean': bool, 'candidate': bool}
+
+    Besides pyserial's ``comports()`` (which glocs ``/dev/ttyUSB*``,
+    ``/dev/ttyACM*`` ...), we also scan ``/dev`` itself for char devices
+    whose *name* looks EnOcean-ish - this catches udev symlinks and docker
+    device binds named ``/dev/enocean`` that pyserial never lists.
     """
     out = []
+    seen = set()
     try:
         import serial.tools.list_ports
         for p in serial.tools.list_ports.comports():
-            desc = (p.description or "").lower()
-            hwid = (p.hwid or "").lower()
             device = p.device
-            is_enocean = any(h in hwid or h in desc for h in _ENOCEAN_HWID_HINTS)
-            is_candidate = any(device.startswith(x) for x in ("/dev/ttyUSB", "/dev/ttyACM"))
+            desc = p.description or ""
+            hwid = p.hwid or ""
+            is_enocean = _device_looks_enocean(device, desc, hwid)
+            is_candidate = (any(device.startswith(x) for x in ("/dev/ttyUSB", "/dev/ttyACM"))
+                            or is_enocean)
+            seen.add(device)
             out.append({
                 'device': device,
-                'description': p.description,
-                'hwid': p.hwid,
+                'description': desc,
+                'hwid': hwid,
                 'enocean': bool(is_enocean),
-                'candidate': bool(is_candidate or is_enocean),
+                'candidate': bool(is_candidate),
             })
     except Exception:   # pylint: disable=broad-except
         pass
+
+    # scan /dev for char devices with an EnOcean-ish name (e.g. /dev/enocean)
+    try:
+        devnames = os.listdir('/dev')
+    except OSError:
+        devnames = []
+    for name in devnames:
+        device = '/dev/' + name
+        if device in seen:
+            continue
+        if not any(h in name.lower() for h in _DEV_SCAN_HINTS):
+            continue
+        try:
+            st = os.stat(device)
+        except OSError:
+            continue
+        if not stat.S_ISCHR(st.st_mode) and not os.path.islink(device):
+            continue
+        is_enocean = _device_looks_enocean(device, name, '')
+        seen.add(device)
+        out.append({
+            'device': device,
+            'description': name + ' (EnOcean-named device)',
+            'hwid': '',
+            'enocean': True,
+            'candidate': True,
+        })
     return out
 
 
