@@ -29,6 +29,7 @@ window.LANG_en = {
     sensor: 'Sensor',    bidirectional: 'Bidirectional',
     no_actors: 'No actors configured.',    no_sensors: 'No sensors configured.',
     no_devices: 'No devices configured yet.',    connected: 'connected',    disconnected: 'disconnected',
+    searching_gateway: 'searching for EnOcean gateway…',
     eep_placeholder: 'A5-20-01, temperature, switch…',    device_count: 'devices',
     eep_viewer: 'Open in EEP viewer',    send_label: 'send',
     err_load_status: 'Failed to load status: ',    err_load_config: 'Failed to load configuration: ',

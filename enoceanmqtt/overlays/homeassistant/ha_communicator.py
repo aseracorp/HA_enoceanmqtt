@@ -157,9 +157,14 @@ class HACommunicator(Communicator):
         # Init
         super().__init__(config, sensors)
 
-        # Disable Teach-in on startup
-        self.enocean.teach_in = False
-        logging.info("Auto Teach-in is %s", "enabled" if self.enocean.teach_in else "disabled")
+        # Disable Teach-in on startup. When no gateway is present the
+        # communicator starts in discovery mode (enocean=None) and the run
+        # loop configures teach-in once a transceiver connects.
+        if self.enocean is not None:
+            self.enocean.teach_in = False
+            logging.info("Auto Teach-in is %s", "enabled" if self.enocean.teach_in else "disabled")
+        else:
+            logging.info("No EnOcean gateway at startup - delay teach-in config until it connects")
 
     def _apply_device_config(self, cur_sensor):
         '''apply the EEP-related device configuration (command, channel, direction,
@@ -295,7 +300,7 @@ class HACommunicator(Communicator):
 
                 # LEARN status
                 self.mqtt.publish(self._system_status_topic['learn'],
-                                  'ON' if self.enocean.teach_in else 'OFF',
+                                  'ON' if (self.enocean is not None and self.enocean.teach_in) else 'OFF',
                                   retain=True)
 
                 # First MQTT connection is done

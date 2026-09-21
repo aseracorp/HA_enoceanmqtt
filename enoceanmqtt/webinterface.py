@@ -96,9 +96,12 @@ class WebInterface:
             sensors.append(com.describe_sensor(sensor))
         return {
             'gateway': {
-                'connected': com.enocean is not None and com.enocean.is_alive(),
+                'connected': com.gateway_connected(),
+                'discovering': (not com.gateway_connected()
+                                and getattr(com, 'enocean_sender', None) is None),
                 'base_id': com.enocean_sender_hex,
-                'mqtt': com.mqtt.is_connected() if com.mqtt else False,
+                'error': getattr(com, 'enocean_error', None),
+                'mqtt': (com.mqtt.is_connected() if com.mqtt else False),
                 'diagnostics': com.diagnostics,
             },
             'learn_mode': com.learn_mode,

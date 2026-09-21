@@ -77,6 +77,15 @@ class FakeMQTT:
     def is_connected(self):
         return True
 
+    def loop_stop(self):
+        pass
+
+    def disconnect(self):
+        pass
+
+    def loop_forever(self):
+        pass
+
     def subscribe(self, topic):
         self.subs.append(topic)
 
@@ -1769,3 +1778,199 @@ def test_ha_discovery_legacy_config_name_unchanged():
                 assert cfg['device']['name'] == 'e2m_kitchen', cfg['device']['name']
                 assert cfg['default_entity_id'].startswith(
                     'sensor.e2m_kitchen'), cfg['default_entity_id']
+
+
+def test_boot_without_gateway_missing_serial():
+    """booting with an unusable serial port must not crash - the gateway
+    starts with enocean=None and the web UI stays up (the run loop retries).
+
+    Regression: SerialCommunicator(port) opens the port in __init__ and the
+    old code let that exception escape, killing the whole process before the
+    web interface could start.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': '/dev/enocean-does-not-exist-12345',
+            'mqtt_prefix': 'enoceanmqtt/',
+            'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        assert com.enocean is None, 'no gateway -> enocean must be None'
+        assert com.enocean_error, 'the connect error should be recorded'
+        # the web-facing status can be rendered safely
+        com.mqtt = FakeMQTT()
+        assert com.virtual_senders() == []
+        assert com.enocean_sender_hex is None
+        # teach-in must fail cleanly, not raise
+        ok, msg = com._send_teachin_payload(
+            name='x', sender_hex=None, rorg=0xA5, func=0x38, type_=0x08,
+            address=0x123456, category='actor')
+        assert not ok and 'not connected' in msg
+
+
+def test_boot_no_port_discovery_mode():
+    """boot with no enocean_port configured at all -> discovery mode: the
+    gateway comes up, the web UI is reachable and reports discovering=True.
+
+    Regression: the old mandatory-config check killed the process when
+    enocean_port was missing entirely."""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            # no enocean_port on purpose
+            'mqtt_prefix': 'enoceanmqtt/',
+            'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        assert com.enocean is None
+        assert com.gateway_connected() is False
+        assert com.enocean_error, 'discovery mode should record an error string'
+        assert 'discovery' in com.enocean_error.lower(), com.enocean_error
+
+
+def test_ha_overlay_boot_without_gateway():
+    """the HA overlay (the docker default) must boot without a gateway too.
+
+    Regression: HACommunicator.__init__ did ``self.enocean.teach_in = False``
+    unconditionally, crashing with AttributeError when the communicator
+    started in discovery mode (enocean=None)."""
+    from enoceanmqtt.overlays.homeassistant.ha_communicator import HACommunicator
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': '/dev/enocean-does-not-exist-9999',
+            'mqtt_prefix': 'enoceanmqtt/',
+            'mqtt_discovery_prefix': 'homeassistant/',
+            'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = HACommunicator(conf, [])
+        assert com.enocean is None
+        assert com.gateway_connected() is False
+
+
+def test_boot_without_gateway_status_and_reconnect():
+    """/api/status shows the gateway as disconnected + discovering, and the
+    web UI is reachable - the full 'configure from the web UI' flow works
+    without a gateway at boot."""
+    import urllib.request
+    import socket as _socket
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': '/dev/enocean-does-not-exist-6789',
+            'mqtt_prefix': 'enoceanmqtt/',
+            'webui_disable': '0',
+            'webui_port': '0',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        assert com.enocean is None
+        assert com.gateway_connected() is False
+        com.mqtt = FakeMQTT()
+
+        web = WebInterface(com)
+        sock = _socket.socket()
+        sock.bind(('127.0.0.1', 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        web.start(host='127.0.0.1', port=port)
+        time.sleep(0.3)
+        try:
+            with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/status') as r:
+                data = json.loads(r.read())
+            gw = data['gateway']
+            assert gw['connected'] is False
+            assert gw['discovering'] is True, gw
+            assert 'error' in gw
+        finally:
+            web.stop()
+
+        # once a transceiver is present the same object reports connected
+        com.enocean = FakeEnocean()
+        assert com.gateway_connected() is True
+
+
+
+def test_tcp_down_no_transmit_queue_growth():
+    """a TCP ser2net endpoint that is down must not leak transmit packets.
+
+    Regression: the run loop queried base_id (=CO_RD_IDBASE enqueue) every
+    iteration while the retry thread was alive-but-not-connected, growing the
+    transmit queue without bound. gateway_connected() is now the gate."""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:1',   # nothing listens
+            'mqtt_prefix': 'enoceanmqtt/',
+            'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        # boot via a serial port that does not exist -> enocean stays None
+        # (no TCP retry thread is started, keeping the test hermetic)
+        conf['enocean_port'] = '/dev/enocean-does-not-exist-777'
+        com = Communicator(conf, [])
+        assert com.enocean is None
+        try:
+            # construct a TCP communicator WITHOUT starting its thread (the
+            # retry thread would keep the interpreter alive -> use the class
+            # directly, sock=None = endpoint down)
+            from enoceanmqtt.tcpclientcommunicator import TCPClientCommunicator
+            tcp = TCPClientCommunicator('127.0.0.1', 1)   # not .start()ed
+            assert tcp.sock is None
+            # gateway_connected() treats a socket-less TCP client as down
+            com.enocean = tcp
+            assert com.gateway_connected() is False
+            assert com.enocean_sender is None
+
+            # simulate the run-loop guard: while not connected, base_id must
+            # never be requested (which would enqueue CO_RD_IDBASE)
+            for _ in range(5):
+                if (com.enocean is not None and com.gateway_connected()
+                        and com.enocean_sender is None):
+                    com.enocean_sender = com.enocean.base_id
+            assert com.enocean.transmit.qsize() == 0, "transmit queue must stay empty while TCP is down"
+            assert com.enocean_sender is None
+        finally:
+            try:
+                com.enocean.stop()
+            except Exception:   # pylint: disable=broad-except
+                pass
+            com.enocean = None
+
+
+def test_run_loop_survives_no_gateway():
+    """the run loop must keep spinning (and keep MQTT up) while there is no
+    transceiver, instead of exiting or crashing."""
+    import threading as _t
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': '/dev/enocean-does-not-exist-54321',
+            'mqtt_prefix': 'enoceanmqtt/',
+            'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.mqtt = FakeMQTT()
+        # make connect retries instant so the loop spins without sleeping
+        com._connect_enocean = lambda: (_ for _ in ()).throw(
+            FileNotFoundError('no such serial port (test)'))
+        com.enocean = None
+
+        real_sleep = time.sleep
+        time.sleep = lambda s: None
+        try:
+            t = _t.Thread(target=com.run, daemon=True)
+            t.start()
+            time.sleep(0.5)
+            assert t.is_alive(), 'run loop must keep running without a gateway'
+            assert com.enocean is None
+            com._restart_requested = True
+            t.join(timeout=5)
+            assert not t.is_alive(), 'loop should exit on restart request'
+        finally:
+            time.sleep = real_sleep

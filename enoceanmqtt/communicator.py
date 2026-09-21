@@ -8,6 +8,7 @@ import json
 import os
 import re
 import time
+import threading
 import datetime
 
 from enocean.communicators.serialcommunicator import SerialCommunicator
@@ -158,9 +159,12 @@ class Communicator:
         except Exception:   # pylint: disable=broad-except
             logging.exception("failed to parse secure_devices config")
 
-        # check for mandatory configuration
-        if 'mqtt_host' not in self.conf or 'enocean_port' not in self.conf:
-            raise Exception("Mandatory configuration not found: mqtt_host/enocean_port")
+        # check for mandatory configuration. mqtt_host is required (there is
+        # nothing to do without a broker); enocean_port is NOT - without it
+        # the gateway boots in discovery mode and stays up so a gateway can
+        # be picked from the web UI.
+        if 'mqtt_host' not in self.conf:
+            raise Exception("Mandatory configuration not found: mqtt_host")
         mqtt_port = int(self.conf['mqtt_port']) if 'mqtt_port' in self.conf else 1883
         mqtt_keepalive = int(self.conf['mqtt_keepalive']) if 'mqtt_keepalive' in self.conf else 60
 
@@ -189,21 +193,26 @@ class Communicator:
         self.mqtt.connect_async(self.conf['mqtt_host'], port=mqtt_port, keepalive=mqtt_keepalive)
         self.mqtt.loop_start()
 
-        # setup enocean communication
-        eport  = self.conf['enocean_port']
-        seport = eport.split(':')
-        if seport[0] == "tcp":
-            logging.info("connecting TCPClient to %s port %d", seport[1],int(seport[2]))
-            self.enocean = TCPClientCommunicator(seport[1],int(seport[2]))
-        else:
-            logging.info("connecting Serial to %s", eport)
-            self.enocean = SerialCommunicator(eport)
-
-        self.enocean.start()
-        # sender will be automatically determined
+        # setup enocean communication. The transceiver is optional at boot:
+        # when the configured port is missing (ser2net host not reachable yet,
+        # dongle unplugged, or still scanning for one) the gateway keeps
+        # running - and the web UI stays up - with self.enocean = None. The
+        # run loop retries the connection in the background, and MQTT stays
+        # connected the whole time.
+        self.enocean = None
         self.enocean_sender = None
+        self.enocean_error = None
+        try:
+            self._connect_enocean()
+        except Exception as exc:   # pylint: disable=broad-except
+            logging.error("EnOcean gateway not available at boot: %s", exc)
+            self.enocean_error = str(exc) or exc.__class__.__name__
+            self.enocean = None
+            self._start_gateway_discovery()
+
         # UTE teach-in telegrams are handled by this class, not by the library
-        self.enocean.teach_in = False
+        if self.enocean is not None:
+            self.enocean.teach_in = False
 
         # start the embedded web interface
         self._webui = None
@@ -625,6 +634,31 @@ class Communicator:
         self.mqtt.connect_async(self.conf['mqtt_host'], port=mqtt_port, keepalive=keepalive)
         self.mqtt.loop_start()
 
+    def _connect_enocean(self):
+        """build + start the transceiver communicator for the current port.
+
+        Returns the live communicator. Raises (KeyError/ValueError/serial
+        errors) when the configured port is unusable - the caller decides
+        whether that is fatal or (boot/reconnect) just deferred.
+        """
+        eport = (self.conf.get('enocean_port') or '').strip()
+        if not eport:
+            # no port configured - the gateway runs in discovery mode and the
+            # web UI offers the discovered serial/mDNS endpoints
+            raise ValueError('no EnOcean port configured - gateway discovery active')
+        seport = eport.split(':')
+        if seport[0] == "tcp":
+            logging.info("connecting TCPClient to %s port %d", seport[1], int(seport[2]))
+            self.enocean = TCPClientCommunicator(seport[1], int(seport[2]))
+        else:
+            logging.info("connecting Serial to %s", eport)
+            self.enocean = SerialCommunicator(eport)
+        self.enocean.start()
+        # sender will be automatically determined once the transceiver answers
+        self.enocean_sender = None
+        self.enocean_error = None
+        return self.enocean
+
     def _reconnect_enocean(self):
         """(re)connect the EnOcean transceiver with the current conf port."""
         if getattr(self, 'enocean', None) is not None:
@@ -632,15 +666,20 @@ class Communicator:
                 self.enocean.stop()
             except Exception:   # pylint: disable=broad-except
                 pass
-        eport = self.conf['enocean_port']
-        seport = eport.split(':')
-        if seport[0] == "tcp":
-            self.enocean = TCPClientCommunicator(seport[1], int(seport[2]))
-        else:
-            self.enocean = SerialCommunicator(eport)
-        self.enocean.start()
-        self.enocean_sender = None
-        self.enocean.teach_in = False
+            self.enocean = None
+        self._connect_enocean()
+        if self.enocean is not None:
+            self.enocean.teach_in = False
+
+    def _start_gateway_discovery(self):
+        """kick off a background gateway hunt (serial + mDNS) when the
+        configured port is not reachable at boot."""
+        try:
+            from enoceanmqtt.device_discovery import discover
+            threading.Thread(target=discover, kwargs={'timeout': 2.0},
+                             daemon=True, name='gw-discovery').start()
+        except Exception:   # pylint: disable=broad-except
+            pass
 
     def _classify_category(self, sensor):
         """the device category the web UI shows (mirrors describe_sensor).
@@ -1020,6 +1059,39 @@ class Communicator:
             return None
         return enocean.utils.to_hex_string(self.enocean_sender)
 
+    def gateway_connected(self):
+        """is the EnOcean transceiver actually usable right now?
+
+        The retry threads (TCPClient/SerialCommunicator) stay alive while the
+        dongle is gone, so thread-alive alone is NOT "connected". A transceiver
+        is connected only when data can truly flow:
+
+          * TCPClientCommunicator  - a live socket exists (``sock`` attr)
+          * SerialCommunicator     - the serial port is open
+          * plain threads (tests)  - fall back to thread-alive
+
+        Without this a TCP ser2net host that is down would still report
+        "connected" in the web UI (the retry thread keeps running by design).
+        """
+        en = getattr(self, 'enocean', None)
+        if en is None:
+            return False
+        # TCP client: a live socket means data can flow; a missing socket
+        # means the retry thread is still hunting for the endpoint.
+        try:
+            sock = en.sock
+            return sock is not None
+        except AttributeError:
+            pass
+        # serial client: report connected only while the port is open
+        try:
+            ser = en._SerialCommunicator__ser
+            return bool(ser is not None and getattr(ser, 'is_open', False))
+        except AttributeError:
+            pass
+        # plain communicator/test double: thread aliveness is the best signal
+        return bool(en.is_alive())
+
     def virtual_senders(self):
         """the usable virtual sender IDs of the transceiver.
 
@@ -1044,7 +1116,8 @@ class Communicator:
         """enable or disable UTE teach-in mode (one-shot)"""
         self.learn_mode = bool(enabled)
         # UTE responses are handled by this class, keep the library from auto-answering
-        self.enocean.teach_in = False
+        if self.enocean is not None:
+            self.enocean.teach_in = False
         logging.info("UTE teach-in mode %s", "enabled" if self.learn_mode else "disabled")
 
     def start_capture(self):
@@ -1167,6 +1240,9 @@ class Communicator:
         For bidirectional 4BS devices the sensor expects the controller to
         confirm the teach-in; we send a 4BS telegram back with the LRN bit
         set and the same EEP, targeting the device's sender address."""
+        if self.enocean is None:
+            logging.warning("cannot answer teach-in - no EnOcean gateway connected")
+            return
         if getattr(in_packet, 'sender', None):
             destination = list(in_packet.sender)
         else:
@@ -1269,7 +1345,8 @@ class Communicator:
             return
 
         # UTE responses are handled by this class, keep the library from auto-answering
-        self.enocean.teach_in = False
+        if self.enocean is not None:
+            self.enocean.teach_in = False
 
         existing = self._sensors_by_address.get(address)
         rorg = packet.rorg_of_eep
@@ -1828,6 +1905,9 @@ class Communicator:
         if not (sensor.get('smartack') or sensor.get('bidirectional') or
                 str(sensor.get('answer')) in ("True", "true", "1")):
             return False
+        if self.enocean is None:
+            logging.warning("cannot reply - no EnOcean gateway connected")
+            return False
         if sensor.get('smartack'):
             # fast path: construct and send immediately
             reply = self._build_smartack_reply(in_packet, sensor)
@@ -1950,6 +2030,9 @@ class Communicator:
 
         # send it
         logging.info("sending: %s", packet)
+        if self.enocean is None:
+            logging.warning("cannot send - no EnOcean gateway connected")
+            return
         self.enocean.send(packet)
 
     def _send_teachin(self, name):
@@ -2009,6 +2092,11 @@ class Communicator:
         is_actor = category in ('actor', 'bidirectional') or bidirectional
         if not is_actor:
             return False, 'Teach-in telegram is only supported for actors / bidirectional devices'
+
+        # a teach-in needs a live transceiver - without one there is nothing
+        # to send from and the gateway is still searching for its dongle
+        if self.enocean is None or not self.enocean.is_alive():
+            return False, 'EnOcean gateway not connected - teach-in unavailable'
 
         destination = sender_bytes(address) if address is not None else None
 
@@ -2317,20 +2405,45 @@ class Communicator:
         # start endless loop for listening
         _reconnect_delay = 1
         while not self._restart_requested:
-            # (re)connect the transceiver if the previous one died
+            # (re)connect the transceiver if the previous one died. The
+            # gateway also boots without one: until a gateway appears the
+            # loop simply sleeps so the web UI (and MQTT) stay available.
             if self.enocean is None or not self.enocean.is_alive():
-                try:
-                    logging.warning("EnOcean transceiver not alive; reconnecting "
-                                    "in %ds", _reconnect_delay)
+                if self.enocean is None:
+                    # first failure at boot, or the configured port is still
+                    # unplugged/unreachable - keep MQTT alive and retry
+                    logging.warning("No EnOcean gateway available; retrying in "
+                                    "%ds (gateway discovery active)",
+                                    _reconnect_delay)
                     time.sleep(_reconnect_delay)
                     _reconnect_delay = min(_reconnect_delay * 2, 30)
-                    self._reconnect_enocean()
-                except Exception as exc:   # pylint: disable=broad-except
-                    logging.error("EnOcean reconnect failed: %s", exc)
-                    continue
-                _reconnect_delay = 1
-            # Request transmitter ID, if needed
-            if self.enocean_sender is None:
+                    try:
+                        self._connect_enocean()
+                    except Exception as exc:   # pylint: disable=broad-except
+                        logging.error("EnOcean gateway not available: %s", exc)
+                        self.enocean_error = str(exc) or exc.__class__.__name__
+                        self.enocean = None
+                        continue
+                    _reconnect_delay = 1
+                    if self.enocean is not None:
+                        self.enocean.teach_in = False
+                else:
+                    try:
+                        logging.warning("EnOcean transceiver not alive; reconnecting "
+                                        "in %ds", _reconnect_delay)
+                        time.sleep(_reconnect_delay)
+                        _reconnect_delay = min(_reconnect_delay * 2, 30)
+                        self._reconnect_enocean()
+                    except Exception as exc:   # pylint: disable=broad-except
+                        logging.error("EnOcean reconnect failed: %s", exc)
+                        continue
+                    _reconnect_delay = 1
+            # Request transmitter ID, if needed. Only when the transceiver is truly
+            # usable: for a TCP endpoint that is down the retry thread is alive
+            # but there is no socket, and querying base_id would enqueue a
+            # CO_RD_IDBASE every loop iteration forever (the queue can never be
+            # drained without a connection).
+            if self.enocean is not None and self.gateway_connected() and self.enocean_sender is None:
                 self.enocean_sender = self.enocean.base_id
                 # now that we know the base id, query transceiver diagnostics
                 self._query_diagnostics()
@@ -2357,7 +2470,8 @@ class Communicator:
                 # periodically re-query + re-publish transceiver diagnostics.
                 # _query_diagnostics() itself rate-limits (incl. dead-dongle
                 # backoff), so this is just the outer throttle.
-                if time.time() - self._diag.get('_last_query', 0) > DIAGNOSTICS_INTERVAL:
+                if (self.gateway_connected() and
+                        time.time() - self._diag.get('_last_query', 0) > DIAGNOSTICS_INTERVAL):
                     self._query_diagnostics()
                     self._publish_diagnostics()
                 continue
@@ -2370,4 +2484,5 @@ class Communicator:
         self.mqtt.loop_stop()
         self.mqtt.disconnect()
         self.mqtt.loop_forever()  # will block until disconnect complete
-        self.enocean.stop()
+        if self.enocean is not None:
+            self.enocean.stop()

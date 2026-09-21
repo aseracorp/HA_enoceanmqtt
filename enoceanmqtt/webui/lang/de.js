@@ -29,6 +29,7 @@ window.LANG_de = {
     sensor: 'Sensor',    bidirectional: 'Bidirektional',
     no_actors: 'Keine Aktoren konfiguriert.',    no_sensors: 'Keine Sensoren konfiguriert.',
     no_devices: 'Noch keine Geräte konfiguriert.',    connected: 'verbunden',    disconnected: 'nicht verbunden',
+    searching_gateway: 'Suche nach EnOcean-Gateway…',
     eep_placeholder: 'A5-20-01, Temperatur, Schalter…',    device_count: 'Geräte',
     eep_viewer: 'Im EEP-Viewer öffnen',    send_label: 'Senden',
     err_load_status: 'Status konnte nicht geladen werden: ',    err_load_config: 'Konfiguration konnte nicht geladen werden: ',
