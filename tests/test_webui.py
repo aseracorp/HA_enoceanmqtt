@@ -1550,9 +1550,9 @@ def test_friendly_name_with_spaces_backend():
     MQTT topic base ('name') is derived from it.
 
     '/' is kept in the stored name (it groups the sensor in the MQTT broker)
-    and becomes a space in the Home Assistant friendly name - so:
+    and is preserved verbatim in the friendly name - so:
     'Living Room / Temp!' -> name 'living_room/temp', friendly
-    'Living Room Temp!' (slash -> space, runs of spaces collapse).
+    'Living Room / Temp!' (slash untouched, runs of spaces collapse).
     """
     with tempfile.TemporaryDirectory() as tmp:
         conf = {
@@ -1594,9 +1594,9 @@ def test_friendly_name_with_spaces_backend():
         assert res3['ok'], res3
         stored3 = com._store.get('living_room/temp')
         assert stored3 is not None
-        assert stored3['friendly_name'] == 'Living Room Temp!'
+        assert stored3['friendly_name'] == 'Living Room / Temp!'
         assert res3['sensor']['name'] == 'living_room/temp'
-        assert res3['sensor']['friendly_name'] == 'Living Room Temp!'
+        assert res3['sensor']['friendly_name'] == 'Living Room / Temp!'
 
         # empty / punctuation-only names rejected
         assert not com.add_sensor({'friendly_name': '   ', 'address': 0x33333333,
@@ -1607,7 +1607,7 @@ def test_friendly_name_with_spaces_backend():
 
 def test_update_sensor_with_slash_roundtrip():
     """renaming a web-added sensor with a '/' keeps the MQTT grouping and
-    the slash -> space friendly mapping; config-file sensors get a clear
+    the friendly name verbatim; config-file sensors get a clear
     error instead of 'Sensor not found'."""
     with tempfile.TemporaryDirectory() as tmp:
         conf = {
@@ -1624,7 +1624,7 @@ def test_update_sensor_with_slash_roundtrip():
                               'address': 0x12345678, 'eep': 'A5-02-05'})
         assert res['ok'], res
         assert res['sensor']['name'] == 'lights/kitchen_temp'
-        assert res['sensor']['friendly_name'] == 'Lights Kitchen Temp'
+        assert res['sensor']['friendly_name'] == 'Lights/Kitchen Temp'
 
         # rename keeping the grouping: edit box shows the slashed base
         res = com.update_sensor('lights/kitchen_temp', {
@@ -1633,7 +1633,7 @@ def test_update_sensor_with_slash_roundtrip():
         stored = com._store.get('lights/kitchen_temp')
         assert stored is not None
         assert stored['name'] == 'lights/kitchen_temp'
-        assert stored['friendly_name'] == 'lights kitchen_temp'
+        assert stored['friendly_name'] == 'lights/kitchen_temp'
 
         # rename WITH a group change
         res = com.update_sensor('lights/kitchen_temp', {
@@ -1641,7 +1641,7 @@ def test_update_sensor_with_slash_roundtrip():
         assert res['ok'], res
         assert com._store.get('lights/hall_temp') is not None
         assert com._store.get('lights/kitchen_temp') is None
-        assert com._store.get('lights/hall_temp')['friendly_name'] == 'Lights Hall Temp'
+        assert com._store.get('lights/hall_temp')['friendly_name'] == 'Lights/Hall Temp'
 
         # config-file sensors are not web-editable: clear error, no crash
         com.sensors.append({'name': 'enoceanmqtt/kitchen', 'source': 'config',

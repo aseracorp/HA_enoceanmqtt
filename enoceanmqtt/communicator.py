@@ -687,13 +687,16 @@ class Communicator:
 
     @staticmethod
     def _friendly_from_input(name):
-        """the Home Assistant friendly name shown for a user-entered name.
+        """the Home Assistant friendly name for a user-entered name.
 
-        '/' (MQTT topic grouping) is shown as a space, exactly as requested:
-        "Lights/Kitchen Temp" -> "Lights Kitchen Temp". Runs of spaces
-        collapse so a group separator styled ' / ' becomes a single space.
+        The typed name is preserved verbatim (slashes and spaces alike) -
+        it is what the user sees in Home Assistant and what the edit dialog
+        round-trips. Leading/trailing whitespace is trimmed and runs of
+        whitespace collapse, but '/' is never rewritten.
+        "test/test test" -> "test/test test"
+        "Living Room / Temp" -> "Living Room / Temp"
         """
-        return re.sub(r' +', ' ', re.sub(r'/', ' ', str(name or ''))).strip()
+        return re.sub(r' +', ' ', str(name or '').strip()).strip()
 
     @staticmethod
     def _sanitize_entity_id(name):
@@ -826,11 +829,9 @@ class Communicator:
 
         return {
             'name': display_name,
-            # display the friendly name with '/' (MQTT grouping) as a space,
-            # like Home Assistant shows it - legacy stored friendly names
-            # (e.g. 'Kitchen / Temp') render consistently too.
-            'friendly_name': self._friendly_from_input(
-                sensor.get('friendly_name') or display_name),
+            # the friendly name is the raw user-entered name (slashes kept)
+            # so it round-trips losslessly through the edit dialog.
+            'friendly_name': sensor.get('friendly_name') or display_name,
             'address': address,
             'sender': sensor.get('sender'),
             'virtual': sensor.get('virtual'),
