@@ -85,6 +85,21 @@ def sender_bytes(sender_int):
 _parse_int = parse_int
 
 
+def changed_need_restart(payload):
+    """True when any changed key still requires a process restart.
+
+    MQTT broker settings and the EnOcean port are applied live by
+    Communicator._apply_live_config(); every other setting (webui port,
+    overlay, logging / publish toggles, debug, ...) only takes effect on the
+    next start.
+    """
+    live = {'mqtt_host', 'mqtt_port', 'mqtt_user', 'mqtt_pwd',
+            'mqtt_ssl', 'mqtt_ssl_insecure', 'mqtt_ssl_ca_certs',
+            'mqtt_ssl_certfile', 'mqtt_ssl_keyfile', 'mqtt_keepalive',
+            'mqtt_client_id', 'mqtt_prefix', 'enocean_port'}
+    return set(payload.keys()) - live
+
+
 class Communicator:
     """the main working class providing the MQTT interface to the enocean packet classes"""
     mqtt = None
@@ -555,9 +570,14 @@ class Communicator:
         """persist updated [CONFIG] settings back to the configuration file.
 
         ``payload`` is a dict of key/value pairs (plain strings). The first
-        configuration file from ``self.conf['config']`` is rewritten; changes
-        take effect after a restart.
-        Returns {'ok': True} or {'ok': False, 'error': ...}.
+        configuration file from ``self.conf['config']`` is rewritten.
+
+        Most settings are applied live (MQTT broker details, EnOcean port) -
+        the response's ``restart_required`` flag tells the web UI whether a
+        process restart is still needed for the changed keys (webui port,
+        overlay, logging/publish toggles, ...).
+        Returns {'ok': True, 'restart_required': bool} or
+        {'ok': False, 'error': ...}.
         """
         try:
             config_files = self.conf.get('config') or []
@@ -584,7 +604,8 @@ class Communicator:
             logging.info("Updated [CONFIG] in %s", conf_file)
             # apply the changed settings live - no process restart needed
             self._apply_live_config(payload)
-            return {'ok': True}
+            restart_required = bool(changed_need_restart(payload))
+            return {'ok': True, 'restart_required': restart_required}
         except Exception as exc:   # pylint: disable=broad-except
             logging.error("save_config failed: %s", exc)
             return {'ok': False, 'error': str(exc)}
