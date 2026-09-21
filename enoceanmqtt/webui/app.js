@@ -353,6 +353,46 @@ $('gw-status')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.
 // saved, so it survives a restart).
 const GW_DISCOVERY_MS = 5000;
 let _gwDiscoveryTimer = null;
+
+function _foundEndpoint(data) {
+  // pick the best candidate: a real mDNS endpoint (host+port) beats a
+  // generic serial candidate; never return an unusable entry.
+  const mdns = (data.mdns || []).find((m) => m.host && m.port);
+  if (mdns) return 'tcp:' + mdns.host + ':' + mdns.port;
+  const ser = (data.serial || []).find((s) => s.candidate && s.device);
+  if (ser) return ser.device;
+  return null;
+}
+
+function _fillConfigPort(value) {
+  // pre-fill the on-screen enocean_port field if the config modal is open
+  const field = Array.from(document.querySelectorAll('#config-grid [data-cfgkey="enocean_port"]'))[0];
+  if (field) field.value = value;
+}
+
+function renderDiscoveryBanner(data) {
+  const banner = $('discovery-banner');
+  const text = $('discovery-banner-text');
+  const serialCount = $('discovery-serial-count');
+  if (!banner || !text) return;
+  const found = _foundEndpoint(data || {});
+  const serials = (data && data.serial || []).filter((s) => s.candidate && s.device);
+  const isConnected = !!(state.gateway && state.gateway.connected);
+  // hide when connected, nothing found, or the user dismissed this result
+  if (isConnected || !found || _discoveryDismissed === found) {
+    banner.hidden = true;
+    return;
+  }
+  text.textContent = t('discovery_found') + ' ' + found;
+  if (serials.length > 1 || (serials.length === 1 && serials[0].device !== found)) {
+    serialCount.textContent = t('discovery_serial') + ': ' + serials.length;
+    serialCount.hidden = false;
+  } else {
+    serialCount.hidden = true;
+  }
+  banner.hidden = false;
+}
+
 async function autoDiscover() {
   if (state.gateway && state.gateway.connected) return;   // already connected
   let data = null;
@@ -360,19 +400,17 @@ async function autoDiscover() {
     data = await api('/api/discovery');
   } catch (e) { /* back end busy / unreachable - retry next tick */ }
   if (!data || (state.gateway && state.gateway.connected)) return;
-  const ser = (data.serial || []).find((s) => s.candidate);
-  const mdns = (data.mdns || [])[0];
-  const found = (ser && ser.device) || (mdns && (mdns.port ? 'tcp:' + (mdns.host || '') + ':' + mdns.port : null));
-  if (found && state.config && !String(state.config.enocean_port || '').trim()) {
-    state.config.enocean_port = found;
-    const field = Array.from(document.querySelectorAll('#config-grid [data-cfgkey="enocean_port"]'))[0];
-    if (field) field.value = found;
-    toast('Discovered gateway: ' + found, 'success');
-    // persist the found port so the gateway reconnects to it after a restart
-    try {
-      const res = await api('/api/config', { method: 'POST', body: JSON.stringify({ enocean_port: found }) });
-      if (!res.ok) throw new Error(res.error || 'save failed');
-    } catch (e) { /* keep it prefilled; the user can save it from the dialog */ }
+  const found = _foundEndpoint(data);
+  if (!found) { renderDiscoveryBanner(data); return; }
+
+  // show the persistent banner with a "Use this gateway" action
+  renderDiscoveryBanner(data);
+
+  // keep the config modal pre-filled, but do NOT write config on our own -
+  // the user clicks "Use this gateway" for that (no silent takeover).
+  if (state.config && !String(state.config.enocean_port || '').trim()) {
+    _fillConfigPort(found);
+    toast(t('discovery_found') + ' ' + found, 'success');
   }
 }
 (function gwDiscoveryLoop() {
@@ -381,11 +419,38 @@ async function autoDiscover() {
     // automatically if the transceiver disappears later (dongle unplugged)
     if (!(state.gateway && state.gateway.connected)) {
       await autoDiscover();
+    } else {
+      renderDiscoveryBanner({});   // connected -> hide the banner
     }
     _gwDiscoveryTimer = setTimeout(tick, GW_DISCOVERY_MS);
   };
   tick();
 })();
+$('discovery-use')?.addEventListener('click', async () => {
+  const data = await api('/api/discovery');
+  const found = _foundEndpoint(data || {});
+  if (!found) { toast(t('discovery_none'), 'error'); return; }
+  try {
+    const res = await api('/api/config', { method: 'POST', body: JSON.stringify({ enocean_port: found }) });
+    if (!res.ok) throw new Error(res.error || 'save failed');
+    state.config = state.config || {};
+    state.config.enocean_port = found;
+    _fillConfigPort(found);
+    $('discovery-banner').hidden = true;
+    _discoveryDismissed = found;
+    toast(t('config_saved'), 'success');
+    // (re)connect now - the backend applies the port live
+    try { await api('/api/restart'); } catch (e) { /* backend applies live */ }
+  } catch (e) {
+    toast(t('err_save_config') + ' ' + e.message, 'error');
+  }
+});
+let _discoveryDismissed = null;
+$('discovery-dismiss')?.addEventListener('click', () => {
+  const banner = $('discovery-banner');
+  if (banner) banner.hidden = true;
+  _discoveryDismissed = 'dismissed';
+});
 $('configedit-cancel')?.addEventListener('click', () => { $('configedit-overlay').hidden = true; });
 
 

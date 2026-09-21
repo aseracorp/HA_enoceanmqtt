@@ -85,7 +85,16 @@ class WebInterface:
 
     # -- controller methods (bound into the handler) --------------------------
     def discover(self):
-        """return locally attached EnOcean dongles + mDNS ser2net endpoints"""
+        """return locally attached EnOcean dongles + mDNS ser2net endpoints.
+
+        Serves the background discovery cache so the handler never blocks
+        for the multi-second mDNS sweep; the cache is refreshed every ~10s
+        by the communicator's gw-discovery thread."""
+        com = self.communicator
+        cache = getattr(com, 'get_discovery_cache', None)
+        if cache is not None:
+            return cache()
+        # fallback (very old/test communicators): run a synchronous sweep
         from enoceanmqtt.device_discovery import discover
         return discover()
 

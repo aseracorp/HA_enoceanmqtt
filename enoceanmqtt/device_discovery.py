@@ -3,10 +3,10 @@
 Local serial
 ------------
 pyserial ``list_ports`` is used to enumerate the host's serial devices. An
-EnOcean transceiver (USB300, TCM300/TCM310/TCM515/TCM516, TCM310) is usually
+EnOcean transceiver (USB300, TCM300/TCM310/TCM515/TCM516, ...) is usually
 recognised by its description / USB VID:PID; we also flag any
-``/dev/ttyUSB*`` / ``/dev/ttyACM*`` as a *candidate* so a user can pick it in
-the config UI.
+``/dev/ttyUSB*`` / ``/dev/ttyACM*`` as a *candidate* so a user can pick it
+in the config UI.
 
 Network (mDNS)
 --------------
@@ -18,12 +18,19 @@ ser2net endpoint over mDNS. Common service names in the wild:
   * ``_ser2net._tcp.local.``    - generic ser2net bridge (e.g. ser2net on a
                                   gateway / Raspberry Pi exposes the dongle)
   * ``_enocean._tcp.local.``    - generic EnOcean gateway service
-  * ``_tcp._tcp.local.``        - fallback: report any TCP service whose TXT
-                                  mentions enocean/ser2net/tcm
+  * ``_enocangw._tcp.local.``   - Busware enocean-gateway service
 
 The browser sends a standard mDNS PTR query for each service type and parses
-the answers (pointer + SRV + A/AAAA + TXT) using only stdlib ``socket`` -
-no zeroconf dependency.
+the answers (PTR + SRV + A/AAAA + TXT) using only stdlib ``socket`` - no
+zeroconf dependency.
+
+Two sockets are used:
+  * a *query* socket bound to an ephemeral port - mDNS queries MUST originate
+    from a unicast source port, otherwise responders will drop the reply
+    (RFC 6762 source address/port checks);
+  * a *listener* socket bound to 5353 and joined to the 224.0.0.251 group so
+    we also receive unsolicited announcements (plug-and-play) and replies
+    that are broadcast to the group.
 """
 from __future__ import annotations
 
@@ -35,13 +42,21 @@ import time
 SERVICE_TYPES = ("_tcm515._tcp", "_tcm310._tcp", "_ser2net._tcp",
                  "_enocean._tcp", "_enocangw._tcp")
 
+#: mDNS multicast group (RFC 6762)
+_MDNS_ADDR = "224.0.0.251"
+_MDNS_PORT = 5353
+_MDNS_GROUP = socket.inet_aton(_MDNS_ADDR)
+
 #: keywords in a mDNS TXT record / service name that flag an EnOcean endpoint
 _ENOCEAN_HINTS = (b"tcm515", b"tcm310", b"tcm300", b"enocean", b"ser2net",
-                  b"usb300", b"tcm", b"eltako", b"fsb", b"fsr")
+                  b"usb300", b"tcm", b"eltako", b"fsb", b"fsr", b"esp3",
+                  b"tcpclientcommunicator")
 
 #: USB VID/PID (or substrings in hwid/description) of common EnOcean dongles
-_ENOCEAN_VIDS = ("10:20", "0403", "1a86", "067b")  # qingping? no - see below
-_ENOCEAN_HWID_HINTS = ("10:20", "tcm", "enocean", "usb300", "2504", "10:20")
+_ENOCEAN_HWID_HINTS = ("10:20", "tcm", "enocean", "usb300", "2504")
+
+#: fallback port when an mDNS SRV record is missing (ser2net default)
+_DEFAULT_SER2NET_PORT = 30000
 
 
 def discover_serial(timeout=1.0):
@@ -79,6 +94,7 @@ class _MdnsResponse:
         self.answers = []
 
     def _name(self, off, _depth=0):
+        """decode a (possibly compressed) name starting at byte offset *off*."""
         if _depth > 12:   # guard against pointer loops
             return "", off
         parts = []
@@ -118,88 +134,218 @@ class _MdnsResponse:
             rtype, rclass, ttl, rdlen = struct.unpack('!HHIH', data[off:off + 10])
             off += 10
             rdata = data[off:off + rdlen]
+            rdata_off = off
             off += rdlen
-            self.answers.append((name, rtype, rclass, ttl, rdata))
+            self.answers.append((name, rtype, rclass, ttl, rdata, rdata_off))
         return self.answers
 
 
-def discover_mdns(timeout=2.0):
+def _make_query(stype):
+    """build a standard mDNS PTR question for ``stype._tcp.local.``"""
+    qname = (stype + ".local.").encode()
+    # header: id=0 flags=0 qd=1 ; question: name, QTYPE=PTR(12), QCLASS=IN(1)
+    question = qname + struct.pack('!HH', 12, 1)
+    header = struct.pack('!HHHHHH', 0, 0, 1, 0, 0, 0)
+    return header + question
+
+
+def _parse_txt(rdata):
+    """decode a TXT record into a dict (RFC 6763: length-prefixed k=v pairs)."""
+    txt = {}
+    i = 0
+    while i < len(rdata):
+        ln = rdata[i]
+        i += 1
+        kv = rdata[i:i + ln]
+        i += ln
+        if b'=' in kv:
+            k, _, v = kv.partition(b'=')
+            txt[k.decode('utf-8', 'replace')] = v.decode('utf-8', 'replace')
+        else:
+            txt[kv.decode('utf-8', 'replace')] = ""
+    return txt
+
+
+def _looks_like_enocean(service, instance, txt):
+    """True when a discovered service shares hints with EnOcean/ser2net."""
+    hints = b' '.join(k.encode('utf-8', 'replace') for k in txt.keys()) + b' ' + \
+        b' '.join(str(v).encode('utf-8', 'replace') for v in txt.values()) + \
+        b' ' + instance.encode('utf-8', 'replace')
+    hints = hints.lower()
+    return (any(h in hints for h in _ENOCEAN_HINTS) or
+            any(st in service for st in SERVICE_TYPES))
+
+
+def _ip_from_srv_target(target):
+    """resolve an SRV target name (may be FQDN or IP literal) to an IP str."""
+    target = target.strip().rstrip('.')
+    if not target:
+        return None
+    # already an IP literal?
+    try:
+        socket.inet_aton(target)
+        return target
+    except OSError:
+        pass
+    try:
+        # mDNS name -> usually resolvable via the cache or the same mDNS
+        tok = socket.getaddrinfo(target, None, socket.AF_INET,
+                                 socket.SOCK_STREAM, socket.IPPROTO_TCP)
+        if tok:
+            return tok[0][4][0]
+    except OSError:
+        pass
+    return None
+
+
+def discover_mdns(timeout=2.0, query=True):
     """Browse the configured mDNS service types; return discovered endpoints.
 
     Each entry: {'service': ..., 'name': ..., 'host': ..., 'port': int,
     'txt': {...}}
+
+    If *query* is False, only unsolicited multicast announcements are
+    listened for (no PTR queries are sent); used by the background cache
+    thread between explicit UI refreshes.
     """
     found = {}
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.settimeout(0.2)
+
+    def collect(resp):
         try:
-            s.bind(('', 5353))
-        except OSError:
-            pass  # bind may fail if another mdns client is bound - still send
-
-        # send a PTR query for each service type
-        for stype in SERVICE_TYPES:
-            qname = (stype + ".local.").encode()
-            # header: id=0 flags=0 qd=1 an=0 ... ; question: name, PTR(12), IN(1)
-            question = qname + struct.pack('!HH', 12, 1)
-            header = struct.pack('!HHHHHH', 0, 0, 1, 0, 0, 0)
-            try:
-                s.sendto(header + question, ("224.0.0.251", 5353))
-            except OSError:
-                continue
-
-        end = time.time() + timeout
-        while time.time() < end:
-            try:
-                data, addr = s.recvfrom(4096)
-            except socket.timeout:
-                continue
-            except OSError:
-                break
-            resp = _MdnsResponse(data)
-            try:
-                answers = resp.parse()
-            except Exception:   # pylint: disable=broad-except
-                continue
-            for name, rtype, _rclass, _ttl, rdata in (answers or []):
-                if rtype == 12:  # PTR -> points at instance "host._type.local."
-                    found.setdefault(name, {})
-                    found[name]['instance'] = rdata.decode('utf-8', 'replace')
-                elif rtype == 33:  # SRV: priority weight port target
+            answers = resp.parse()
+        except Exception:   # pylint: disable=broad-except
+            return
+        for name, rtype, _rclass, _ttl, rdata, roff in (answers or []):
+            if rtype == 12:          # PTR -> points at instance name (encoded)
+                try:
+                    inst, _ = resp._name(roff)
+                except Exception:   # pylint: disable=broad-except
+                    inst = rdata.decode('utf-8', 'replace')
+                found.setdefault(name, {})['instance'] = inst
+            elif rtype == 33:        # SRV: priority weight port target
+                if len(rdata) >= 6:
                     port = struct.unpack('!H', rdata[4:6])[0]
                     found.setdefault(name, {})['port'] = port
-                elif rtype == 16:  # TXT
-                    txt = {}
-                    i = 0
-                    while i < len(rdata):
-                        ln = rdata[i]
-                        i += 1
-                        kv = rdata[i:i + ln]
-                        i += ln
-                        if b'=' in kv:
-                            k, _, v = kv.partition(b'=')
-                            txt[k.decode('utf-8', 'replace')] = v.decode('utf-8', 'replace')
-                    found.setdefault(name, {})['txt'] = txt
-        s.close()
-    except Exception:   # pylint: disable=broad-except
-        return []
+                    # SRV target name lives in rdata[6:]; pointers inside it
+                    # are relative to the whole message -> decode with context
+                    try:
+                        target, _ = resp._name(roff + 6)
+                        found.setdefault(name, {})['target'] = target
+                    except Exception:   # pylint: disable=broad-except
+                        pass
+            elif rtype == 16:        # TXT
+                found.setdefault(name, {})['txt'] = _parse_txt(rdata)
+            elif rtype == 1:         # A record -> hostname = name, ip = rdata
+                found.setdefault("_host_" + name, {})['ip'] = socket.inet_ntoa(rdata[:4])
 
-    # build the result list, only keeping services that look EnOcean-ish
+    # --- listener socket (joins the group; captures broadcast replies + ---
+    # --- unsolicited announcements)                                        ---
+    listener = None
+    try:
+        listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        except (AttributeError, OSError):
+            pass
+        listener.bind(("", _MDNS_PORT))
+        listener.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
+                            _MDNS_GROUP + socket.inet_aton("0.0.0.0"))
+        listener.settimeout(0.1)
+    except OSError:
+        listener = None
+
+    # --- query socket (ephemeral; source port must be unicast per RFC 6762) --
+    qsock = None
+    if query:
+        qsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        qsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        qsock.bind(("", 0))
+        try:
+            for stype in SERVICE_TYPES:
+                qsock.sendto(_make_query(stype), (_MDNS_ADDR, _MDNS_PORT))
+        except OSError:
+            pass
+        qsock.settimeout(0.1)
+
+    end = time.time() + timeout
+    while time.time() < end:
+        # listener first (broadcast replies + announcements)
+        if listener is not None:
+            try:
+                data, _addr = listener.recvfrom(4096)
+                collect(_MdnsResponse(data))
+            except socket.timeout:
+                pass
+            except OSError:
+                listener.close()
+                listener = None
+        # query socket (unicast replies)
+        if qsock is not None:
+            try:
+                data, _addr = qsock.recvfrom(4096)
+                collect(_MdnsResponse(data))
+            except socket.timeout:
+                pass
+            except OSError:
+                qsock.close()
+                qsock = None
+        if listener is None and qsock is None:
+            break
+
+    for s in (listener, qsock):
+        if s is not None:
+            try:
+                s.close()
+            except OSError:
+                pass
+
+    # --- assemble endpoints ---------------------------------------------------
     out = []
+    # merge PTR-only records into their SRV record via the instance name:
+    # a real endpoint needs a port, and SRV carries it.  The PTR answer for a
+    # service type tells us the *instance* name; SRV/TXT answers are keyed by
+    # that instance name.  Only instances that have both a host and a port are
+    # usable by the TCP communicator, so filter on those.
     for service, info in found.items():
+        if service.startswith("_host_"):
+            continue
         txt = info.get('txt', {})
-        hints = b' '.join(k.encode() for k in txt.keys()) + b' ' + \
-            (info.get('instance', '').encode())
-        if any(h in hints.lower() for h in _ENOCEAN_HINTS) or \
-           any(st in service for st in SERVICE_TYPES):
-            out.append({
-                'service': service,
-                'name': info.get('instance', ''),
-                'port': info.get('port'),
-                'txt': txt,
-            })
+        instance = info.get('instance', '')
+        port = info.get('port')
+        if port is None:
+            # PTR-only entry (no SRV yet) - not yet connectable: skip
+            continue
+        # The service/instance naming differs between record types; match the
+        # SRV/TXT answers (keyed by full instance name) with the PTR's
+        # instance string.
+        if instance and service != instance:
+            continue
+        if not _looks_like_enocean(service, instance, txt):
+            continue
+
+        # host: SRV target may be a name or an IP; fall back to instance
+        target = info.get('target', '')
+        host = target
+        if not host or target.endswith('.local'):
+            ip = None
+            for _k, v in found.items():
+                if _k.startswith("_host_") and v.get('ip'):
+                    ip = v['ip']
+                    break
+            if ip:
+                host = ip
+            elif target:
+                host = _ip_from_srv_target(target)
+            elif instance:
+                host = instance.rsplit('.', 2)[0]
+        out.append({
+            'service': service,
+            'name': instance,
+            'host': host,
+            'port': int(port),
+            'txt': txt,
+        })
     return out
 
 

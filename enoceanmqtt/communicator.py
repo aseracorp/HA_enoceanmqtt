@@ -202,13 +202,21 @@ class Communicator:
         self.enocean = None
         self.enocean_sender = None
         self.enocean_error = None
+
+        # gateway discovery cache. A background thread keeps browsing local
+        # serial + mDNS and stores the latest results here so GET /api/discovery
+        # answers instantly instead of blocking the web handler for seconds.
+        self._discovery_cache = {'serial': [], 'mdns': []}
+        self._discovery_cache_lock = threading.Lock()
         try:
             self._connect_enocean()
         except Exception as exc:   # pylint: disable=broad-except
             logging.error("EnOcean gateway not available at boot: %s", exc)
             self.enocean_error = str(exc) or exc.__class__.__name__
             self.enocean = None
-            self._start_gateway_discovery()
+        # always keep hunting (unless the transceiver came up); the web UI
+        # reads the cache, so poked devices appear without a reload
+        self._start_gateway_discovery()
 
         # UTE teach-in telegrams are handled by this class, not by the library
         if self.enocean is not None:
@@ -672,14 +680,33 @@ class Communicator:
             self.enocean.teach_in = False
 
     def _start_gateway_discovery(self):
-        """kick off a background gateway hunt (serial + mDNS) when the
-        configured port is not reachable at boot."""
-        try:
+        """start the background gateway hunt (serial + mDNS).
+
+        Runs continuously (never exits): every sweep stores the latest
+        candidates into self._discovery_cache, which GET /api/discovery
+        serves instantly. A dongle plugged in later, or a gateway that appears
+        on the network, is picked up within one sweep."""
+        def _loop():
             from enoceanmqtt.device_discovery import discover
-            threading.Thread(target=discover, kwargs={'timeout': 2.0},
-                             daemon=True, name='gw-discovery').start()
+            while True:
+                try:
+                    res = discover(timeout=2.0)
+                    with self._discovery_cache_lock:
+                        self._discovery_cache = res
+                except Exception:   # pylint: disable=broad-except
+                    pass
+                time.sleep(8)
+
+        try:
+            t = threading.Thread(target=_loop, daemon=True, name='gw-discovery')
+            t.start()
         except Exception:   # pylint: disable=broad-except
             pass
+
+    def get_discovery_cache(self):
+        """latest serial + mDNS candidates (thread-safe read)."""
+        with self._discovery_cache_lock:
+            return dict(self._discovery_cache)
 
     def _classify_category(self, sensor):
         """the device category the web UI shows (mirrors describe_sensor).

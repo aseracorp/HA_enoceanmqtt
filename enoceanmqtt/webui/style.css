@@ -563,6 +563,28 @@ select optgroup { background-color: var(--bg-elevated); color: var(--text-second
 .footer-links a:hover { color: var(--text); text-decoration: underline; }
 .footer-sep { color: var(--text-muted); }
 
+/* ---------------- discovery banner ---------------- */
+#discovery-banner {
+  position: fixed; top: 60px; right: 16px; z-index: 190;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-elevated); border: 1px solid var(--primary);
+  color: var(--text); padding: 8px 14px; border-radius: var(--radius);
+  box-shadow: var(--shadow); font-size: 13px; max-width: min(480px, calc(100vw - 32px));
+  animation: slideDown 0.25s ease;
+}
+#discovery-banner[hidden] { display: none; }
+.discovery-dot { background: var(--primary); box-shadow: 0 0 8px rgba(176,20,25,0.55); }
+.discovery-banner-body { display: flex; align-items: center; gap: 8px; }
+.discovery-banner-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.discovery-serial { font-size: 11.5px; opacity: 0.75; white-space: nowrap; }
+#discovery-use { font-size: 12px; padding: 3px 10px; }
+.btn-plain { border: none; background: transparent; color: var(--text); opacity: 0.65; }
+.btn-plain:hover { opacity: 1; }
+.btn-small { font-size: 12.5px; padding: 4px 12px; }
+#discovery-dismiss { border: none; background: transparent; color: var(--text); opacity: 0.6; cursor: pointer; line-height: 1; padding: 2px 6px; }
+#discovery-dismiss:hover { opacity: 1; }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
 /* ---------------- toast ---------------- */
 #toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
