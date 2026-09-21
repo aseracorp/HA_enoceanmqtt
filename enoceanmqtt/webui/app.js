@@ -85,13 +85,21 @@ function renderGateway() {
 
   if (gw) {
     gwEl.className = 'pill ' + (gw.connected ? 'ok' : 'bad');
-    // show the gateway base ID only - stable and unambiguous. The port is
-    // available in the hover tooltip.
-    const gwAddr = gw.base_id || '—';
-    gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + escapeHtml(String(gwAddr));
     mqttEl.className = 'pill ' + (gw.mqtt ? 'ok' : 'bad');
     // just the connection state - the details go into the tooltip
     mqttEl.innerHTML = '<span class="dot"></span>' + t('mqtt') + ' ' + (gw.mqtt ? t('connected') : t('disconnected'));
+    if (gw.connected) {
+      // show the gateway base ID only - stable and unambiguous. The port is
+      // available in the hover tooltip.
+      const gwAddr = gw.base_id || '—';
+      gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + escapeHtml(String(gwAddr));
+    } else if (gw.discovering) {
+      // booted without a gateway - the back end is hunting for local serial
+      // dongles and mDNS ser2net endpoints right now
+      gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + t('searching_gateway');
+    } else {
+      gwEl.innerHTML = '<span class="dot"></span>' + t('gateway') + ' ' + t('disconnected');
+    }
     // hover tooltips with configured settings + transceiver diagnostics
     const cfg = state.config || {};
     if (cfg.enocean_port) gwEl.setAttribute('data-tip', 'Port: ' + cfg.enocean_port + (cfg.log_packets !== undefined ? '\nLog packets: ' + cfg.log_packets : ''));
@@ -338,21 +346,45 @@ $('mqtt-status')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' || 
 // Gateway status pill -> EnOcean gateway settings popup
 $('gw-status')?.addEventListener('click', () => openConfigEdit(['enocean']));
 $('gw-status')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openConfigEdit(['enocean']); } });
-// auto-search for an EnOcean gateway when not connected (no separate button)
-(function autoDiscover() {
-  if (!state.gateway || state.gateway.connected) return;   // already connected
-  api('/api/discovery').then((data) => {
-    if (!data) return;
-    const ser = (data.serial || []).find((s) => s.candidate);
-    const mdns = (data.mdns || [])[0];
-    const found = (ser && ser.device) || (mdns && (mdns.port ? 'tcp:' + (mdns.host || '') + ':' + mdns.port : null));
-    if (found && state.config && !String(state.config.enocean_port || '').trim()) {
-      state.config.enocean_port = found;
-      const field = Array.from(document.querySelectorAll('#config-grid [data-cfgkey="enocean_port"]'))[0];
-      if (field) field.value = found;
-      toast('Discovered gateway: ' + found, 'success');
+// auto-search for an EnOcean gateway while disconnected (no separate button).
+// Runs on boot and then every 5 s so a dongle plugged in later, or a ser2net
+// endpoint that appears on the network, is picked up automatically. When the
+// configured port is empty and a candidate is found, it is pre-filled (and
+// saved, so it survives a restart).
+const GW_DISCOVERY_MS = 5000;
+let _gwDiscoveryTimer = null;
+async function autoDiscover() {
+  if (state.gateway && state.gateway.connected) return;   // already connected
+  let data = null;
+  try {
+    data = await api('/api/discovery');
+  } catch (e) { /* back end busy / unreachable - retry next tick */ }
+  if (!data || (state.gateway && state.gateway.connected)) return;
+  const ser = (data.serial || []).find((s) => s.candidate);
+  const mdns = (data.mdns || [])[0];
+  const found = (ser && ser.device) || (mdns && (mdns.port ? 'tcp:' + (mdns.host || '') + ':' + mdns.port : null));
+  if (found && state.config && !String(state.config.enocean_port || '').trim()) {
+    state.config.enocean_port = found;
+    const field = Array.from(document.querySelectorAll('#config-grid [data-cfgkey="enocean_port"]'))[0];
+    if (field) field.value = found;
+    toast('Discovered gateway: ' + found, 'success');
+    // persist the found port so the gateway reconnects to it after a restart
+    try {
+      const res = await api('/api/config', { method: 'POST', body: JSON.stringify({ enocean_port: found }) });
+      if (!res.ok) throw new Error(res.error || 'save failed');
+    } catch (e) { /* keep it prefilled; the user can save it from the dialog */ }
+  }
+}
+(function gwDiscoveryLoop() {
+  const tick = async () => {
+    // keep hunting while the gateway is not connected - this also resumes
+    // automatically if the transceiver disappears later (dongle unplugged)
+    if (!(state.gateway && state.gateway.connected)) {
+      await autoDiscover();
     }
-  }).catch(() => {});
+    _gwDiscoveryTimer = setTimeout(tick, GW_DISCOVERY_MS);
+  };
+  tick();
 })();
 $('configedit-cancel')?.addEventListener('click', () => { $('configedit-overlay').hidden = true; });
 

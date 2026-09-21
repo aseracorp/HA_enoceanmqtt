@@ -29,6 +29,7 @@ window.LANG_it = {
     sensor: 'Sensore',    bidirectional: 'Bidirezionale',
     no_actors: 'Nessun attuatore configurato.',    no_sensors: 'Nessun sensore configurato.',
     no_devices: 'Nessun dispositivo configurato.',    connected: 'connesso',    disconnected: 'disconnesso',
+    searching_gateway: 'ricerca del gateway EnOcean…',
     eep_placeholder: 'A5-20-01, temperatura, interruttore…',    device_count: 'dispositivi',
     eep_viewer: 'Apri nel visualizzatore EEP',    send_label: 'invio',
     err_load_status: 'Impossibile caricare lo stato: ',    err_load_config: 'Impossibile caricare la configurazione: ',
