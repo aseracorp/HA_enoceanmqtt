@@ -859,11 +859,11 @@ function slugifyMqttName(name) {
   return s.replace(/^[_\ /]+|[_\ /]+$/g, '');
 }
 
-// The Home Assistant friendly name for a typed name: '/' (topic grouping)
-// shows as a space and runs of spaces collapse. "Lights/Kitchen Temp" ->
-// "Lights Kitchen Temp".
+// The Home Assistant friendly name for a typed name: the typed name is
+// preserved verbatim (slashes kept - they are part of the name). Only
+// whitespace is trimmed/collapsed. "test/test test" -> "test/test test".
 function friendlyFromMqtt(name) {
-  return String(name || '').replace(/\//g, ' ').replace(/ +/g, ' ').trim();
+  return String(name || '').replace(/ +/g, ' ').trim();
 }
 
 // The entity_id the device will get in Home Assistant: 'e2m_' + the
