@@ -1370,6 +1370,44 @@ def test_device_discovery_serial_no_ports():
     assert isinstance(ports, list)
 
 
+def test_device_discovery_serial_enocean_named_device():
+    """a char device named /dev/enocean (udev symlink / docker device bind)
+    is discovered as an EnOcean candidate even though pyserial never lists it.
+
+    Regression: discover_serial() only enumerated pyserial's /dev/ttyUSB* /
+    /dev/ttyACM* globs, so a dongle mounted as /dev/enocean was invisible and
+    the gateway stayed in discovery mode forever."""
+    import os
+    import stat as _stat
+    if not os.path.exists('/dev/enocean'):
+        os.mknod('/dev/enocean', _stat.S_IFCHR | 0o660, os.makedev(1, 3))
+    try:
+        from enoceanmqtt.device_discovery import discover_serial
+        ports = discover_serial()
+        hit = [d for d in ports if d['device'] == '/dev/enocean']
+        assert hit, ports
+        assert hit[0]['candidate'] is True
+        assert hit[0]['enocean'] is True
+    finally:
+        try:
+            os.remove('/dev/enocean')
+        except OSError:
+            pass
+
+
+def test_device_discovery_ftdi_adapter_not_false_positive():
+    """a generic FTDI USB-serial adapter (VID 0403) without any EnOcean hint
+    in its description is NOT flagged as EnOcean; with an 'EnOcean USB300'
+    description it IS."""
+    from enoceanmqtt.device_discovery import _device_looks_enocean
+    # generic adapter
+    assert _device_looks_enocean('/dev/ttyUSB0', 'USB Serial',
+                                 'USB VID:PID=0403:6001 SER=123') is False
+    # real USB300 (lsusb: 'EnOcean GmbH EnOcean USB 300 DB', 0403:6001)
+    assert _device_looks_enocean('/dev/ttyUSB0', 'EnOcean USB 300',
+                                 'USB VID:PID=0403:6001 SER=555') is True
+
+
 def test_default_ha_mapping():
     """unmapped profiles get sensible default HA entities from the engine."""
     from enoceanmqtt.eep_engine import engine
