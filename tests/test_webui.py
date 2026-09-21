@@ -863,6 +863,42 @@ def test_config_save_and_history():
         assert 'mqtt_keepalive = 42' in content
         assert 'webui_port = 8123' in content
 
+
+def test_save_config_restart_required_flag():
+    """save_config reports restart_required honestly: MQTT/EnOcean-port keys
+    are applied live (no restart), anything else still needs one. The web UI
+    must no longer show 'restart required' for live-applied changes."""
+    with tempfile.TemporaryDirectory() as tmp:
+        conf_file = os.path.join(tmp, 'enoceanmqtt.conf')
+        with open(conf_file, 'w') as f:
+            f.write('[CONFIG]\n'
+                    'mqtt_host = localhost\n')
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883', 'config': [conf_file],
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = _mk_com(conf)
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        # live-applied keys -> no restart
+        r = com.save_config({'mqtt_port': '1886'})
+        assert r['ok'] and r.get('restart_required') is False, r
+        r = com.save_config({'enocean_port': '/dev/enocean'})
+        assert r['ok'] and r.get('restart_required') is False, r
+
+        # restart-required keys
+        r = com.save_config({'webui_port': '8124'})
+        assert r['ok'] and r.get('restart_required') is True, r
+        r = com.save_config({'log_packets': '0'})
+        assert r['ok'] and r.get('restart_required') is True, r
+
+        # mixed payload -> restart needed
+        r = com.save_config({'mqtt_keepalive': '30', 'debug': '1'})
+        assert r['ok'] and r.get('restart_required') is True, r
+
         # add a sensor + inject history (both in-memory and persistent store)
         com.add_sensor({'name': 't', 'address': 0x12345678, 'eep': 'A5-02-05'})
         for tmp_c, ts in [(20.0, '2026-09-11T09:00:00Z'), (21.0, '2026-09-11T10:00:00Z')]:

@@ -378,8 +378,13 @@ function renderDiscoveryBanner(data) {
   const found = _foundEndpoint(data || {});
   const serials = (data && data.serial || []).filter((s) => s.candidate && s.device);
   const isConnected = !!(state.gateway && state.gateway.connected);
-  // hide when connected, nothing found, or the user dismissed this result
-  if (isConnected || !found || _discoveryDismissed === found) {
+  // A port is already configured -> the banner would be noise. Only offer
+  // discovered gateways while the user still has to pick one (or the port
+  // is empty); the gateway pill already shows that nothing is connected.
+  const hasConfiguredPort = !!(state.config && String(state.config.enocean_port || '').trim());
+  // hide when connected, a port is already configured, nothing found, or
+  // the user dismissed this result
+  if (isConnected || hasConfiguredPort || !found || _discoveryDismissed === found) {
     banner.hidden = true;
     return;
   }
@@ -438,7 +443,7 @@ $('discovery-use')?.addEventListener('click', async () => {
     _fillConfigPort(found);
     $('discovery-banner').hidden = true;
     _discoveryDismissed = found;
-    toast(t('config_saved'), 'success');
+    configSavedToast(res.restart_required === true);
     // (re)connect now - the backend applies the port live
     try { await api('/api/restart'); } catch (e) { /* backend applies live */ }
   } catch (e) {
@@ -454,6 +459,12 @@ $('discovery-dismiss')?.addEventListener('click', () => {
 $('configedit-cancel')?.addEventListener('click', () => { $('configedit-overlay').hidden = true; });
 
 
+function configSavedToast(restartRequired) {
+  // settings that _apply_live_config() handles need no restart; the backend
+  // tells us via the restart_required flag it computes in save_config()
+  toast(restartRequired ? t('config_saved') : t('config_saved_live'), 'success');
+}
+
 function configPayloadFromGrid() {
   const payload = {};
   document.querySelectorAll('#config-grid [data-cfgkey]').forEach((inp) => {
@@ -466,7 +477,7 @@ async function saveConfigPayload(payload) {
   try {
     const res = await api('/api/config', { method: 'POST', body: JSON.stringify(payload) });
     if (!res.ok) throw new Error(res.error || 'save failed');
-    toast(t('config_saved'), 'success');
+    configSavedToast(res.restart_required === true);
     $('configedit-overlay').hidden = true;
     state.config = Object.assign({}, state.config, payload);
   } catch (err) {
