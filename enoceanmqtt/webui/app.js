@@ -353,6 +353,9 @@ $('gw-status')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.
 // saved, so it survives a restart).
 const GW_DISCOVERY_MS = 5000;
 let _gwDiscoveryTimer = null;
+// true once the boot config has been fetched (or failed) so the discovery
+// loop knows _portConfigured() is trustworthy.
+let _configTried = false;
 
 function _foundEndpoint(data) {
   // pick the best candidate: a real mDNS endpoint (host+port) beats a
@@ -425,6 +428,17 @@ function _portConfigured() {
 
 (function gwDiscoveryLoop() {
   const tick = async () => {
+    // Never flash "gateway found" while the boot /api/status + /api/config
+    // are still in flight: on a cold refresh the discovery sweep can beat
+    // the config fetch (load-order race) and render a banner for a gateway
+    // that is actually already configured. Once config has loaded (or
+    // failed), _portConfigured() is reliable - so wait for it first.
+    if (!_configTried) {
+      try {
+        await loadConfig();
+      } catch (e) { /* already toasted */ }
+      _configTried = true;
+    }
     // Once a port is configured we stop hunting entirely: the banner must
     // never resurface, and poking mDNS/serial every 5s is pointless. The
     // gateway pill already shows (dis)connected state.
