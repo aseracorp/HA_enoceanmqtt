@@ -2295,3 +2295,48 @@ def test_run_loop_survives_no_gateway():
             assert not t.is_alive(), 'loop should exit on restart request'
         finally:
             time.sleep = real_sleep
+
+
+def test_appjs_gates_discovery_banner_on_config_load():
+    """the discovery banner must never flash 'gateway found' before the boot
+    /api/config has loaded.
+
+    Regression (load-order race): on a cold refresh the discovery loop's first
+    pass could beat the config fetch. _portConfigured() then read a not-yet-
+    loaded state.config (null) -> returned False -> the banner showed 'gateway
+    found' even though a port WAS configured. The user saw it ~1 in 4 refreshes.
+
+    The served app.js must wait for the config (or its failure) before the
+    first auto-discover pass, and treat unknown config as configured so the
+    banner stays hidden. We assert the guard markers exist in the served JS.
+    """
+    import urllib.request
+    import socket as _socket
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': '/dev/enocean-does-not-exist-5555',
+            'mqtt_prefix': 'enoceanmqtt/',
+            'webui_disable': '0',
+            'webui_port': '0',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        com.mqtt = FakeMQTT()
+        web = WebInterface(com)
+        sock = _socket.socket(); sock.bind(('127.0.0.1', 0))
+        port = sock.getsockname()[1]; sock.close()
+        web.start(host='127.0.0.1', port=port)
+        time.sleep(0.3)
+        try:
+            with urllib.request.urlopen(f'http://127.0.0.1:{port}/app.js') as r:
+                js = r.read().decode('utf-8')
+        finally:
+            web.stop()
+
+        # 1) the discovery loop must await the boot config before its first pass
+        assert 'await loadConfig()' in js, 'discovery loop must load config first'
+        assert '_configTried' in js, 'config-loaded guard flag must exist'
+        # 2) the loop must skip the pass while config is still unknown so a
+        #    stale discovery answer can never beat the config fetch.
+        assert 'if (!_configTried)' in js
