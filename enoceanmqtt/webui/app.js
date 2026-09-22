@@ -381,7 +381,7 @@ function renderDiscoveryBanner(data) {
   // A port is already configured -> the banner would be noise. Only offer
   // discovered gateways while the user still has to pick one (or the port
   // is empty); the gateway pill already shows that nothing is connected.
-  const hasConfiguredPort = !!(state.config && String(state.config.enocean_port || '').trim());
+  const hasConfiguredPort = _portConfigured();
   // hide when connected, a port is already configured, nothing found, or
   // the user dismissed this result
   if (isConnected || hasConfiguredPort || !found || _discoveryDismissed === found) {
@@ -413,19 +413,25 @@ async function autoDiscover() {
 
   // keep the config modal pre-filled, but do NOT write config on our own -
   // the user clicks "Use this gateway" for that (no silent takeover).
-  if (state.config && !String(state.config.enocean_port || '').trim()) {
+  if (!_portConfigured()) {
     _fillConfigPort(found);
     toast(t('discovery_found') + ' ' + found, 'success');
   }
 }
+function _portConfigured() {
+  // whether the user has already chosen an EnOcean port (config set + saved)
+  return !!(state.config && String(state.config.enocean_port || '').trim());
+}
+
 (function gwDiscoveryLoop() {
   const tick = async () => {
-    // keep hunting while the gateway is not connected - this also resumes
-    // automatically if the transceiver disappears later (dongle unplugged)
-    if (!(state.gateway && state.gateway.connected)) {
-      await autoDiscover();
+    // Once a port is configured we stop hunting entirely: the banner must
+    // never resurface, and poking mDNS/serial every 5s is pointless. The
+    // gateway pill already shows (dis)connected state.
+    if (_portConfigured() || (state.gateway && state.gateway.connected)) {
+      renderDiscoveryBanner({});   // hide banner (configured / connected)
     } else {
-      renderDiscoveryBanner({});   // connected -> hide the banner
+      await autoDiscover();
     }
     _gwDiscoveryTimer = setTimeout(tick, GW_DISCOVERY_MS);
   };

@@ -2072,9 +2072,9 @@ def test_ha_overlay_boot_without_gateway():
 
 
 def test_boot_without_gateway_status_and_reconnect():
-    """/api/status shows the gateway as disconnected + discovering, and the
-    web UI is reachable - the full 'configure from the web UI' flow works
-    without a gateway at boot."""
+    """/api/status shows the gateway as disconnected (a port is configured
+    so it is NOT 'discovering'), and the web UI is reachable - the full
+    'configure from the web UI' flow works without a gateway at boot."""
     import urllib.request
     import socket as _socket
     with tempfile.TemporaryDirectory() as tmp:
@@ -2103,7 +2103,8 @@ def test_boot_without_gateway_status_and_reconnect():
                 data = json.loads(r.read())
             gw = data['gateway']
             assert gw['connected'] is False
-            assert gw['discovering'] is True, gw
+            # a port IS configured (just unreachable) -> not 'discovering'
+            assert gw['discovering'] is False, gw
             assert 'error' in gw
         finally:
             web.stop()
@@ -2111,6 +2112,64 @@ def test_boot_without_gateway_status_and_reconnect():
         # once a transceiver is present the same object reports connected
         com.enocean = FakeEnocean()
         assert com.gateway_connected() is True
+
+
+def test_status_discovering_only_when_unconfigured():
+    """/api/status reports discovering=True ONLY when no enocean_port is
+    configured. With a configured port but no live transceiver (dongle
+    unplugged / ser2net host down) the gateway must show as disconnected,
+    not keep claiming it is still searching for a gateway.
+
+    Regression: the user saw 'detected device' / 'searching' despite having
+    a gateway configured, whenever the transceiver was temporarily offline."""
+    import urllib.request
+    import socket as _socket
+    with tempfile.TemporaryDirectory() as tmp:
+        # scenario A: port configured but transceiver down
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': '/dev/enocean-does-not-exist-7777',
+            'mqtt_prefix': 'enoceanmqtt/',
+            'webui_disable': '0', 'webui_port': '0',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = Communicator(conf, [])
+        assert com.enocean is None
+        com.mqtt = FakeMQTT()
+        web = WebInterface(com)
+        sock = _socket.socket(); sock.bind(('127.0.0.1', 0))
+        port = sock.getsockname()[1]; sock.close()
+        web.start(host='127.0.0.1', port=port)
+        time.sleep(0.3)
+        try:
+            with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/status') as r:
+                gw = json.loads(r.read())['gateway']
+            assert gw['connected'] is False
+            assert gw['discovering'] is False, 'configured + offline must NOT be discovering'
+        finally:
+            web.stop()
+        web.stop()
+
+        # scenario B: NO port configured -> genuinely discovering
+        conf2 = dict(conf)
+        conf2['enocean_port'] = ''   # discovery mode
+        conf2['webui_port'] = '0'
+        com2 = Communicator(conf2, [])
+        assert com2.enocean is None
+        com2.mqtt = FakeMQTT()
+        web2 = WebInterface(com2)
+        sock2 = _socket.socket(); sock2.bind(('127.0.0.1', 0))
+        port2 = sock2.getsockname()[1]; sock2.close()
+        web2.start(host='127.0.0.1', port=port2)
+        time.sleep(0.3)
+        try:
+            with urllib.request.urlopen(f'http://127.0.0.1:{port2}/api/status') as r:
+                gw2 = json.loads(r.read())['gateway']
+            assert gw2['connected'] is False
+            assert gw2['discovering'] is True, 'no port configured -> discovering'
+        finally:
+            web2.stop()
+        web2.stop()
 
 
 

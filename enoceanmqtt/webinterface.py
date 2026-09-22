@@ -103,10 +103,17 @@ class WebInterface:
         sensors = []
         for sensor in com.sensors:
             sensors.append(com.describe_sensor(sensor))
+        connected = com.gateway_connected()
+        # 'discovering' means the gateway is genuinely hunting for a first
+        # transceiver: no port has been configured yet. When a port IS set
+        # but the transceiver is down (dongle unplugged, ser2net host
+        # unreachable) we must NOT claim it is still searching - the web UI
+        # shows 'disconnected' instead of a misleading 'searching...'.
+        has_port = bool(str(com.conf.get('enocean_port') or '').strip())
         return {
             'gateway': {
-                'connected': com.gateway_connected(),
-                'discovering': (not com.gateway_connected()
+                'connected': connected,
+                'discovering': (not connected and not has_port
                                 and getattr(com, 'enocean_sender', None) is None),
                 'base_id': com.enocean_sender_hex,
                 'error': getattr(com, 'enocean_error', None),
