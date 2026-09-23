@@ -640,23 +640,33 @@ def test_f6_eep_recognition():
         # leakage values. They are classified as the (dominant) 2-rocker
         # switch, since a single RPS telegram cannot tell them apart and
         # rockers are what users trigger during teach-in.
+        # Expectations are derived from the official EEP.xml F6 profiles and
+        # verified against the bundled enocean library's D0 owner-sets:
+        #   - 0xC0..0xFF            -> window handle (never a legal rocker, R2>3)
+        #   - 0x70                  -> key card inserted (unique)
+        #   - 0x11                  -> liquid leakage water (unique value)
+        #   - 0x10/0x30             -> smoke ON/LOW but ALSO rocker -> rocker
+        #                             (rocker is the dominant teach-in device)
+        #   - 0x00                  -> smoke OFF / push released -> push
+        #   - bit3 or bit7 set      -> not a legal rocker -> push
+        #   - (d0 & 0x88) == 0      -> legal rocker -> F6-02-01
         cases = [
-            (0x00, 0xAA000001, (0xF6, 0x01, 0x01), 'push released'),
-            (0x08, 0xAA000002, (0xF6, 0x01, 0x01), 'push pressed'),
+            (0x00, 0xAA000001, (0xF6, 0x01, 0x01), 'push released / smoke off'),
+            (0x08, 0xAA000002, (0xF6, 0x01, 0x01), 'push pressed (bit3 set)'),
             (0x01, 0xAA000003, (0xF6, 0x02, 0x01), 'rocker R1'),
             (0x02, 0xAA000004, (0xF6, 0x02, 0x01), 'rocker R1 b'),
-            (0x10, 0xAA000005, (0xF6, 0x02, 0x01), 'rocker2 / smoke (ambiguous)'),
-            (0x30, 0xAA000006, (0xF6, 0x02, 0x01), 'rocker2 / smoke (ambiguous)'),
-            (0x70, 0xAA000007, (0xF6, 0x04, 0x01), 'key card'),
-            (0x11, 0xAA000008, (0xF6, 0x02, 0x01), 'rocker2 / leakage (ambiguous)'),
-            (0x04, 0xAA000009, (0xF6, 0x01, 0x01), 'push released (not window)'),
-            (0x0C, 0xAA00000A, (0xF6, 0x01, 0x01), 'push released (not window)'),
+            (0x10, 0xAA000005, (0xF6, 0x02, 0x01), 'rocker2 / smoke ON (ambiguous)'),
+            (0x30, 0xAA000006, (0xF6, 0x02, 0x01), 'rocker2 / smoke LOW (ambiguous)'),
+            (0x70, 0xAA000007, (0xF6, 0x04, 0x01), 'key card inserted'),
+            (0x11, 0xAA000008, (0xF6, 0x05, 0x01), 'liquid leakage water'),
+            (0x04, 0xAA000009, (0xF6, 0x02, 0x01), 'rocker (bit3 clear)'),
+            (0x0C, 0xAA00000A, (0xF6, 0x01, 0x01), 'push (bit3 set)'),
             (0xC0, 0xAA00000C, (0xF6, 0x10, 0x00), 'window handle up/right'),
             (0xD0, 0xAA00000D, (0xF6, 0x10, 0x00), 'window handle left/up'),
             (0xE0, 0xAA00000E, (0xF6, 0x10, 0x00), 'window handle SRG02 real byte'),
             (0xF0, 0xAA00000F, (0xF6, 0x10, 0x00), 'window handle right/down'),
             (0xEF, 0xAA00000B, (0xF6, 0x10, 0x00), "window handle (don't-care bits set)"),
-            (0x90, 0xAA000010, (0xF6, 0x02, 0x01), 'rocker SA'),
+            (0x90, 0xAA000010, (0xF6, 0x01, 0x01), 'push (bit7 set, no rocker)'),
         ]
         for d0, addr, expect, label in cases:
             got = teachin(d0, addr)

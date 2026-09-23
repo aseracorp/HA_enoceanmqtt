@@ -1345,31 +1345,57 @@ class Communicator:
             return None
         d0 = packet.data[1]
 
-        # 0x70 is NOT a valid 2-rocker state (R2 would exceed 0..3) - it is
-        # the Key Card Activated Switch (F6-04-01). Unambiguous.
-        if d0 == 0x70:
-            return (0x04, 0x01)   # Key Card Activated Switch
+        # The D0 owner-sets below are derived from the F6 profiles in the official
+        # EEP.xml (2.6.4), mapping each of the 256 D0 bytes to the set of F6
+        # profiles whose enum values can legally decode it (verified against the
+        # bundled enocean library). RPS telegrams carry no EEP, so a single D0 is
+        # inherently ambiguous whenever it is a legal value of more than one
+        # profile. We apply the strongest, spec-based discriminators first and a
+        # documented default for the truly ambiguous bytes:
+        #
+        #   0x00 / 0x10 / 0x30  smoke OFF/ON/LOW - also rocker/push/handle/leak
+        #   0x11                 leakage water    - also rocker/push/handle
+        #   0xC0..0xFF           window handle    - never a legal rocker (R2>3)
+        #   0x70                 key card inserted - unique to F6-04-01
+        #
+        # Bytes with R1/R2 in 0..3 (0x0x..0x7x low nibble 0-7) are legal rockers;
+        # everything outside the window/leak/key-card discriminators defaults to
+        # the 2-rocker switch, the dominant F6 device type during teach-in.
 
-        # Window handle (F6-10-00). The official standard specifies WIN as the
-        # whole D0 byte; real handles transmit 0xC0..0xFF (bits 6-7 set, e.g.
-        # 0xE0 from a Thermokon SRG02). That whole range is disjoint from every
-        # other F6 profile: it is never a legal rocker press (R2/R1 would
-        # exceed 3), never smoke (0x10/0x30), leakage (0x11) or key-card (0x70).
+        # Window handle (F6-10-00): D0 0xC0..0xFF is never a legal rocker press
+        # (R2 would be 4..7) and never smoke/leakage/key-card.
         if d0 >= 0xC0:
             return (0x10, 0x00)   # Window Handle
 
-        # Any other D0 that carries R1 (bits 0-2), EB (bit 3), R2 (bits 4-6)
-        # or SA (bit 7) is a 2-rocker switch (F6-02-01). This includes the
-        # values 0x10/0x30/0x11 that also appear in smoke/leakage telegrams -
-        # they are classified as rocker because that is the overwhelmingly
-        # common and user-triggered F6 device.
-        r2 = (d0 >> 4) & 0x07
-        sa = (d0 >> 7) & 0x01
-        r1 = (d0 >> 0) & 0x07
-        if r2 != 0 or sa != 0 or (r1 != 0 and (d0 & 0x04) == 0):
+        # Key Card Activated Switch (F6-04-01): 0x70 = card inserted, the only
+        # KC value a real teach-in emits; not a valid rocker state (R2=7).
+        if d0 == 0x70:
+            return (0x04, 0x01)   # Key Card Activated Switch
+
+        # Liquid Leakage Sensor (F6-05-01): 0x11 = water detected. Not smoke, and
+        # a stronger signal than the rocker default because "water detected" is a
+        # deliberate, rare action - but note it is also rocker R1=1,R2=1.
+        if d0 == 0x11:
+            return (0x05, 0x01)   # Liquid Leakage Sensor
+
+        # Smoke Detector (F6-05-02): 0x10 / 0x30 (alarm ON / battery low).
+        # These are also legal rocker presses, so they stay ambiguous; smoke is
+        # far rarer than a rocker click during teach-in -> classify as rocker.
+        # 0x00 (alarm OFF) is also push-button released -> push button.
+
+        # Default: 2-rocker switch (F6-02-01). The rocker-legal D0 set (verified
+        # against the bundled enocean library / EEP.xml) is exactly the 64 bytes
+        # with bit3 and bit7 clear: 0x00-0x07, 0x10-0x17, ... 0x70-0x77. This
+        # includes the ambiguous smoke bytes 0x10/0x30 and (via 0x11) the leak
+        # byte we already returned above; a real rocker press is the dominant
+        # F6 teach-in event, so ambiguous bytes default to rocker.
+        if d0 != 0 and (d0 & 0x88) == 0:
             return (0x02, 0x01)   # Rocker Switch, 2 Rocker
 
-        # remaining: push button (0x00 released, 0x08 pressed)
+        # Everything else (bit3 or bit7 set: 0x08-0x0F, 0x18-0x1F, ... 0x78-0xFF,
+        # minus the window 0xC0+ / key-card 0x70 / leak 0x11 already handled) is
+        # not a legal rocker and not a distinct detector value -> push button
+        # (F6-01-01).
         return (0x01, 0x01)       # Push Button
 
     @staticmethod
