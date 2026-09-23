@@ -112,3 +112,37 @@ def test_a5_02_05_temperature_exact(data, shortcut, expected):
     case = select_case(prof, bits, u.to_bitarray([0], 8))
     dec = decode(case, bits, u.to_bitarray([0], 8))
     assert round(dec[shortcut]["value"], 1) == expected
+
+
+@pytest.mark.parametrize(
+    "d0,expected_raw,expected_text",
+    [
+        (0x00, 0, "Moved from up to vertical"),
+        (0x04, 0, "Moved from up to vertical"),
+        (0x0C, 0, "Moved from up to vertical"),
+        (0x08, 0, "Moved from up to vertical"),
+        (0x10, 1, "Moved from vertical to up"),
+        (0x14, 1, "Moved from vertical to up"),
+        (0x1C, 1, "Moved from vertical to up"),
+        (0x30, 3, "Moved from vertical to down"),
+    ],
+)
+def test_f6_10_00_window_handle_decodes(d0, expected_raw, expected_text):
+    """F6-10-00 (Window Handle) regression: WIN must decode the 2-bit field (bits 2-3) to
+    0..3 with the official EEP.xml 2.6.4 descriptions and a 0..3 raw value.
+
+    The pre-engine enocean library delivered exactly these (raw, description) pairs for the
+    teach-in D0 bytes 0x04/0x0C and the operating bytes 0x10/0x14/0x1C/0x30, and the
+    mapping.yaml templates depend on numeric WIN 0/1/3. A previous port of the engine
+    declared WIN as (offset 0, size 8) with 8 value-less enum items, so every telegram
+    decoded to the *whole byte* (0..255 raw, no enum match) and the HA templates broke.
+    """
+    prof = find_profile(0xF6, 0x10, 0x00)
+    assert prof is not None, "F6-10-00 profile must exist"
+    bits = u.to_bitarray([d0], 8)
+    status = u.to_bitarray([0x20], 8)
+    case = select_case(prof, bits, status)
+    dec = decode(case, bits, status)
+    win = dec["WIN"]
+    assert win["raw_value"] == expected_raw, f"D0=0x{d0:02X} raw WIN"
+    assert win["value"] == expected_text, f"D0=0x{d0:02X} enum WIN"
