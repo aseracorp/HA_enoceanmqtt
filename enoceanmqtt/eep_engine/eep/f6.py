@@ -113,8 +113,15 @@ PROFILES = {
     ),
     (0xf6, 0x10, 0x00): profile(0xf6, 0x10, 0x00, 'Window Handle',
         case((
-            field('WIN', 'Window handle', 0, 8, 'enum', items=(enum('Moved from up to right.'), enum('Moved from right to down.'), enum('Moved from down to left.'), enum('Moved from left to up.'), enum('Moved from up to left.'), enum('Moved from left  to down.'), enum('Moved from down to right.'), enum('Moved from right to up.'))),
-        ), conditions=(cond('status', 2, 1, 1), cond('status', 3, 1, 0)), status_fields=(field('', 'T21', 2, 1, 'fixed', fixed_value=1), field('', 'NU', 3, 1, 'fixed', fixed_value=0))),
+            field('WIN', 'Window handle', 2, 2, 'enum', items=(
+                enum('Moved from up to vertical', 0),
+                enum('Moved from vertical to up', 1),
+                enum('Moved from down to vertical', 2),
+                enum('Moved from vertical to down', 3),
+            )),
+            field('T21', 'T21', 2, 1, 'bool'),
+            field('NU', 'NU', 3, 1, 'bool'),
+        )),
     ),
     (0xf6, 0x10, 0x01): profile(0xf6, 0x10, 0x01, 'Window Handle ERP2',
         case((
