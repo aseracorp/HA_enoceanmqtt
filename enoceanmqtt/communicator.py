@@ -1350,10 +1350,12 @@ class Communicator:
         if d0 == 0x70:
             return (0x04, 0x01)   # Key Card Activated Switch
 
-        # window handle uses only bits 2-3 (values 1..3): 0x04 / 0x0C.
-        # These are not valid rocker presses (R1=0, EB=0/1, R2=0) and not
-        # smoke/leakage values.
-        if d0 in (0x04, 0x0C):
+        # Window handle (F6-10-00). The official standard specifies WIN as the
+        # whole D0 byte; real handles transmit 0xC0..0xFF (bits 6-7 set, e.g.
+        # 0xE0 from a Thermokon SRG02). That whole range is disjoint from every
+        # other F6 profile: it is never a legal rocker press (R2/R1 would
+        # exceed 3), never smoke (0x10/0x30), leakage (0x11) or key-card (0x70).
+        if d0 >= 0xC0:
             return (0x10, 0x00)   # Window Handle
 
         # Any other D0 that carries R1 (bits 0-2), EB (bit 3), R2 (bits 4-6)

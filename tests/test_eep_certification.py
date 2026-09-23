@@ -125,6 +125,9 @@ def test_a5_02_05_temperature_exact(data, shortcut, expected):
         (0x14, 1, "Moved from vertical to up"),
         (0x1C, 1, "Moved from vertical to up"),
         (0x30, 3, "Moved from vertical to down"),
+        (0xC0, 0, "Moved from up to vertical"),
+        (0xE0, 2, "Moved from down to vertical"),
+        (0xF0, 3, "Moved from vertical to down"),
     ],
 )
 def test_f6_10_00_window_handle_decodes(d0, expected_raw, expected_text):
