@@ -673,6 +673,56 @@ def test_f6_eep_recognition():
             assert got == expect, f'{label}: D0=0x{d0:02X} expected {expect} got {got}'
 
 
+def test_f6_eep_recognition_status_variants():
+    """F6 application-style variants are selected by the status byte T21/NU.
+
+    The same rocker D0 byte maps to different F6 EEPs depending on the status
+    bits (T21 = bit 2, NU = bit 3):
+        T21/NU = 11 -> F6-02-02 Light/Blind Control Style 2
+        T21/NU = 01 -> F6-03-01 Light/Blind Control 4-rocker (A..D)
+        T21/NU = 00 -> F6-02-01 generic 2-rocker
+    A real teach-in arrives with status 0x20/0x30 (T21/NU=00), so these only
+    fire when the device actually uses the style-2/4-rocker status coding.
+    """
+    import datetime
+    from enocean.protocol.packet import RadioPacket
+    with tempfile.TemporaryDirectory() as tmp:
+        conf = {
+            'mqtt_host': 'localhost', 'mqtt_port': '1883',
+            'enocean_port': 'tcp:127.0.0.1:9999',
+            'mqtt_prefix': 'enoceanmqtt/', 'webui_disable': '1',
+            'webui_sensor_store': os.path.join(tmp, 'sensors.json'),
+        }
+        com = _mk_com(conf)
+        com.mqtt = FakeMQTT()
+        com.enocean_sender = [0xFF, 0x80, 0x00, 0x00]
+
+        def teachin(d0, addr, status):
+            p = RadioPacket(PACKET.RADIO_ERP1,
+                            data=[0xf6, d0, (addr >> 24) & 0xff, (addr >> 16) & 0xff,
+                                  (addr >> 8) & 0xff, addr & 0xff, status],
+                            optional=[0x00, 0xff, 0xff, 0xff, 0xff, 0x3c, 0x00])
+            p.parse()
+            p.received = datetime.datetime.utcnow()
+            com.set_learn_mode(True)
+            com._process_radio_packet(p)
+            for s in com._store.all():
+                if s['address'] == addr:
+                    return (s['rorg'], s.get('func'), s.get('type'))
+            return None
+
+        # plain 2-rocker press, status 0x20 (T21/NU = 00) -> F6-02-01
+        assert teachin(0x01, 0xBB000001, 0x20) == (0xF6, 0x02, 0x01)
+        # style-2 status T21/NU = 11 -> F6-02-02
+        assert teachin(0x01, 0xBB000002, 0x0C) == (0xF6, 0x02, 0x02)
+        # 4-rocker status T21/NU = 01 -> F6-03-01
+        assert teachin(0x01, 0xBB000003, 0x08) == (0xF6, 0x03, 0x01)
+        # window handle with any status stays F6-10-00
+        assert teachin(0xE0, 0xBB000004, 0x0C) == (0xF6, 0x10, 0x00)
+        # key card with any status stays F6-04-01
+        assert teachin(0x70, 0xBB000005, 0x08) == (0xF6, 0x04, 0x01)
+
+
 
 def test_vld_data_telegram_not_taught_in():
     """a VLD (0xD2) data telegram without teach-in must NOT be auto-captured.

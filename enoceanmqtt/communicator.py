@@ -1344,6 +1344,15 @@ class Communicator:
         if packet.rorg != RORG.RPS or len(packet.data) < 2:
             return None
         d0 = packet.data[1]
+        # The status byte's bit 2 (T21) and bit 3 (NU) select the F6 application
+        # style for the same D0 encoding (f6 profiles use status conditions):
+        #   T21/NU = 11 -> "style 2" application (F6-02-02, key-card inserted case)
+        #   T21/NU = 01 -> multi-button/count style (F6-02-02 case2, F6-03-xx)
+        #   T21/NU = 00 -> dispatched 4-rocker (F6-03-01/02 case1)
+        # A real teach-in press normally arrives with status 0x20/0x30.
+        status = packet.status if getattr(packet, 'status', None) is not None else (packet.data[-1] if len(packet.data) > 1 else 0)
+        t21 = (status >> 2) & 0x01
+        nu = (status >> 3) & 0x01
 
         # The D0 owner-sets below are derived from the F6 profiles in the official
         # EEP.xml (2.6.4), mapping each of the 256 D0 bytes to the set of F6
@@ -1382,6 +1391,29 @@ class Communicator:
         # These are also legal rocker presses, so they stay ambiguous; smoke is
         # far rarer than a rocker click during teach-in -> classify as rocker.
         # 0x00 (alarm OFF) is also push-button released -> push button.
+
+        # Application-style variants selected by the status byte T21/NU, which are
+        # otherwise indistinguishable from F6-02-01 by D0 alone:
+        #   T21/NU = 11 -> F6-02-02 Light/Blind Style 2  (CONTROL) when 2-button
+        #                  rocker values present
+        #   T21/NU = 11 -> F6-04-01 key card inserted
+        #   T21/NU = 01 -> F6-02-02 multi-press / F6-03-xx multi-button count
+        #   T21/NU = 00 -> F6-03-01/02 4-rocker dispatch (A..D buttons)
+        # These are only sound when the D0 is a legal rocker byte (handled) and
+        # the status actually carries the style code; otherwise fall through to
+        # the generic F6-02-01.
+        is_rocker_d0 = (d0 & 0x88) == 0 and d0 != 0
+        if t21 == 1 and nu == 1 and is_rocker_d0:
+            # Style-2 application (F6-02-02 "CONTROL" / F6-04-01 inserted already
+            # handled): T21/NU=11 selects the 2-rocker style-2 layout.
+            return (0x02, 0x02)   # Light and Blind Control - Style 2
+        if t21 == 0 and nu == 1 and is_rocker_d0:
+            # 4-rocker dispatch (F6-03-01/02 case1): T21/NU=01, 8 buttons A..D.
+            return (0x03, 0x01)   # Light and Blind Control 4-Rocker
+        if t21 == 1 and nu == 0 and is_rocker_d0:
+            # Key-card "taken out" / F6-02-02 multi-press (case2). Rare as a
+            # teach-in; keep the F6-02-01 default below.
+            pass
 
         # Default: 2-rocker switch (F6-02-01). The rocker-legal D0 set (verified
         # against the bundled enocean library / EEP.xml) is exactly the 64 bytes
